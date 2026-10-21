@@ -2181,6 +2181,10 @@
       "port_hint": "Cổng lắng nghe của proxy.",
       "remote_dns": "DNS từ xa",
       "remote_dns_hint": "Phân giải tên máy chủ đích qua proxy khi được hỗ trợ.",
+
+      "accept_invalid_certs": "Bỏ qua xác minh chứng chỉ",
+
+      "accept_invalid_certs_hint": "Tắt xác minh chứng chỉ TLS cho các yêu cầu qua proxy dùng chung này. Chỉ dùng với proxy công ty hoặc CA riêng đáng tin cậy.",
       "no_proxy": "Không dùng proxy",
       "no_proxy_hint": "Các mẫu máy chủ phân tách bằng dấu phẩy sẽ bỏ qua proxy.",
       "auth": "Xác thực",

@@ -382,6 +382,7 @@ fn saved_upstream_proxy_policy_overrides_global_proxy_and_hydrates_custom_secret
         port: 1080,
         auth: SettingsUpstreamProxyAuth::None,
         remote_dns: true,
+        accept_invalid_certs: false,
         no_proxy: String::new(),
     });
     let policy = SavedUpstreamProxyPolicy::Custom {
@@ -436,6 +437,7 @@ fn global_upstream_proxy_overrides_environment_and_requires_saved_credentials() 
         port: 1080,
         auth: SettingsUpstreamProxyAuth::None,
         remote_dns: true,
+        accept_invalid_certs: false,
         no_proxy: String::new(),
     });
     let policy = SavedUpstreamProxyPolicy::UseGlobal;
@@ -505,6 +507,7 @@ fn rdp_proxy_policy_respects_gateway_and_rejects_http() {
         port: 8080,
         auth: SettingsUpstreamProxyAuth::None,
         remote_dns: true,
+        accept_invalid_certs: false,
         no_proxy: String::new(),
     });
     assert!(

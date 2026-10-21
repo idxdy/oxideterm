@@ -2181,6 +2181,10 @@
       "port_hint": "Puerto de escucha del proxy.",
       "remote_dns": "DNS remoto",
       "remote_dns_hint": "Resolver los nombres de host de destino a través del proxy cuando sea compatible.",
+
+      "accept_invalid_certs": "Omitir la verificación de certificados",
+
+      "accept_invalid_certs_hint": "Desactiva la verificación de certificados TLS en las solicitudes mediante este proxy compartido. Úsalo solo con un proxy corporativo o una CA privada de confianza.",
       "no_proxy": "Sin proxy",
       "no_proxy_hint": "Patrones de host separados por comas que omiten el proxy.",
       "auth": "Autenticación",

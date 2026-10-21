@@ -2181,6 +2181,10 @@
       "port_hint": "프록시 수신 포트입니다.",
       "remote_dns": "원격 DNS",
       "remote_dns_hint": "지원되는 경우 대상 호스트 이름을 프록시를 통해 확인합니다.",
+
+      "accept_invalid_certs": "인증서 검증 안 함",
+
+      "accept_invalid_certs_hint": "이 공유 프록시를 통하는 요청의 TLS 인증서 검증을 비활성화합니다. 신뢰할 수 있는 회사 프록시 또는 사설 CA에서만 사용하세요.",
       "no_proxy": "프록시 제외",
       "no_proxy_hint": "프록시를 우회할 호스트 패턴을 쉼표로 구분해 입력합니다.",
       "auth": "인증",

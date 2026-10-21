@@ -51,6 +51,7 @@ pub(in crate::workspace) fn default_settings_upstream_proxy_config() -> Settings
         port: 1080,
         auth: SettingsUpstreamProxyAuth::None,
         remote_dns: true,
+        accept_invalid_certs: false,
         no_proxy: String::new(),
     }
 }
@@ -1277,6 +1278,14 @@ impl WorkspaceApp {
                     Self::toggle_settings_network_remote_dns,
                     cx,
                 ))
+                .child(self.network_checkbox_row(
+                    "settings_view.network.accept_invalid_certs",
+                    "settings_view.network.accept_invalid_certs_hint",
+                    proxy.accept_invalid_certs,
+                    true,
+                    Self::toggle_settings_network_accept_invalid_certs,
+                    cx,
+                ))
                 .child(self.card_separator())
                 .child(self.settings_network_auth_content(Some(proxy), cx))
                 .child(self.card_separator())
@@ -2035,6 +2044,20 @@ impl WorkspaceApp {
             |settings| {
                 if let Some(proxy) = settings.network.upstream_proxy.as_mut() {
                     proxy.remote_dns = !proxy.remote_dns;
+                }
+            },
+            cx,
+        );
+    }
+
+    pub(in crate::workspace) fn toggle_settings_network_accept_invalid_certs(
+        &mut self,
+        cx: &mut Context<Self>,
+    ) {
+        self.edit_settings(
+            |settings| {
+                if let Some(proxy) = settings.network.upstream_proxy.as_mut() {
+                    proxy.accept_invalid_certs = !proxy.accept_invalid_certs;
                 }
             },
             cx,

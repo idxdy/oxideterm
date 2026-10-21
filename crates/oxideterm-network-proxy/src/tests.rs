@@ -35,6 +35,7 @@ fn custom_proxy(protocol: ApplicationProxyProtocol) -> CustomApplicationProxy {
         port: 1080,
         auth: ApplicationProxyAuth::None,
         remote_dns: true,
+        accept_invalid_certs: false,
         no_proxy: String::new(),
     }
 }
@@ -108,6 +109,7 @@ fn missing_application_proxy_password_is_fail_closed() {
             keychain_id: Some("credential-id".to_string()),
         },
         remote_dns: true,
+        accept_invalid_certs: false,
         no_proxy: String::new(),
     });
 
@@ -115,6 +117,26 @@ fn missing_application_proxy_password_is_fail_closed() {
         application_proxy_policy_from_settings(&settings, &TestCredentials { password: None }),
         ApplicationProxyPolicy::Unavailable { .. }
     ));
+}
+
+#[test]
+fn shared_proxy_maps_accept_invalid_certs() {
+    let mut settings = PersistedSettings::default();
+    settings.network.application_proxy_mode = SettingsApplicationProxyMode::Shared;
+    settings.network.upstream_proxy = Some(SettingsUpstreamProxyConfig {
+        protocol: SettingsUpstreamProxyProtocol::HttpConnect,
+        host: "proxy.example".to_string(),
+        port: 8080,
+        auth: SettingsUpstreamProxyAuth::None,
+        remote_dns: true,
+        accept_invalid_certs: true,
+        no_proxy: String::new(),
+    });
+
+    match application_proxy_policy_from_settings(&settings, &TestCredentials { password: None }) {
+        ApplicationProxyPolicy::Custom(proxy) => assert!(proxy.accept_invalid_certs),
+        other => panic!("expected custom proxy policy, got {other:?}"),
+    }
 }
 
 #[test]

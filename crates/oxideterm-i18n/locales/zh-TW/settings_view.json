@@ -2181,6 +2181,10 @@
       "port_hint": "代理監聽連接埠。",
       "remote_dns": "遠端 DNS",
       "remote_dns_hint": "支援時透過代理解析目標主機名稱。",
+
+      "accept_invalid_certs": "不校驗憑證",
+
+      "accept_invalid_certs_hint": "透過此共享代理的請求不校驗 TLS 憑證。僅在信任公司代理或私有 CA 時啟用。",
       "no_proxy": "不走代理",
       "no_proxy_hint": "以逗號分隔的主機比對規則，這些目標會略過代理。",
       "auth": "驗證",

@@ -215,6 +215,7 @@ mod tests {
                 keychain_id: Some(reference.into()),
             },
             remote_dns: true,
+            accept_invalid_certs: false,
             no_proxy: String::new(),
         });
         settings

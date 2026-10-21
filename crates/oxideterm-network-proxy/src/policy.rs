@@ -51,6 +51,7 @@ pub struct CustomApplicationProxy {
     pub port: u16,
     pub auth: ApplicationProxyAuth,
     pub remote_dns: bool,
+    pub accept_invalid_certs: bool,
     pub no_proxy: String,
 }
 
@@ -63,6 +64,7 @@ impl fmt::Debug for CustomApplicationProxy {
             .field("port", &self.port)
             .field("auth", &self.auth)
             .field("remote_dns", &self.remote_dns)
+            .field("accept_invalid_certs", &self.accept_invalid_certs)
             .field("no_proxy", &self.no_proxy)
             .finish()
     }

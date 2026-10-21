@@ -205,6 +205,11 @@ pub struct SettingsUpstreamProxyConfig {
     pub auth: SettingsUpstreamProxyAuth,
     #[serde(default = "default_proxy_remote_dns")]
     pub remote_dns: bool,
+    /// Disable TLS certificate verification for application HTTP traffic that
+    /// uses this shared proxy. Intended only for trusted corporate proxies
+    /// with a private or self-signed CA.
+    #[serde(default)]
+    pub accept_invalid_certs: bool,
     #[serde(default)]
     pub no_proxy: String,
 }

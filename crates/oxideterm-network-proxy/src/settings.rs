@@ -63,6 +63,7 @@ pub fn application_proxy_policy_from_settings(
         port: proxy.port,
         auth,
         remote_dns: proxy.remote_dns,
+        accept_invalid_certs: proxy.accept_invalid_certs,
         no_proxy: proxy.no_proxy.clone(),
     })
 }
@@ -103,6 +104,7 @@ pub fn configure_update_http_client_builder(
                 port: settings.port,
                 auth: ApplicationProxyAuth::None,
                 remote_dns: true,
+                accept_invalid_certs: false,
                 no_proxy: settings.no_proxy.clone(),
             });
             configure_http_client_builder(builder, &policy)

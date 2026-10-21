@@ -2181,6 +2181,10 @@
       "port_hint": "Proxy listening port.",
       "remote_dns": "Remote DNS",
       "remote_dns_hint": "Resolve target hostnames through the proxy when supported.",
+
+      "accept_invalid_certs": "Skip certificate verification",
+
+      "accept_invalid_certs_hint": "Disable TLS certificate verification for requests through this shared proxy. Use only with a trusted corporate proxy or private CA.",
       "no_proxy": "No Proxy",
       "no_proxy_hint": "Comma-separated host patterns that bypass the proxy.",
       "auth": "Authentication",

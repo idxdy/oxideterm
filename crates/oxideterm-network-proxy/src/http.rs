@@ -25,7 +25,10 @@ pub(crate) fn configure_http_client_builder(
             if let ApplicationProxyAuth::Password { username, password } = &config.auth {
                 proxy = proxy.basic_auth(username, password.as_str());
             }
-            builder = builder.no_proxy().proxy(proxy);
+            builder = builder
+                .danger_accept_invalid_certs(config.accept_invalid_certs)
+                .no_proxy()
+                .proxy(proxy);
             Ok(builder)
         }
         ApplicationProxyPolicy::Unavailable { reason } => {

@@ -2181,6 +2181,10 @@
       "port_hint": "Port, auf dem der Proxy lauscht.",
       "remote_dns": "Remote-DNS",
       "remote_dns_hint": "Ziel-Hostnamen über den Proxy auflösen, wenn unterstützt.",
+
+      "accept_invalid_certs": "Zertifikatsprüfung überspringen",
+
+      "accept_invalid_certs_hint": "Deaktiviert die TLS-Zertifikatsprüfung für Anfragen über diesen gemeinsamen Proxy. Nur bei vertrauenswürdigem Firmenproxy oder privater CA verwenden.",
       "no_proxy": "Kein Proxy",
       "no_proxy_hint": "Durch Kommas getrennte Hostmuster, die den Proxy umgehen.",
       "auth": "Authentifizierung",
