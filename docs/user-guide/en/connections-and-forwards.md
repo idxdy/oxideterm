@@ -129,6 +129,12 @@ Serial terminals do not provide SFTP, port forwarding, ProxyJump, SSH host-key v
 
 In Settings → Credentials, use **SSH common** to save sudo, su, or custom-prompt credentials for your SSH sessions. Connection-specific matches take priority; local terminals have a separate scope.
 
+SSH-common credentials can also define **host patterns** such as `hktkosl*` or `i-*`. The field starts with `*`, which matches every host. Matching supports `*` and `?`, is case-insensitive, and uses the active terminal's SSH host. The lookup order is: connection-specific credential, then a host-matched SSH-common credential, then an SSH-common credential whose patterns are empty or only `*`. A connection-specific match still wins over any host group.
+
+Enable **Fill automatically and press Enter** to send a matching password without pressing Enter first. It applies only when exactly one credential matches. For SSH common, use a specific host pattern when you do not want the automation to apply to every host; the default `*` matches all hosts.
+
+To handle a second factor after the password, choose a two-stage authentication type. **Separate input** handles two prompts: the existing prompt patterns identify the first-stage password prompt, and **Second-stage prompt patterns** plus an optional **Second-stage user hint** identify the verification-code prompt. **Combined input** handles a single prompt that expects the password and code together; the helper concatenates them and does not use the second-stage fields. Both types require an existing verification-code credential for the seed. After the password is filled, the helper sends one code automatically when auto-fill is enabled, otherwise it shows an inline hint for Enter. A repeated second-factor prompt falls back to manual input.
+
 When a password prompt has one matching credential, press Enter at the inline hint to fill it. With several matches, Enter opens a chooser showing each credential's name, type, and source. Use arrow keys and Enter, click an entry, or press Esc to cancel. Starting manual input or changing the terminal closes the chooser.
 
 Full connection sync includes the common scope when sensitive-credential sync is enabled; selecting only some connections leaves that shared scope unchanged. An encrypted connection export with passwords includes scoped copies of common credentials. Importing that package attaches the copies to the imported connections without creating a global default.

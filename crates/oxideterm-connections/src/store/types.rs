@@ -518,6 +518,23 @@ pub enum PrivilegeCredentialKind {
     SudoPassword,
     SuPassword,
     CustomPrompt,
+    #[serde(alias = "two_stage_authentication")]
+    TwoStageSeparateInput,
+    TwoStageCombinedInput,
+}
+
+impl PrivilegeCredentialKind {
+    pub fn is_two_stage(self) -> bool {
+        matches!(
+            self,
+            Self::TwoStageSeparateInput | Self::TwoStageCombinedInput
+        )
+    }
+
+    /// Only the separate-input flow waits for a second prompt.
+    pub fn waits_for_second_factor(self) -> bool {
+        matches!(self, Self::TwoStageSeparateInput)
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -530,6 +547,19 @@ pub struct SavedPrivilegeCredential {
     pub username_hint: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub prompt_patterns: Vec<String>,
+    /// SSH-common credentials can target a host group without becoming a
+    /// connection-specific credential. Empty means every SSH host.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub host_patterns: Vec<String>,
+    /// Text fragments that identify the second prompt in a two-stage
+    /// authentication credential.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub second_factor_patterns: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub second_factor_user_hint: Option<String>,
+    /// Optional second-factor seed used after a successful password prompt.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub totp_credential_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keychain_id: Option<String>,
     #[serde(default, skip)]
@@ -780,6 +810,10 @@ pub struct SavePrivilegeCredentialRequest {
     pub kind: PrivilegeCredentialKind,
     pub username_hint: Option<String>,
     pub prompt_patterns: Vec<String>,
+    pub host_patterns: Vec<String>,
+    pub second_factor_patterns: Vec<String>,
+    pub second_factor_user_hint: Option<String>,
+    pub totp_credential_id: Option<String>,
     /// UI drafts become SecretString at the store boundary. The value is stored
     /// in keychain and never serialized into SavedConnection.
     pub secret: Option<SecretString>,
@@ -800,6 +834,10 @@ impl fmt::Debug for SavePrivilegeCredentialRequest {
             .field("kind", &self.kind)
             .field("username_hint", &self.username_hint)
             .field("prompt_patterns", &self.prompt_patterns)
+            .field("host_patterns", &self.host_patterns)
+            .field("second_factor_patterns", &self.second_factor_patterns)
+            .field("second_factor_user_hint", &self.second_factor_user_hint)
+            .field("totp_credential_id", &self.totp_credential_id)
             .field("secret", &self.secret.as_ref().map(|_| "[redacted secret]"))
             .field("enabled", &self.enabled)
             .field("require_click_to_send", &self.require_click_to_send)

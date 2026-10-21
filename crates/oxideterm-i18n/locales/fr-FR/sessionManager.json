@@ -182,6 +182,22 @@
       "prompt_patterns": "Motifs d’invite",
       "prompt_patterns_placeholder": "Un motif par ligne",
       "prompt_patterns_hint": "Les invites personnalisées correspondent à ces fragments. Les invites sudo/su intégrées utilisent aussi des valeurs sûres par défaut.",
+      "second_factor_patterns": "Motifs de la seconde étape",
+      "second_factor_patterns_placeholder": "Un motif par ligne",
+      "second_factor_patterns_hint": "Après le mot de passe, ces fragments identifient l’invite de la seconde étape.",
+      "second_factor_user_hint": "Indice utilisateur de la seconde étape",
+      "second_factor_user_hint_placeholder": "Facultatif",
+      "two_stage_combined_hint": "La saisie combinée envoie le mot de passe et le code ensemble ; les motifs de la seconde étape ne sont pas utilisés.",
+      "host_patterns": "Motifs d’hôte",
+      "host_patterns_placeholder": "Un motif par ligne, par exemple hktkosl*",
+      "host_patterns_hint": "Utilisé uniquement par les identifiants SSH communs. Prend en charge * et ? ; * correspond à tous les hôtes.",
+      "totp_credential": "Identifiant de code de vérification",
+      "totp_none": "Aucun",
+      "totp_hint": "Après le mot de passe, l’identifiant de code sélectionné fournit le second facteur.",
+      "auto_submit": "Remplir automatiquement et appuyer sur Entrée",
+      "auto_submit_hint": "S’applique uniquement lorsqu’un seul identifiant correspond. Les identifiants SSH communs doivent aussi définir un motif d’hôte.",
+      "auto_requires_host_patterns": "Le remplissage automatique en SSH commun nécessite au moins un motif d’hôte.",
+      "two_stage_requires_totp": "L’authentification en deux étapes nécessite un identifiant de code de vérification.",
       "enabled": "Activé",
       "cancel_edit": "Annuler la modification",
       "saving": "Enregistrement...",
@@ -189,7 +205,9 @@
       "kind": {
         "sudo_password": "mot de passe sudo",
         "su_password": "mot de passe su",
-        "custom_prompt": "Invite personnalisée"
+        "custom_prompt": "Invite personnalisée",
+        "two_stage_separate_input": "Authentification en deux étapes (saisie séparée)",
+        "two_stage_combined_input": "Authentification en deux étapes (saisie combinée)"
       }
     },
     "views": {

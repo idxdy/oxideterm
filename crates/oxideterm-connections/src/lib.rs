@@ -68,6 +68,7 @@ pub use store::{
     SerialProfilesSyncSnapshot, SshAlgorithmPreferences, SshChannelStrategy,
     StandaloneSftpEndpoint, StandaloneSftpProfile, StandaloneSftpProfilesSyncSnapshot,
     StandaloneSftpTransferMode, TelnetProfile, TelnetProfilesSyncSnapshot,
-    default_telnet_upstream_proxy, is_profile_credential, validate_group_name,
+    default_telnet_upstream_proxy, is_profile_credential, privilege_host_pattern_matches,
+    validate_group_name,
 };
 pub use store::{SSH_COMMON_PRIVILEGE_SCOPE_ID, TotpBinding, TotpResolver};

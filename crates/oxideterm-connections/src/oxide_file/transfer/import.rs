@@ -618,6 +618,22 @@ fn apply_oxide_import_with_options_inner(
                     )
             });
         }
+        let available_totp_ids = store
+            .totp_credentials()
+            .iter()
+            .map(|credential| credential.id.clone())
+            .collect::<HashSet<_>>();
+        for connection in &mut connections_to_save {
+            for credential in &mut connection.privilege_credentials {
+                if credential
+                    .totp_credential_id
+                    .as_deref()
+                    .is_some_and(|id| !available_totp_ids.contains(id))
+                {
+                    credential.totp_credential_id = None;
+                }
+            }
+        }
         store.upsert_imported_connections_and_managed_keys_transaction(
             connections_to_save,
             imported_managed_keys,
@@ -899,6 +915,27 @@ fn import_privilege_credentials(
             kind: credential.kind,
             username_hint: credential.username_hint,
             prompt_patterns: credential.prompt_patterns,
+            // An archive copy is scoped to one connection, so host-group
+            // patterns no longer add anything and must not leak across scopes.
+            host_patterns: Vec::new(),
+            second_factor_patterns: if credential.kind.waits_for_second_factor() {
+                credential.second_factor_patterns
+            } else {
+                Vec::new()
+            },
+            second_factor_user_hint: if credential.kind.waits_for_second_factor() {
+                credential.second_factor_user_hint
+            } else {
+                None
+            },
+            // TOTP seeds are merged before connections are written. A missing
+            // binding is cleared after the merge instead of consulting the
+            // pre-import store here.
+            totp_credential_id: if credential.kind.is_two_stage() {
+                credential.totp_credential_id
+            } else {
+                None
+            },
             keychain_id: None,
             plaintext_secret: credential.secret.map(SecretString::from),
             enabled: credential.enabled,

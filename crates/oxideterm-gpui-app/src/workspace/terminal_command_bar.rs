@@ -9,7 +9,10 @@ use super::terminal_git::{
     terminal_git_repository_action_label_key,
 };
 use super::*;
-use oxideterm_connections::{LOCAL_SHELL_PRIVILEGE_CONNECTION_ID, SSH_COMMON_PRIVILEGE_SCOPE_ID};
+use oxideterm_connections::{
+    LOCAL_SHELL_PRIVILEGE_CONNECTION_ID, SSH_COMMON_PRIVILEGE_SCOPE_ID,
+    privilege_host_pattern_matches,
+};
 use oxideterm_environment::{
     CurrentDirectoryScope, CurrentDirectorySnapshot, CurrentDirectorySource, GitChangedPath,
     GitRepositoryStatus, ProjectSnapshot, ProjectTask, ProjectTaskGroup,
@@ -79,6 +82,17 @@ pub(super) struct PrivilegeCredentialPicker {
     prompt_generation: u64,
     state: PrivilegePromptHelperState,
     selected: usize,
+}
+
+pub(super) struct PendingPrivilegeTotp {
+    pub(super) pane_id: PaneId,
+    pub(super) session_id: TerminalSessionId,
+    pub(super) totp_credential_id: String,
+    pub(super) first_prompt_text: String,
+    pub(super) second_factor_patterns: Vec<String>,
+    pub(super) second_factor_user_hint: Option<String>,
+    pub(super) expires_at: std::time::Instant,
+    pub(super) require_click_to_send: bool,
 }
 
 impl PrivilegeCredentialPicker {
@@ -301,18 +315,23 @@ fn privilege_credential_matches_prompt(
                 PrivilegeCredentialKind::CustomPrompt => {
                     privilege_prompt_matches_custom_patterns(prompt, &credential.prompt_patterns)
                 }
-                PrivilegeCredentialKind::SudoPassword => false,
+                PrivilegeCredentialKind::SudoPassword
+                | PrivilegeCredentialKind::TwoStageSeparateInput
+                | PrivilegeCredentialKind::TwoStageCombinedInput => false,
             }
         }
         PrivilegePromptMatch::Custom { .. } => {
-            credential.kind == PrivilegeCredentialKind::CustomPrompt
+            (credential.kind == PrivilegeCredentialKind::CustomPrompt
+                || credential.kind.is_two_stage())
                 && privilege_prompt_matches_custom_patterns(prompt, &credential.prompt_patterns)
         }
         PrivilegePromptMatch::GenericPassword { .. } => match credential.kind {
             // Bare `Password:` carries no reliable sudo/su identity. Offer only
             // scoped, click-to-send candidates and never infer a command kind.
             PrivilegeCredentialKind::SudoPassword | PrivilegeCredentialKind::SuPassword => true,
-            PrivilegeCredentialKind::CustomPrompt => {
+            PrivilegeCredentialKind::CustomPrompt
+            | PrivilegeCredentialKind::TwoStageSeparateInput
+            | PrivilegeCredentialKind::TwoStageCombinedInput => {
                 privilege_prompt_matches_custom_patterns(prompt, &credential.prompt_patterns)
             }
         },
@@ -422,6 +441,72 @@ fn build_privilege_prompt_helper_state_with_tracked_prompt(
     build_privilege_prompt_helper_state_from_prompt(connection_id, credentials, prompt)
 }
 
+fn latest_visible_prompt_line(text: &str) -> Option<&str> {
+    text.lines()
+        .map(str::trim)
+        .rev()
+        .find(|line| !line.is_empty())
+}
+
+fn privilege_line_matches_patterns(line: &str, patterns: &[String]) -> bool {
+    let line = line.to_ascii_lowercase();
+    patterns
+        .iter()
+        .map(|pattern| pattern.trim().to_ascii_lowercase())
+        .any(|pattern| !pattern.is_empty() && line.contains(&pattern))
+}
+
+fn privilege_prompt_text(prompt: &PrivilegePromptMatch) -> &str {
+    match prompt {
+        PrivilegePromptMatch::Sudo { prompt_text, .. }
+        | PrivilegePromptMatch::Su { prompt_text, .. }
+        | PrivilegePromptMatch::Custom { prompt_text, .. }
+        | PrivilegePromptMatch::GenericPassword { prompt_text } => prompt_text,
+    }
+}
+
+fn privilege_host_patterns_are_specific(patterns: &[String]) -> bool {
+    patterns.iter().any(|pattern| {
+        let pattern = pattern.trim();
+        !pattern.is_empty() && pattern != "*"
+    })
+}
+
+fn select_ssh_privilege_candidates(
+    connection_id: Option<&str>,
+    exact: Vec<SavedPrivilegeCredential>,
+    common: Vec<SavedPrivilegeCredential>,
+    host: &str,
+) -> (String, Vec<SavedPrivilegeCredential>) {
+    if let Some(connection_id) = connection_id
+        && !exact.is_empty()
+    {
+        return (connection_id.to_string(), exact);
+    }
+    let host_matched = common
+        .iter()
+        .filter(|credential| {
+            credential.enabled
+                && privilege_host_patterns_are_specific(&credential.host_patterns)
+                && credential
+                    .host_patterns
+                    .iter()
+                    .any(|pattern| privilege_host_pattern_matches(host, pattern))
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    if !host_matched.is_empty() {
+        return (SSH_COMMON_PRIVILEGE_SCOPE_ID.to_string(), host_matched);
+    }
+    let generic = common
+        .into_iter()
+        .filter(|credential| {
+            credential.enabled && !privilege_host_patterns_are_specific(&credential.host_patterns)
+        })
+        .collect::<Vec<_>>();
+    (SSH_COMMON_PRIVILEGE_SCOPE_ID.to_string(), generic)
+}
+
 fn build_privilege_prompt_helper_state_from_prompt(
     connection_id: String,
     credentials: &[SavedPrivilegeCredential],
@@ -481,7 +566,10 @@ fn detect_custom_prompt_from_credentials(
     visible_text: &str,
 ) -> Option<PrivilegePromptMatch> {
     credentials.iter().find_map(|credential| {
-        if !credential.enabled || credential.kind != PrivilegeCredentialKind::CustomPrompt {
+        if !credential.enabled
+            || !(credential.kind == PrivilegeCredentialKind::CustomPrompt
+                || credential.kind.is_two_stage())
+        {
             return None;
         }
         // Custom privilege prompts are user-authored fragments. They must be
@@ -547,6 +635,79 @@ mod terminal_project_git_root_tests {
 mod privilege_prompt_helper_tests {
     use super::*;
     use chrono::Utc;
+
+    #[test]
+    fn second_factor_prompt_matches_only_the_latest_visible_line() {
+        let text = "First Factor:\r\nSecond Factor:";
+        let line = latest_visible_prompt_line(text).expect("latest line");
+        assert_eq!(line, "Second Factor:");
+        let patterns = vec!["Second Factor:".to_string()];
+        assert!(privilege_line_matches_patterns(line, &patterns));
+        assert!(!privilege_line_matches_patterns("First Factor:", &patterns));
+    }
+
+    #[test]
+    fn ssh_privilege_scope_prefers_connection_then_host_group_then_generic() {
+        let exact = saved_privilege_credential_for_connection(
+            "conn-1",
+            "exact",
+            PrivilegeCredentialKind::SudoPassword,
+            None,
+        );
+        let mut group = saved_privilege_credential_for_connection(
+            SSH_COMMON_PRIVILEGE_SCOPE_ID,
+            "group",
+            PrivilegeCredentialKind::SudoPassword,
+            None,
+        );
+        group.host_patterns = vec!["hktkosl*".into()];
+        let mut other_group = group.clone();
+        other_group.id = "other-group".into();
+        other_group.host_patterns = vec!["i-*".into()];
+        let mut generic = saved_privilege_credential_for_connection(
+            SSH_COMMON_PRIVILEGE_SCOPE_ID,
+            "generic",
+            PrivilegeCredentialKind::SudoPassword,
+            None,
+        );
+        generic.host_patterns = vec!["*".into()];
+
+        let (scope, selected) = select_ssh_privilege_candidates(
+            Some("conn-1"),
+            vec![exact.clone()],
+            vec![group.clone(), other_group.clone(), generic.clone()],
+            "hktkosl1102",
+        );
+        assert_eq!(scope, "conn-1");
+        assert_eq!(
+            selected.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(),
+            ["exact"]
+        );
+
+        let (scope, selected) = select_ssh_privilege_candidates(
+            None,
+            Vec::new(),
+            vec![group.clone(), other_group.clone(), generic.clone()],
+            "HKTKOSL1102",
+        );
+        assert_eq!(scope, SSH_COMMON_PRIVILEGE_SCOPE_ID);
+        assert_eq!(
+            selected.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(),
+            ["group"]
+        );
+
+        let (scope, selected) = select_ssh_privilege_candidates(
+            Some("conn-1"),
+            Vec::new(),
+            vec![group, other_group, generic.clone()],
+            "unknown-host",
+        );
+        assert_eq!(scope, SSH_COMMON_PRIVILEGE_SCOPE_ID);
+        assert_eq!(
+            selected.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(),
+            ["generic"]
+        );
+    }
 
     #[test]
     fn ssh_common_privilege_candidates_preserve_scope_and_specific_priority() {
@@ -650,6 +811,10 @@ mod privilege_prompt_helper_tests {
             kind,
             username_hint: username_hint.map(str::to_string),
             prompt_patterns: Vec::new(),
+            host_patterns: Vec::new(),
+            second_factor_patterns: Vec::new(),
+            second_factor_user_hint: None,
+            totp_credential_id: None,
             keychain_id: Some(format!("privilege:v1:{connection_id}:{id}")),
             plaintext_secret: None,
             enabled: true,

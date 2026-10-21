@@ -182,6 +182,22 @@
       "prompt_patterns": "Mẫu lời nhắc",
       "prompt_patterns_placeholder": "Mỗi dòng một mẫu",
       "prompt_patterns_hint": "Lời nhắc tùy chỉnh khớp với các đoạn văn bản này. Lời nhắc sudo/su tích hợp cũng dùng mặc định an toàn.",
+      "second_factor_patterns": "Mẫu lời nhắc giai đoạn hai",
+      "second_factor_patterns_placeholder": "Mỗi dòng một mẫu",
+      "second_factor_patterns_hint": "Sau khi nhập mật khẩu, các đoạn này xác định lời nhắc giai đoạn hai.",
+      "second_factor_user_hint": "Gợi ý người dùng giai đoạn hai",
+      "second_factor_user_hint_placeholder": "Tùy chọn",
+      "two_stage_combined_hint": "Nhập một lần gửi mật khẩu và mã cùng nhau; mẫu lời nhắc giai đoạn hai không được dùng.",
+      "host_patterns": "Mẫu máy chủ",
+      "host_patterns_placeholder": "Mỗi dòng một mẫu, ví dụ hktkosl*",
+      "host_patterns_hint": "Chỉ dùng cho thông tin xác thực SSH chung. Hỗ trợ * và ?; * khớp mọi máy chủ.",
+      "totp_credential": "Thông tin xác thực mã xác minh",
+      "totp_none": "Không có",
+      "totp_hint": "Sau khi điền mật khẩu, thông tin xác thực mã đã chọn cung cấp yếu tố thứ hai.",
+      "auto_submit": "Tự động điền và nhấn Enter",
+      "auto_submit_hint": "Chỉ áp dụng khi có đúng một thông tin xác thực khớp. Thông tin xác thực SSH chung cũng cần đặt mẫu máy chủ.",
+      "auto_requires_host_patterns": "Tự động điền trong SSH chung cần ít nhất một mẫu máy chủ.",
+      "two_stage_requires_totp": "Xác thực hai giai đoạn cần thông tin xác thực mã xác minh.",
       "enabled": "Bật",
       "cancel_edit": "Hủy sửa",
       "saving": "Đang lưu...",
@@ -189,7 +205,9 @@
       "kind": {
         "sudo_password": "mật khẩu sudo",
         "su_password": "mật khẩu su",
-        "custom_prompt": "Lời nhắc tùy chỉnh"
+        "custom_prompt": "Lời nhắc tùy chỉnh",
+        "two_stage_separate_input": "Xác thực hai giai đoạn (nhập riêng)",
+        "two_stage_combined_input": "Xác thực hai giai đoạn (nhập một lần)"
       }
     },
     "views": {

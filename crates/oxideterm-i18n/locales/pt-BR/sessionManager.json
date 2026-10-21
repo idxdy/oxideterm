@@ -182,6 +182,22 @@
       "prompt_patterns": "Padrões de prompt",
       "prompt_patterns_placeholder": "Um padrão por linha",
       "prompt_patterns_hint": "Prompts personalizados correspondem a esses fragmentos. Prompts sudo/su integrados também usam padrões seguros.",
+      "second_factor_patterns": "Padrões do segundo estágio",
+      "second_factor_patterns_placeholder": "Um padrão por linha",
+      "second_factor_patterns_hint": "Depois da senha, estes fragmentos identificam o prompt do segundo estágio.",
+      "second_factor_user_hint": "Dica de usuário do segundo estágio",
+      "second_factor_user_hint_placeholder": "Opcional",
+      "two_stage_combined_hint": "A entrada combinada envia a senha e o código juntos; os padrões do segundo estágio não são usados.",
+      "host_patterns": "Padrões de host",
+      "host_patterns_placeholder": "Um padrão por linha, por exemplo hktkosl*",
+      "host_patterns_hint": "Usado apenas por credenciais SSH comuns. Aceita * e ?; * corresponde a todos os hosts.",
+      "totp_credential": "Credencial de código de verificação",
+      "totp_none": "Nenhuma",
+      "totp_hint": "Depois de preencher a senha, a credencial de código selecionada fornece o segundo fator.",
+      "auto_submit": "Preencher automaticamente e pressionar Enter",
+      "auto_submit_hint": "Aplica-se apenas quando exatamente uma credencial corresponde. Credenciais SSH comuns também precisam definir um padrão de host.",
+      "auto_requires_host_patterns": "O preenchimento automático em SSH comum exige pelo menos um padrão de host.",
+      "two_stage_requires_totp": "A autenticação em duas etapas exige uma credencial de código de verificação.",
       "enabled": "Ativado",
       "cancel_edit": "Cancelar edição",
       "saving": "Salvando...",
@@ -189,7 +205,9 @@
       "kind": {
         "sudo_password": "senha sudo",
         "su_password": "senha su",
-        "custom_prompt": "Prompt personalizado"
+        "custom_prompt": "Prompt personalizado",
+        "two_stage_separate_input": "Autenticação em duas etapas (entrada separada)",
+        "two_stage_combined_input": "Autenticação em duas etapas (entrada combinada)"
       }
     },
     "views": {

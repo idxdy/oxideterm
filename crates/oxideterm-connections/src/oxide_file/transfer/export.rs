@@ -207,10 +207,15 @@ fn export_connections_to_oxide_inner(
     }
     report_progress("collecting_portable_secrets");
 
-    let credential_selection = crate::CredentialSyncSelection {
+    let mut credential_selection = crate::CredentialSyncSelection {
         connection_ids: connection_ids.iter().cloned().collect(),
         ..Default::default()
     };
+    // Connection archives also carry scoped copies of SSH-common privilege
+    // credentials, so their referenced TOTP seeds must travel with them.
+    credential_selection
+        .connection_ids
+        .insert(crate::SSH_COMMON_PRIVILEGE_SCOPE_ID.to_string());
     let selected_totp = store
         .totp_credentials()
         .iter()
@@ -472,6 +477,18 @@ fn export_privilege_credentials(
                 kind: credential.kind,
                 username_hint: credential.username_hint.clone(),
                 prompt_patterns: credential.prompt_patterns.clone(),
+                host_patterns: Vec::new(),
+                second_factor_patterns: if credential.kind.waits_for_second_factor() {
+                    credential.second_factor_patterns.clone()
+                } else {
+                    Vec::new()
+                },
+                second_factor_user_hint: if credential.kind.waits_for_second_factor() {
+                    credential.second_factor_user_hint.clone()
+                } else {
+                    None
+                },
+                totp_credential_id: credential.totp_credential_id.clone(),
                 secret: record.secret.map(SecretString::into_zeroizing),
                 enabled: credential.enabled,
                 require_click_to_send: credential.require_click_to_send,

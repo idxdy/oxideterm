@@ -303,6 +303,14 @@ pub struct EncryptedPrivilegeCredential {
     pub username_hint: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub prompt_patterns: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub host_patterns: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub second_factor_patterns: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub second_factor_user_hint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub totp_credential_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub secret: Option<Zeroizing<String>>,
     #[serde(default = "default_true")]
@@ -322,6 +330,10 @@ impl fmt::Debug for EncryptedPrivilegeCredential {
             .field("kind", &self.kind)
             .field("username_hint", &self.username_hint)
             .field("prompt_patterns", &self.prompt_patterns)
+            .field("host_patterns", &self.host_patterns)
+            .field("second_factor_patterns", &self.second_factor_patterns)
+            .field("second_factor_user_hint", &self.second_factor_user_hint)
+            .field("totp_credential_id", &self.totp_credential_id)
             .field("secret", &self.secret.as_ref().map(|_| "<redacted>"))
             .field("enabled", &self.enabled)
             .field("require_click_to_send", &self.require_click_to_send)

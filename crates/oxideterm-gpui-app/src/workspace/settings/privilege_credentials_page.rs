@@ -13,6 +13,7 @@ pub(in crate::workspace) struct SettingsPrivilegeScopeRow {
     username_placeholder: String,
     credential_count: usize,
     local: bool,
+    ssh_common: bool,
 }
 
 impl SettingsWorkspaceEntity {
@@ -27,7 +28,12 @@ impl SettingsWorkspaceEntity {
             kind: self.privilege_draft.kind,
             username_hint: self.privilege_draft.username_hint.clone(),
             prompt_patterns: self.privilege_draft.prompt_patterns.clone(),
+            host_patterns: self.privilege_draft.host_patterns.clone(),
+            second_factor_patterns: self.privilege_draft.second_factor_patterns.clone(),
+            second_factor_user_hint: self.privilege_draft.second_factor_user_hint.clone(),
+            totp_credential_id: self.privilege_draft.totp_credential_id.clone(),
             enabled: self.privilege_draft.enabled,
+            require_click_to_send: self.privilege_draft.require_click_to_send,
             error: self.privilege_error.clone(),
         }
     }
@@ -76,7 +82,17 @@ impl SettingsWorkspaceEntity {
         self.privilege_draft.kind = credential.kind;
         self.privilege_draft.username_hint = credential.username_hint.unwrap_or_default();
         self.privilege_draft.prompt_patterns = credential.prompt_patterns.join("\n");
+        self.privilege_draft.host_patterns = if credential.host_patterns.is_empty() {
+            "*".to_string()
+        } else {
+            credential.host_patterns.join("\n")
+        };
+        self.privilege_draft.second_factor_patterns = credential.second_factor_patterns.join("\n");
+        self.privilege_draft.second_factor_user_hint =
+            credential.second_factor_user_hint.unwrap_or_default();
+        self.privilege_draft.totp_credential_id = credential.totp_credential_id;
         self.privilege_draft.enabled = credential.enabled;
+        self.privilege_draft.require_click_to_send = credential.require_click_to_send;
         self.privilege_editor_open = true;
         self.settings_focused_input = Some(SettingsInput::LocalPrivilegeLabel);
         cx.notify();
@@ -88,12 +104,35 @@ impl SettingsWorkspaceEntity {
         cx: &mut Context<Self>,
     ) {
         self.privilege_draft.kind = kind;
+        if !kind.is_two_stage() {
+            self.privilege_draft.totp_credential_id = None;
+        }
+        if !kind.waits_for_second_factor() {
+            self.privilege_draft.second_factor_patterns.clear();
+            self.privilege_draft.second_factor_user_hint.clear();
+        }
         self.privilege_error = None;
         cx.notify();
     }
 
     pub(in crate::workspace) fn toggle_privilege_enabled(&mut self, cx: &mut Context<Self>) {
         self.privilege_draft.enabled = !self.privilege_draft.enabled;
+        self.privilege_error = None;
+        cx.notify();
+    }
+
+    pub(in crate::workspace) fn toggle_privilege_auto_submit(&mut self, cx: &mut Context<Self>) {
+        self.privilege_draft.require_click_to_send = !self.privilege_draft.require_click_to_send;
+        self.privilege_error = None;
+        cx.notify();
+    }
+
+    pub(in crate::workspace) fn set_privilege_totp_credential(
+        &mut self,
+        credential_id: Option<String>,
+        cx: &mut Context<Self>,
+    ) {
+        self.privilege_draft.totp_credential_id = credential_id;
         self.privilege_error = None;
         cx.notify();
     }
@@ -109,6 +148,22 @@ impl SettingsWorkspaceEntity {
         let prompt_patterns = self
             .privilege_draft
             .prompt_patterns
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(ToOwned::to_owned)
+            .collect::<Vec<_>>();
+        let host_patterns = self
+            .privilege_draft
+            .host_patterns
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(ToOwned::to_owned)
+            .collect::<Vec<_>>();
+        let second_factor_patterns = self
+            .privilege_draft
+            .second_factor_patterns
             .lines()
             .map(str::trim)
             .filter(|line| !line.is_empty())
@@ -133,9 +188,15 @@ impl SettingsWorkspaceEntity {
             kind: self.privilege_draft.kind,
             username_hint: optional_trimmed_privilege_value(&self.privilege_draft.username_hint),
             prompt_patterns,
+            host_patterns,
+            second_factor_patterns,
+            second_factor_user_hint: optional_trimmed_privilege_value(
+                &self.privilege_draft.second_factor_user_hint,
+            ),
+            totp_credential_id: self.privilege_draft.totp_credential_id.clone(),
             secret,
             enabled: self.privilege_draft.enabled,
-            require_click_to_send: true,
+            require_click_to_send: self.privilege_draft.require_click_to_send,
         })
     }
 
@@ -190,6 +251,9 @@ fn is_privilege_input(input: SettingsInput) -> bool {
             | SettingsInput::LocalPrivilegeUsernameHint
             | SettingsInput::LocalPrivilegeSecret
             | SettingsInput::LocalPrivilegePromptPatterns
+            | SettingsInput::LocalPrivilegeHostPatterns
+            | SettingsInput::LocalPrivilegeSecondFactorPatterns
+            | SettingsInput::LocalPrivilegeSecondFactorUserHint
     )
 }
 
@@ -242,6 +306,12 @@ impl WorkspaceApp {
             }
             PrivilegeCredentialKind::CustomPrompt => {
                 "sessionManager.privilege_credentials.kind.custom_prompt"
+            }
+            PrivilegeCredentialKind::TwoStageSeparateInput => {
+                "sessionManager.privilege_credentials.kind.two_stage_separate_input"
+            }
+            PrivilegeCredentialKind::TwoStageCombinedInput => {
+                "sessionManager.privilege_credentials.kind.two_stage_combined_input"
             }
         };
         self.i18n.t(key)
@@ -657,15 +727,34 @@ impl WorkspaceApp {
                     ))
                     .child(field_slot(
                         self.settings_privilege_kind_field(privilege.kind, cx),
-                    ))
-                    .child(field_slot(self.settings_privilege_text_field(
-                        "sessionManager.privilege_credentials.username_hint",
-                        SettingsInput::LocalPrivilegeUsernameHint,
-                        &privilege.username_hint,
-                        scope.username_placeholder.clone(),
-                        false,
-                        cx,
-                    )))
+                    )),
+            )
+            .when(scope.ssh_common, |panel| {
+                panel
+                    .child(
+                        self.settings_privilege_host_patterns_field(&privilege.host_patterns, cx),
+                    )
+                    .child(
+                        self.settings_privilege_hint(
+                            self.i18n
+                                .t("sessionManager.privilege_credentials.host_patterns_hint"),
+                        ),
+                    )
+            })
+            .child(self.settings_privilege_prompt_patterns_field(&privilege.prompt_patterns, cx))
+            .child(
+                self.settings_privilege_hint(
+                    self.i18n
+                        .t("sessionManager.privilege_credentials.prompt_patterns_hint"),
+                ),
+            )
+            .child(
+                div()
+                    .w_full()
+                    .min_w(px(0.0))
+                    .flex()
+                    .flex_wrap()
+                    .gap(px(12.0))
                     .child(field_slot(self.settings_privilege_text_field(
                         "sessionManager.privilege_credentials.secret",
                         SettingsInput::LocalPrivilegeSecret,
@@ -679,15 +768,69 @@ impl WorkspaceApp {
                         },
                         true,
                         cx,
+                    )))
+                    .child(field_slot(self.settings_privilege_text_field(
+                        "sessionManager.privilege_credentials.username_hint",
+                        SettingsInput::LocalPrivilegeUsernameHint,
+                        &privilege.username_hint,
+                        scope.username_placeholder.clone(),
+                        false,
+                        cx,
                     ))),
             )
-            .child(self.settings_privilege_prompt_patterns_field(&privilege.prompt_patterns, cx))
-            .child(
-                self.settings_privilege_hint(
-                    self.i18n
-                        .t("sessionManager.privilege_credentials.prompt_patterns_hint"),
-                ),
-            )
+            .when(privilege.kind.waits_for_second_factor(), |panel| {
+                panel
+                    .child(self.settings_privilege_second_factor_patterns_field(
+                        &privilege.second_factor_patterns,
+                        cx,
+                    ))
+                    .child(self.settings_privilege_hint(
+                        self.i18n.t(
+                            "sessionManager.privilege_credentials.second_factor_patterns_hint",
+                        ),
+                    ))
+            })
+            .when(privilege.kind.is_two_stage(), |panel| {
+                panel
+                    .child(
+                        div()
+                            .w_full()
+                            .min_w(px(0.0))
+                            .flex()
+                            .flex_wrap()
+                            .gap(px(12.0))
+                            .child(field_slot(self.settings_privilege_totp_field(
+                                privilege.totp_credential_id.as_deref(),
+                                cx,
+                            )))
+                            .when(privilege.kind.waits_for_second_factor(), |row| {
+                                row.child(field_slot(self.settings_privilege_text_field(
+                                    "sessionManager.privilege_credentials.second_factor_user_hint",
+                                    SettingsInput::LocalPrivilegeSecondFactorUserHint,
+                                    &privilege.second_factor_user_hint,
+                                    self.i18n.t(
+                                        "sessionManager.privilege_credentials.second_factor_user_hint_placeholder",
+                                    ),
+                                    false,
+                                    cx,
+                                )))
+                            }),
+                    )
+                    .child(self.settings_privilege_hint(
+                        self.i18n
+                            .t("sessionManager.privilege_credentials.totp_hint"),
+                    ))
+                    .when(
+                        privilege.kind == PrivilegeCredentialKind::TwoStageCombinedInput,
+                        |panel| {
+                            panel.child(self.settings_privilege_hint(
+                                self.i18n.t(
+                                    "sessionManager.privilege_credentials.two_stage_combined_hint",
+                                ),
+                            ))
+                        },
+                    )
+            })
             .child(
                 div()
                     .flex()
@@ -710,6 +853,13 @@ impl WorkspaceApp {
                             .text_color(rgb(theme.text))
                             .child(self.i18n.t("sessionManager.privilege_credentials.enabled")),
                     ),
+            )
+            .child(self.settings_privilege_auto_submit_row(privilege.require_click_to_send, cx))
+            .child(
+                self.settings_privilege_hint(
+                    self.i18n
+                        .t("sessionManager.privilege_credentials.auto_submit_hint"),
+                ),
             )
             .when_some(privilege.error.clone(), |panel, error| {
                 panel.child(
@@ -817,12 +967,139 @@ impl WorkspaceApp {
         )
     }
 
+    pub(in crate::workspace) fn settings_privilege_totp_field(
+        &self,
+        selected: Option<&str>,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        form_field(
+            &self.tokens,
+            self.i18n
+                .t("sessionManager.privilege_credentials.totp_credential"),
+            self.settings_select_control(
+                SettingsSelect::LocalPrivilegeTotpCredential,
+                self.settings_privilege_totp_label(selected),
+                false,
+                None,
+                cx,
+            ),
+        )
+    }
+
+    pub(in crate::workspace) fn settings_privilege_totp_label(
+        &self,
+        selected: Option<&str>,
+    ) -> String {
+        selected
+            .and_then(|id| {
+                self.connection_store
+                    .totp_credentials()
+                    .iter()
+                    .find(|credential| credential.id == id)
+            })
+            .map(|credential| {
+                if credential.enabled {
+                    credential.name.clone()
+                } else {
+                    format!(
+                        "{} ({})",
+                        credential.name,
+                        self.i18n.t("settings_view.privilege_credentials.disabled")
+                    )
+                }
+            })
+            .unwrap_or_else(|| {
+                self.i18n
+                    .t("sessionManager.privilege_credentials.totp_none")
+            })
+    }
+
+    pub(in crate::workspace) fn settings_privilege_auto_submit_row(
+        &self,
+        require_click_to_send: bool,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        div()
+            .flex()
+            .items_center()
+            .gap(px(8.0))
+            .cursor_pointer()
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, _event, _window, cx| {
+                    this.settings_workspace.update(cx, |settings, cx| {
+                        settings.toggle_privilege_auto_submit(cx);
+                    });
+                    cx.stop_propagation();
+                }),
+            )
+            .child(checkbox(
+                &self.tokens,
+                String::new(),
+                !require_click_to_send,
+            ))
+            .child(
+                div()
+                    .text_size(px(self.tokens.metrics.ui_text_sm))
+                    .text_color(rgb(self.tokens.ui.text))
+                    .child(
+                        self.i18n
+                            .t("sessionManager.privilege_credentials.auto_submit"),
+                    ),
+            )
+            .into_any_element()
+    }
+
     pub(in crate::workspace) fn settings_privilege_prompt_patterns_field(
         &self,
         value: &str,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let input = SettingsInput::LocalPrivilegePromptPatterns;
+        self.settings_privilege_patterns_field(
+            SettingsInput::LocalPrivilegePromptPatterns,
+            value,
+            "sessionManager.privilege_credentials.prompt_patterns",
+            "sessionManager.privilege_credentials.prompt_patterns_placeholder",
+            cx,
+        )
+    }
+
+    pub(in crate::workspace) fn settings_privilege_host_patterns_field(
+        &self,
+        value: &str,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        self.settings_privilege_patterns_field(
+            SettingsInput::LocalPrivilegeHostPatterns,
+            value,
+            "sessionManager.privilege_credentials.host_patterns",
+            "sessionManager.privilege_credentials.host_patterns_placeholder",
+            cx,
+        )
+    }
+
+    pub(in crate::workspace) fn settings_privilege_second_factor_patterns_field(
+        &self,
+        value: &str,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        self.settings_privilege_patterns_field(
+            SettingsInput::LocalPrivilegeSecondFactorPatterns,
+            value,
+            "sessionManager.privilege_credentials.second_factor_patterns",
+            "sessionManager.privilege_credentials.second_factor_patterns_placeholder",
+            cx,
+        )
+    }
+
+    fn settings_privilege_patterns_field(
+        &self,
+        input: SettingsInput,
+        value: &str,
+        label_key: &'static str,
+        placeholder_key: &'static str,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let focused = self
             .settings_workspace
             .read(cx)
@@ -834,8 +1111,7 @@ impl WorkspaceApp {
         let line_height = input.textarea_line_height();
         let placeholder = value.is_empty();
         let visible_value = if placeholder {
-            self.i18n
-                .t("sessionManager.privilege_credentials.prompt_patterns_placeholder")
+            self.i18n.t(placeholder_key)
         } else {
             value.to_string()
         };
@@ -899,8 +1175,7 @@ impl WorkspaceApp {
             });
         form_field(
             &self.tokens,
-            self.i18n
-                .t("sessionManager.privilege_credentials.prompt_patterns"),
+            self.i18n.t(label_key),
             control.into_any_element(),
         )
     }
@@ -933,6 +1208,7 @@ impl WorkspaceApp {
                     .map(|credentials| credentials.len())
                     .unwrap_or(0),
                 local: false,
+                ssh_common: true,
             },
         ];
         // Saved SSH connections already own privilege credential metadata in the
@@ -968,6 +1244,7 @@ impl WorkspaceApp {
                 .map(|credentials| credentials.len())
                 .unwrap_or(0),
             local: true,
+            ssh_common: false,
         }
     }
 
@@ -985,6 +1262,7 @@ impl WorkspaceApp {
             username_placeholder: connection.username.clone(),
             credential_count: connection.privilege_credentials.len(),
             local: false,
+            ssh_common: false,
         }
     }
 
@@ -1074,6 +1352,30 @@ impl WorkspaceApp {
             .0
             .map(str::to_string);
         let scope_id = self.settings_privilege_active_scope_id(selected_scope.as_deref());
+        let snapshot = self.settings_workspace.read(cx).privilege_snapshot();
+        if scope_id == SSH_COMMON_PRIVILEGE_SCOPE_ID
+            && !snapshot.require_click_to_send
+            && snapshot.host_patterns.trim().is_empty()
+        {
+            let error = self
+                .i18n
+                .t("sessionManager.privilege_credentials.auto_requires_host_patterns");
+            self.settings_workspace.update(cx, |settings, cx| {
+                settings.finish_privilege_save(scope_id, Some(error), cx);
+            });
+            self.close_settings_select();
+            return;
+        }
+        if snapshot.kind.is_two_stage() && snapshot.totp_credential_id.is_none() {
+            let error = self
+                .i18n
+                .t("sessionManager.privilege_credentials.two_stage_requires_totp");
+            self.settings_workspace.update(cx, |settings, cx| {
+                settings.finish_privilege_save(scope_id, Some(error), cx);
+            });
+            self.close_settings_select();
+            return;
+        }
         let Some(request) = self.settings_workspace.update(cx, |settings, _cx| {
             settings.take_privilege_save_request(scope_id.clone())
         }) else {
@@ -1139,6 +1441,38 @@ mod tests {
     use gpui::{AppContext, TestAppContext};
 
     use super::*;
+
+    #[gpui::test]
+    fn privilege_save_request_includes_host_group_and_second_factor(cx: &mut TestAppContext) {
+        let settings = cx.new(SettingsWorkspaceEntity::new);
+        settings.update(cx, |settings, cx| {
+            settings.begin_new_privilege_credential(cx);
+            settings.privilege_draft.label = "group sudo".to_string();
+            settings.privilege_draft.kind = PrivilegeCredentialKind::TwoStageSeparateInput;
+            settings.privilege_draft.host_patterns = " hktkosl* \n\ni-* ".to_string();
+            settings.privilege_draft.second_factor_patterns =
+                " Second Factor: \nSecond factor： ".to_string();
+            settings.privilege_draft.second_factor_user_hint = " deploy ".to_string();
+            settings.privilege_draft.totp_credential_id = Some("totp-1".to_string());
+            settings.privilege_draft.require_click_to_send = false;
+
+            let request = settings
+                .take_privilege_save_request(SSH_COMMON_PRIVILEGE_SCOPE_ID.to_string())
+                .expect("privilege save request");
+            assert_eq!(
+                request.host_patterns,
+                vec!["hktkosl*".to_string(), "i-*".to_string()]
+            );
+            assert_eq!(
+                request.second_factor_patterns,
+                vec!["Second Factor:".to_string(), "Second factor：".to_string()]
+            );
+            assert_eq!(request.kind, PrivilegeCredentialKind::TwoStageSeparateInput);
+            assert_eq!(request.second_factor_user_hint.as_deref(), Some("deploy"));
+            assert_eq!(request.totp_credential_id.as_deref(), Some("totp-1"));
+            assert!(!request.require_click_to_send);
+        });
+    }
 
     #[gpui::test]
     fn privilege_save_request_moves_secret_and_keeps_nonsecret_retry_state(

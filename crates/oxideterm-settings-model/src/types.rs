@@ -119,6 +119,7 @@ pub enum SettingsSelect {
     LocalShell,
     LocalShellSemanticScheme(usize),
     LocalPrivilegeKind,
+    LocalPrivilegeTotpCredential,
     ConnectionIdleTimeout,
     ReconnectMaxAttempts,
     ReconnectBaseDelay,
@@ -217,6 +218,9 @@ pub enum SettingsInput {
     TotpPattern,
     TotpPeriod,
     LocalPrivilegePromptPatterns,
+    LocalPrivilegeHostPatterns,
+    LocalPrivilegeSecondFactorPatterns,
+    LocalPrivilegeSecondFactorUserHint,
     ConnectionDefaultUsername,
     ConnectionDefaultPort,
     ConnectionImportTargetGroup,
@@ -592,6 +596,8 @@ impl SettingsInput {
                 | Self::AiAcpAgentEnv(_)
                 | Self::AiMcpArgs
                 | Self::LocalPrivilegePromptPatterns
+                | Self::LocalPrivilegeHostPatterns
+                | Self::LocalPrivilegeSecondFactorPatterns
                 | Self::ManagedKeyPastePrivateKey
         )
     }
@@ -607,6 +613,8 @@ impl SettingsInput {
             | Self::AiAcpAgentEnv(_)
             | Self::AiMcpArgs
             | Self::LocalPrivilegePromptPatterns
+            | Self::LocalPrivilegeHostPatterns
+            | Self::LocalPrivilegeSecondFactorPatterns
             | Self::ManagedKeyPastePrivateKey => 20.0,
             _ => DEFAULT_SETTINGS_TEXTAREA_LINE_HEIGHT,
         }
@@ -646,6 +654,9 @@ impl SettingsInput {
             Self::TotpPattern => 31_012,
             Self::TotpPeriod => 31_013,
             Self::LocalPrivilegePromptPatterns => 31_003,
+            Self::LocalPrivilegeHostPatterns => 31_004,
+            Self::LocalPrivilegeSecondFactorPatterns => 31_005,
+            Self::LocalPrivilegeSecondFactorUserHint => 31_006,
             Self::ConnectionDefaultUsername => 9,
             Self::ConnectionDefaultPort => 10,
             Self::ConnectionImportTargetGroup => 20,

@@ -114,6 +114,7 @@ pub enum SelectAnchorId {
     SettingsLocalShell,
     SettingsLocalShellSemanticScheme(usize),
     SettingsLocalPrivilegeKind,
+    SettingsLocalPrivilegeTotpCredential,
     SettingsConnectionIdleTimeout,
     SettingsReconnectMaxAttempts,
     SettingsReconnectBaseDelay,

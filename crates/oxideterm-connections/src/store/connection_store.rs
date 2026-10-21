@@ -2633,6 +2633,55 @@ impl ConnectionStore {
             } else {
                 "credential:created"
             });
+            let host_patterns = if connection_id == SSH_COMMON_PRIVILEGE_SCOPE_ID {
+                normalize_privilege_host_patterns(request.host_patterns)
+            } else {
+                // Host patterns only partition the shared SSH scope. A
+                // connection-specific credential already has an exact owner.
+                Vec::new()
+            };
+            if connection_id == SSH_COMMON_PRIVILEGE_SCOPE_ID
+                && !request.require_click_to_send
+                && host_patterns.is_empty()
+            {
+                bail!("Automatic privilege fill requires a host pattern or a connection scope");
+            }
+            let second_factor_patterns = normalize_privilege_second_factor_patterns(
+                request.kind,
+                request.second_factor_patterns,
+            );
+            let second_factor_user_hint = if request.kind.waits_for_second_factor() {
+                request
+                    .second_factor_user_hint
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|hint| !hint.is_empty())
+                    .map(ToOwned::to_owned)
+            } else {
+                None
+            };
+            let totp_credential_id = if request.kind.is_two_stage() {
+                request
+                    .totp_credential_id
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|id| !id.is_empty())
+                    .map(ToOwned::to_owned)
+            } else {
+                None
+            };
+            if request.kind.is_two_stage() && totp_credential_id.is_none() {
+                bail!("Two-stage authentication requires a verification code credential");
+            }
+            if let Some(totp_credential_id) = totp_credential_id.as_deref()
+                && !self
+                    .data
+                    .totp_credentials
+                    .iter()
+                    .any(|credential| credential.id == totp_credential_id)
+            {
+                bail!("TOTP credential not found");
+            }
             let new_reference = request
                 .secret
                 .as_ref()
@@ -2657,6 +2706,10 @@ impl ConnectionStore {
                     request.kind,
                     request.prompt_patterns,
                 ),
+                host_patterns,
+                second_factor_patterns,
+                second_factor_user_hint,
+                totp_credential_id,
                 keychain_id: new_reference
                     .clone()
                     .or_else(|| existing.as_ref().and_then(|old| old.keychain_id.clone())),

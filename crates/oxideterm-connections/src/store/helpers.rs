@@ -711,7 +711,9 @@ fn default_privilege_prompt_patterns(kind: PrivilegeCredentialKind) -> Vec<Strin
                 "密码：".to_string(),
             ]
         }
-        PrivilegeCredentialKind::CustomPrompt => Vec::new(),
+        PrivilegeCredentialKind::CustomPrompt
+        | PrivilegeCredentialKind::TwoStageSeparateInput
+        | PrivilegeCredentialKind::TwoStageCombinedInput => Vec::new(),
     }
 }
 
@@ -724,7 +726,9 @@ fn legacy_privilege_prompt_patterns(kind: PrivilegeCredentialKind) -> Vec<String
         PrivilegeCredentialKind::SuPassword => {
             vec!["Password:".to_string(), "su: Password:".to_string()]
         }
-        PrivilegeCredentialKind::CustomPrompt => Vec::new(),
+        PrivilegeCredentialKind::CustomPrompt
+        | PrivilegeCredentialKind::TwoStageSeparateInput
+        | PrivilegeCredentialKind::TwoStageCombinedInput => Vec::new(),
     }
 }
 
@@ -742,12 +746,85 @@ fn normalize_privilege_prompt_patterns(
     }
     // Older builds stored narrow English-only defaults. Treat only that exact
     // generated shape as migratable so real custom prompt fragments survive.
-    if kind != PrivilegeCredentialKind::CustomPrompt
-        && patterns == legacy_privilege_prompt_patterns(kind)
+    if matches!(
+        kind,
+        PrivilegeCredentialKind::SudoPassword | PrivilegeCredentialKind::SuPassword
+    ) && patterns == legacy_privilege_prompt_patterns(kind)
     {
         return default_privilege_prompt_patterns(kind);
     }
     patterns
+}
+
+fn normalize_privilege_second_factor_patterns(
+    kind: PrivilegeCredentialKind,
+    patterns: Vec<String>,
+) -> Vec<String> {
+    if !kind.waits_for_second_factor() {
+        return Vec::new();
+    }
+    patterns
+        .into_iter()
+        .map(|pattern| pattern.trim().to_string())
+        .filter(|pattern| !pattern.is_empty())
+        .collect()
+}
+
+fn normalize_privilege_host_patterns(patterns: Vec<String>) -> Vec<String> {
+    let mut normalized = Vec::new();
+    for pattern in patterns {
+        let pattern = pattern.trim();
+        if pattern.is_empty() {
+            continue;
+        }
+        // Host patterns are display metadata, so preserve the user's casing
+        // while deduplicating case-insensitively.
+        if normalized
+            .iter()
+            .any(|existing: &String| existing.eq_ignore_ascii_case(pattern))
+        {
+            continue;
+        }
+        normalized.push(pattern.to_string());
+    }
+    normalized
+}
+
+/// Matches a host against a single `*`/`?` glob without invoking a regex
+/// engine. Matching is case-insensitive and consumes the whole host.
+pub fn privilege_host_pattern_matches(host: &str, pattern: &str) -> bool {
+    let host = host.trim().to_ascii_lowercase();
+    let pattern = pattern.trim().to_ascii_lowercase();
+    if pattern.is_empty() {
+        return false;
+    }
+    let host = host.as_bytes();
+    let pattern = pattern.as_bytes();
+    let (mut host_index, mut pattern_index) = (0, 0);
+    let (mut star_index, mut star_host_index) = (None, 0);
+    while host_index < host.len() {
+        if pattern_index < pattern.len()
+            && (pattern[pattern_index] == b'?' || pattern[pattern_index] == host[host_index])
+        {
+            host_index += 1;
+            pattern_index += 1;
+        } else if pattern_index < pattern.len() && pattern[pattern_index] == b'*' {
+            star_index = Some(pattern_index);
+            star_host_index = host_index;
+            pattern_index += 1;
+        } else if let Some(star) = star_index {
+            // Backtrack to the last `*` and consume one more host byte.
+            star_host_index += 1;
+            host_index = star_host_index;
+            pattern_index = star + 1;
+        } else {
+            return false;
+        }
+    }
+    while pattern_index < pattern.len() && pattern[pattern_index] == b'*' {
+        pattern_index += 1;
+    }
+    pattern_index == pattern.len()
 }
 
 fn normalize_saved_privilege_credential_for_display(
@@ -755,6 +832,24 @@ fn normalize_saved_privilege_credential_for_display(
 ) -> SavedPrivilegeCredential {
     credential.prompt_patterns =
         normalize_privilege_prompt_patterns(credential.kind, credential.prompt_patterns);
+    credential.host_patterns = normalize_privilege_host_patterns(credential.host_patterns);
+    credential.second_factor_patterns = normalize_privilege_second_factor_patterns(
+        credential.kind,
+        credential.second_factor_patterns,
+    );
+    credential.second_factor_user_hint = if credential.kind.waits_for_second_factor() {
+        credential
+            .second_factor_user_hint
+            .as_deref()
+            .map(str::trim)
+            .filter(|hint| !hint.is_empty())
+            .map(ToOwned::to_owned)
+    } else {
+        None
+    };
+    if !credential.kind.is_two_stage() {
+        credential.totp_credential_id = None;
+    }
     credential
 }
 
