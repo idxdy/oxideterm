@@ -170,7 +170,9 @@ pub(in crate::workspace) enum AiModelRefreshIntent {
     MissingApiKey {
         provider_id: String,
     },
-    Failed,
+    Failed {
+        message: String,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -214,7 +216,14 @@ enum AiProviderKeyOperation {
 
 enum AiModelRefreshFailure {
     MissingApiKey,
-    Failed,
+    Failed(String),
+}
+
+fn model_refresh_failure_message(error: &anyhow::Error) -> String {
+    // Preserve the proxy/TLS/HTTP classification while keeping the toast
+    // bounded and single-line. Reqwest errors already drop the request URL.
+    let message = format!("{error:#}").replace(['\r', '\n'], " ");
+    message.chars().take(400).collect()
 }
 
 struct AiModelRefreshWorkerDelivery {
@@ -2150,12 +2159,25 @@ impl AiWorkspaceEntity {
                             });
                             return;
                         }
-                        Ok(Err(_)) | Err(_) => {
+                        Ok(Err(error)) => {
                             let _ = worker_tx.send(AiModelRefreshWorkerDelivery {
                                 index,
                                 provider_id,
                                 generation,
-                                result: Err(AiModelRefreshFailure::Failed),
+                                result: Err(AiModelRefreshFailure::Failed(format!(
+                                    "could not read the saved API key: {error}"
+                                ))),
+                            });
+                            return;
+                        }
+                        Err(error) => {
+                            let _ = worker_tx.send(AiModelRefreshWorkerDelivery {
+                                index,
+                                provider_id,
+                                generation,
+                                result: Err(AiModelRefreshFailure::Failed(format!(
+                                    "could not read the saved API key: {error}"
+                                ))),
                             });
                             return;
                         }
@@ -2164,7 +2186,9 @@ impl AiWorkspaceEntity {
             };
             let result = oxideterm_ai::fetch_provider_models(provider, api_key)
                 .await
-                .map_err(|_| AiModelRefreshFailure::Failed);
+                .map_err(|error| {
+                    AiModelRefreshFailure::Failed(model_refresh_failure_message(&error))
+                });
             let _ = worker_tx.send(AiModelRefreshWorkerDelivery {
                 index,
                 provider_id,
@@ -4399,7 +4423,9 @@ impl AiWorkspaceEntity {
                 Err(AiModelRefreshFailure::MissingApiKey) => AiModelRefreshIntent::MissingApiKey {
                     provider_id: delivery.provider_id,
                 },
-                Err(AiModelRefreshFailure::Failed) => AiModelRefreshIntent::Failed,
+                Err(AiModelRefreshFailure::Failed(message)) => {
+                    AiModelRefreshIntent::Failed { message }
+                }
             };
             self.model_refresh_intents.push_back(intent);
         }

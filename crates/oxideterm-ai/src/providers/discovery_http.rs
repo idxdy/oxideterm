@@ -81,10 +81,9 @@ pub(crate) async fn fetch_provider_models_payload(
 }
 
 async fn send_text(request: reqwest::RequestBuilder) -> Result<String> {
-    let response = request
-        .send()
-        .await
-        .map_err(|error| anyhow!("model refresh request failed: {}", error.without_url()))?;
+    let response = request.send().await.map_err(|error| {
+        anyhow::Error::new(error.without_url()).context("model refresh request failed")
+    })?;
     let status = response.status();
     let body = response.text().await.unwrap_or_default();
     if !status.is_success() {
@@ -120,10 +119,9 @@ pub(crate) async fn fetch_openai_compatible_json(
             request = request.bearer_auth(api_key.as_str());
         }
         let has_fallback = index + 1 < candidates.len();
-        let response = request
-            .send()
-            .await
-            .map_err(|error| anyhow!("{context} request failed: {}", error.without_url()))?;
+        let response = request.send().await.map_err(|error| {
+            anyhow::Error::new(error.without_url()).context(format!("{context} request failed"))
+        })?;
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
         if !status.is_success() {
