@@ -69,6 +69,7 @@
       "ai_hint": "OxideSens",
       "switch_tree": "Baumansicht",
       "switch_focus": "Fokusansicht",
+      "switch_host": "Zur Hostansicht wechseln",
       "new_connection": "Neue Verbindung",
       "lock_app": "OxideTerm sperren",
       "setup_app_lock": "Anwendungssperre einrichten",
