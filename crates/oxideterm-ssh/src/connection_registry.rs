@@ -2400,6 +2400,7 @@ mod tests {
                 gpu: false,
                 processes: false,
                 docker: false,
+                podman: false,
             },
             Some(updates),
             tokio::runtime::Handle::current(),

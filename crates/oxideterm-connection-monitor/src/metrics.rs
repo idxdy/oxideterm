@@ -4,6 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::docker::{ResourceDockerSnapshot, parse_docker_snapshot};
+use crate::podman::{ResourcePodmanSnapshot, parse_podman_snapshot};
 use crate::service::{ResourceServiceSnapshot, parse_service_snapshot};
 
 pub const RESOURCE_HISTORY_CAPACITY: usize = 60;
@@ -146,6 +147,8 @@ pub struct ResourceMetrics {
     #[serde(default)]
     pub docker: ResourceDockerSnapshot,
     #[serde(default)]
+    pub podman: ResourcePodmanSnapshot,
+    #[serde(default)]
     pub services: ResourceServiceSnapshot,
     pub ssh_rtt_ms: Option<u64>,
     pub source: MetricsSource,
@@ -180,6 +183,7 @@ impl ResourceMetrics {
             gpus: Vec::new(),
             top_processes: Vec::new(),
             docker: ResourceDockerSnapshot::default(),
+            podman: ResourcePodmanSnapshot::default(),
             services: ResourceServiceSnapshot::default(),
             ssh_rtt_ms: None,
             source,
@@ -275,11 +279,13 @@ pub fn parse_resource_metrics(
     let gpus = parse_gpus(output);
     let top_processes = parse_top_processes(output);
     let docker = parse_docker_snapshot(output);
+    let podman = parse_podman_snapshot(output);
     let services = parse_service_snapshot(output);
     let has_memory = mem.is_some();
     let has_auxiliary_metrics = !gpus.is_empty()
         || !top_processes.is_empty()
-        || !matches!(docker.status, crate::ResourceDockerStatus::Unknown);
+        || !matches!(docker.status, crate::ResourceDockerStatus::Unknown)
+        || !matches!(podman.status, crate::ResourcePodmanStatus::Unknown);
 
     let cpu_percent = match (&cpu_snap, previous) {
         (Some(current), Some(previous)) => cpu_usage_percent(current, &previous.cpu),
@@ -426,6 +432,7 @@ pub fn parse_resource_metrics(
         gpus,
         top_processes,
         docker,
+        podman,
         services,
         ssh_rtt_ms: None,
         source,

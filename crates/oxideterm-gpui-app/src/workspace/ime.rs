@@ -144,10 +144,12 @@ pub(super) enum WorkspaceImeTarget {
     HostProcessSearch,
     HostProcessRenice,
     HostDockerSearch,
+    HostPodmanSearch,
     HostServiceSearch,
     HostLogSearch,
     HostTmuxSearch,
     HostTmuxDialogInput,
+    HostPodmanDialog,
     HostPortSearch,
     HostScheduleSearch,
     HostFilesystemSearch,
@@ -429,10 +431,12 @@ pub(super) fn workspace_ime_target_for_plain_host_tools_input(
         HostToolsTextInput::ProcessSearch => Some(WorkspaceImeTarget::HostProcessSearch),
         HostToolsTextInput::ProcessRenice => Some(WorkspaceImeTarget::HostProcessRenice),
         HostToolsTextInput::DockerSearch => Some(WorkspaceImeTarget::HostDockerSearch),
+        HostToolsTextInput::PodmanSearch => Some(WorkspaceImeTarget::HostPodmanSearch),
         HostToolsTextInput::ServiceSearch => Some(WorkspaceImeTarget::HostServiceSearch),
         HostToolsTextInput::LogSearch => Some(WorkspaceImeTarget::HostLogSearch),
         HostToolsTextInput::TmuxSearch => Some(WorkspaceImeTarget::HostTmuxSearch),
         HostToolsTextInput::TmuxDialog => None,
+        HostToolsTextInput::PodmanDialog => Some(WorkspaceImeTarget::HostPodmanDialog),
         HostToolsTextInput::PortSearch => Some(WorkspaceImeTarget::HostPortSearch),
         HostToolsTextInput::ScheduleSearch => Some(WorkspaceImeTarget::HostScheduleSearch),
         HostToolsTextInput::FilesystemSearch => Some(WorkspaceImeTarget::HostFilesystemSearch),
@@ -541,6 +545,8 @@ impl WorkspaceImeTarget {
             Self::HostProcessSearch => 6,
             Self::HostProcessRenice => 7,
             Self::HostDockerSearch => 8,
+            Self::HostPodmanSearch => 22,
+            Self::HostPodmanDialog => 50,
             Self::HostServiceSearch => 9,
             Self::HostLogSearch => 10,
             Self::HostTmuxSearch => 11,
@@ -1283,10 +1289,12 @@ impl WorkspaceApp {
                 HostToolsTextInput::ProcessSearch => WorkspaceImeTarget::HostProcessSearch,
                 HostToolsTextInput::ProcessRenice => WorkspaceImeTarget::HostProcessRenice,
                 HostToolsTextInput::DockerSearch => WorkspaceImeTarget::HostDockerSearch,
+                HostToolsTextInput::PodmanSearch => WorkspaceImeTarget::HostPodmanSearch,
                 HostToolsTextInput::ServiceSearch => WorkspaceImeTarget::HostServiceSearch,
                 HostToolsTextInput::LogSearch => WorkspaceImeTarget::HostLogSearch,
                 HostToolsTextInput::TmuxSearch => WorkspaceImeTarget::HostTmuxSearch,
                 HostToolsTextInput::TmuxDialog => WorkspaceImeTarget::HostTmuxDialogInput,
+                HostToolsTextInput::PodmanDialog => WorkspaceImeTarget::HostPodmanDialog,
                 HostToolsTextInput::PortSearch => WorkspaceImeTarget::HostPortSearch,
                 HostToolsTextInput::ScheduleSearch => WorkspaceImeTarget::HostScheduleSearch,
                 HostToolsTextInput::FilesystemSearch => WorkspaceImeTarget::HostFilesystemSearch,
@@ -2321,6 +2329,12 @@ impl WorkspaceApp {
                 .ui
                 .input_value(HostToolsTextInput::DockerSearch)
                 .map(str::to_string),
+            WorkspaceImeTarget::HostPodmanSearch => self
+                .host_tools
+                .read(cx)
+                .ui
+                .input_value(HostToolsTextInput::PodmanSearch)
+                .map(str::to_string),
             WorkspaceImeTarget::HostServiceSearch => self
                 .host_tools
                 .read(cx)
@@ -2344,6 +2358,12 @@ impl WorkspaceApp {
                 .read(cx)
                 .ui
                 .input_value(HostToolsTextInput::TmuxDialog)
+                .map(|value| ime_text_snapshot(target, value)),
+            WorkspaceImeTarget::HostPodmanDialog => self
+                .host_tools
+                .read(cx)
+                .ui
+                .input_value(HostToolsTextInput::PodmanDialog)
                 .map(|value| ime_text_snapshot(target, value)),
             WorkspaceImeTarget::HostPortSearch => self
                 .host_tools
@@ -3327,6 +3347,14 @@ impl WorkspaceApp {
                     cx,
                 );
             }
+            WorkspaceImeTarget::HostPodmanSearch => {
+                self.replace_host_tools_text_input(
+                    HostToolsTextInput::PodmanSearch,
+                    replacement_range,
+                    text,
+                    cx,
+                );
+            }
             WorkspaceImeTarget::HostServiceSearch => {
                 self.replace_host_tools_text_input(
                     HostToolsTextInput::ServiceSearch,
@@ -3354,6 +3382,14 @@ impl WorkspaceApp {
             WorkspaceImeTarget::HostTmuxDialogInput => {
                 self.replace_host_tools_text_input(
                     HostToolsTextInput::TmuxDialog,
+                    replacement_range,
+                    text,
+                    cx,
+                );
+            }
+            WorkspaceImeTarget::HostPodmanDialog => {
+                self.replace_host_tools_text_input(
+                    HostToolsTextInput::PodmanDialog,
                     replacement_range,
                     text,
                     cx,

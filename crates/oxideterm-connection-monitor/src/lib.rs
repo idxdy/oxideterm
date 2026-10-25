@@ -14,9 +14,12 @@ mod gpu;
 mod log;
 mod metrics;
 mod package;
+mod podman;
+mod podman_resources;
 mod port;
 mod process;
 mod profiler;
+mod redis;
 mod scheduled_task;
 mod service;
 mod shell;
@@ -72,6 +75,28 @@ pub use package::{
     build_package_inspect_command, build_package_snapshot_command, package_filter_label_key,
     package_row_signature, package_status_label_key, parse_package_snapshot, visible_package_rows,
 };
+pub use podman::{
+    PodmanActionAvailability, PodmanActionCommand, PodmanActionKind, PodmanCaptureCommand,
+    ResourcePodmanContainer, ResourcePodmanSnapshot, ResourcePodmanStatus,
+    build_podman_action_command, build_podman_diff_command, build_podman_exec_shell_command,
+    build_podman_follow_logs_command, build_podman_healthcheck_command,
+    build_podman_history_command, build_podman_inspect_command, build_podman_logs_command,
+    build_podman_network_inspect_command, build_podman_rename_command, build_podman_top_command,
+    build_podman_volume_inspect_command, build_podman_volume_usage_command, parse_podman_snapshot,
+    podman_action_availability, podman_action_failure_message, podman_action_succeeded,
+    podman_action_success_message, podman_row_signature, podman_sample_command,
+    podman_state_label_key, shell_quote_single, visible_podman_rows,
+};
+pub use podman_resources::{
+    PodmanResourceAction, PodmanTerminalOp, ResourcePodmanImage, ResourcePodmanImagesSnapshot,
+    ResourcePodmanNetwork, ResourcePodmanNetworksSnapshot, ResourcePodmanSearchResult,
+    ResourcePodmanStat, ResourcePodmanStatsSnapshot, ResourcePodmanVolume,
+    ResourcePodmanVolumesSnapshot, build_podman_attach_command,
+    build_podman_resource_action_command, build_podman_search_command,
+    build_podman_terminal_command, parse_podman_resources_snapshot, parse_podman_search_results,
+    parse_podman_stats_snapshot, podman_resources_snapshot_command, podman_stats_command,
+    validated_resource_name,
+};
 pub use port::{
     PortCaptureCommand, PortCommandCapability, PortFilter, ResourcePortEntry, ResourcePortSnapshot,
     ResourcePortStatus, build_port_diagnostic_command, build_port_snapshot_command,
@@ -91,6 +116,10 @@ pub use profiler::{
     RESOURCE_MAX_OUTPUT_SIZE, RESOURCE_SAMPLE_INTERVAL, RESOURCE_SAMPLE_TIMEOUT,
     ResourceSampleShell, ResourceSampler, ResourceSamplerFuture, ResourceSamplingConfig,
     build_sample_command, build_sample_command_for, shell_init_command,
+};
+pub use redis::{
+    REDIS_PROBE_TARGET, ResourceRedisSnapshot, ResourceRedisStatus, parse_redis_snapshot,
+    redis_sample_command,
 };
 pub use scheduled_task::{
     ResourceScheduledTask, ResourceScheduledTaskSnapshot, ResourceScheduledTaskStatus,

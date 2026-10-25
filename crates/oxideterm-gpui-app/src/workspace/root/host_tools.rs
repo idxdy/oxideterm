@@ -191,6 +191,66 @@ impl WorkspaceApp {
                     )
                 }
             }
+            HostToolsNotice::PodmanActionAlreadyRunning => (
+                self.i18n
+                    .t("sidebar.host_podman.toast.action_already_running"),
+                TerminalNoticeVariant::Warning,
+            ),
+            HostToolsNotice::PodmanLogsAlreadyRunning => (
+                self.i18n
+                    .t("sidebar.host_podman.toast.logs_already_running"),
+                TerminalNoticeVariant::Warning,
+            ),
+            HostToolsNotice::PodmanConnectionMissing => (
+                self.i18n.t("sidebar.host_podman.toast.connection_missing"),
+                TerminalNoticeVariant::Error,
+            ),
+            HostToolsNotice::PodmanActionFailed => (
+                self.i18n.t("sidebar.host_podman.toast.action_failed"),
+                TerminalNoticeVariant::Error,
+            ),
+            HostToolsNotice::PodmanLogsFailed => (
+                self.i18n.t("sidebar.host_podman.toast.logs_failed"),
+                TerminalNoticeVariant::Error,
+            ),
+            HostToolsNotice::PodmanActionFinished {
+                container_name,
+                succeeded,
+            } => {
+                if succeeded {
+                    (
+                        self.i18n_replace(
+                            "sidebar.host_podman.toast.action_succeeded",
+                            &[("name", container_name)],
+                        ),
+                        TerminalNoticeVariant::Success,
+                    )
+                } else {
+                    (
+                        self.i18n.t("sidebar.host_podman.toast.action_failed"),
+                        TerminalNoticeVariant::Error,
+                    )
+                }
+            }
+            HostToolsNotice::PodmanResourceActionFinished {
+                description,
+                succeeded,
+            } => {
+                if succeeded {
+                    (
+                        self.i18n_replace(
+                            "sidebar.host_podman.toast.resource_succeeded",
+                            &[("name", description)],
+                        ),
+                        TerminalNoticeVariant::Success,
+                    )
+                } else {
+                    (
+                        self.i18n.t("sidebar.host_podman.toast.action_failed"),
+                        TerminalNoticeVariant::Error,
+                    )
+                }
+            }
             HostToolsNotice::ServiceActionAlreadyRunning => (
                 self.i18n
                     .t("sidebar.host_services.toast.action_already_running"),

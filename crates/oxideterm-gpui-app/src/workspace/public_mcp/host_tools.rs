@@ -237,6 +237,7 @@ fn host_tools_capture_command(
                 gpu: true,
                 processes: false,
                 docker: false,
+                podman: false,
             },
         ),
         HostToolResource::Processes => build_sample_command_for(
@@ -246,6 +247,7 @@ fn host_tools_capture_command(
                 gpu: false,
                 processes: true,
                 docker: false,
+                podman: false,
             },
         ),
         HostToolResource::Docker => docker_sample_command(os_type).to_owned(),

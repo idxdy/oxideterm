@@ -73,6 +73,7 @@
       "logs": "Nhật ký",
       "tmux": "tmux",
       "docker": "Docker",
+      "podman": "Podman",
       "tmux_management": "Quản lý tmux",
       "docker_management": "Quản lý Docker",
       "session_manager": "Quản lý phiên",
@@ -86,7 +87,8 @@
       "ports": "Cổng",
       "schedules": "Tác vụ đã lên lịch",
       "filesystems": "Ổ đĩa",
-      "packages": "Gói"
+      "packages": "Gói",
+      "redis": "Redis"
     },
     "tooltips": {
       "switch_to_light": "Chuyển sang giao diện sáng",
@@ -206,7 +208,10 @@
         "exec": "Mở shell",
         "start": "Khởi động",
         "stop": "Dừng",
-        "restart": "Khởi động lại"
+        "restart": "Khởi động lại",
+        "pause": "Tạm dừng",
+        "unpause": "Tiếp tục",
+        "remove": "Xóa"
       },
       "exec_title": "Docker: {{name}}",
       "follow_title": "Log Docker: {{name}}",
@@ -221,7 +226,10 @@
         "cancel": "Hủy",
         "start_desc": "Khởi động container {{name}} ({{id}})?",
         "stop_desc": "Dừng container {{name}} ({{id}})? Công việc đang chạy trong container có thể bị gián đoạn.",
-        "restart_desc": "Khởi động lại container {{name}} ({{id}})? Công việc đang chạy trong container sẽ bị gián đoạn."
+        "restart_desc": "Khởi động lại container {{name}} ({{id}})? Công việc đang chạy trong container sẽ bị gián đoạn.",
+        "pause_desc": "Tạm dừng container {{name}} ({{id}})?",
+        "unpause_desc": "Tiếp tục container {{name}} ({{id}})?",
+        "remove_desc": "Xóa container {{name}} ({{id}})? Không thể hoàn tác."
       },
       "toast": {
         "action_already_running": "Đang có một thao tác Docker chạy.",
@@ -233,6 +241,181 @@
         "connection_missing": "Kết nối đã chọn không còn khả dụng.",
         "action_failed": "Thao tác Docker thất bại.",
         "action_succeeded": "Đã hoàn tất thao tác Docker cho {{name}}."
+      }
+    },
+    "host_podman": {
+      "tabs": {
+        "containers": "Container",
+        "images": "Ảnh",
+        "volumes": "Volume",
+        "networks": "Mạng"
+      },
+      "images": {
+        "count_suffix": "ảnh",
+        "empty": "Không có ảnh khớp"
+      },
+      "volumes": {
+        "count_suffix": "volume"
+      },
+      "networks": {
+        "count_suffix": "mạng"
+      },
+      "stats": {
+        "count_suffix": "container"
+      },
+      "resources_empty": "Chưa có gì",
+      "inputs": {
+        "run_title": "Chạy container",
+        "run_placeholder": "-d --name web -p 8080:80 nginx",
+        "rename_title": "Đổi tên container",
+        "rename_placeholder": "Tên mới",
+        "pull_title": "Tải ảnh",
+        "pull_placeholder": "docker.io/library/nginx:alpine",
+        "push_title": "Đẩy ảnh",
+        "push_placeholder": "registry.example.com/me/web:latest",
+        "build_title": "Xây dựng ảnh",
+        "build_placeholder": "-t anh-moi:latest /duong-dan-context",
+        "tag_title": "Gắn nhãn ảnh",
+        "tag_placeholder": "registry.example.com/me/web:latest",
+        "save_title": "Lưu archive",
+        "save_placeholder": "/duong/dan/web.tar",
+        "load_title": "Nạp archive",
+        "load_placeholder": "/duong/dan/image.tar",
+        "import_title": "Nhập rootfs",
+        "import_placeholder": "/duong/dan/rootfs.tar anh-moi:latest",
+        "export_title": "Xuất filesystem",
+        "export_placeholder": "/duong/dan/fs.tar",
+        "copy_title": "Sao chép tệp",
+        "copy_placeholder": "/duong/dan/container /duong/dan/remote",
+        "volume_title": "Tạo volume",
+        "volume_placeholder": "ten-volume",
+        "network_title": "Tạo mạng",
+        "network_placeholder": "ten-mang [driver]",
+        "search_title": "Tìm ảnh",
+        "search_placeholder": "Từ khóa",
+        "login_title": "Đăng nhập registry",
+        "login_placeholder": "registry.example.com"
+      },
+      "confirms": {
+        "run": "Chạy",
+        "remove_image": "Xóa ảnh {{name}}? Không thể hoàn tác.",
+        "tag_image": "Gắn nhãn ảnh {{name}}?",
+        "rename": "Đổi tên thành {{name}}?",
+        "healthcheck": "Chạy healthcheck ngay bây giờ?",
+        "create_volume": "Tạo volume {{name}}?",
+        "remove_volume": "Xóa volume {{name}}? Không thể hoàn tác.",
+        "prune_volumes": "Xóa TẤT CẢ volume không dùng trên máy này? Không thể hoàn tác.",
+        "create_network": "Tạo mạng {{name}}?",
+        "remove_network": "Xóa mạng {{name}}?",
+        "logout": "Đăng xuất khỏi registry này?",
+      "prune_dangling_images": "Xóa tất cả ảnh lơ lửng (không nhãn)? Không thể hoàn tác.",
+      "prune_unused_images": "Xóa TẤT CẢ ảnh không được container nào dùng trên máy này? Không thể hoàn tác."
+      },
+      "captures": {
+        "loading": "Đang tải...",
+        "close": "Đóng",
+      "failed": "Lấy dữ liệu Podman thất bại."
+      },
+      "attach_title": "Gắn vào: {{name}}",
+      "search_placeholder": "Tìm kiếm container...",
+      "count_suffix": "container",
+      "sampling": "Đang thu thập container Podman...",
+      "empty": "Không có container khớp",
+      "unavailable": "Podman không khả dụng trên máy này.",
+      "unavailable_detail": "Podman không thể kết nối trên máy này: {{detail}}",
+      "error": "Lệnh Podman thất bại: {{error}}",
+      "columns": {
+        "container": "Container / Ảnh",
+        "image": "Ảnh",
+        "state": "Trạng thái"
+      },
+      "states": {
+        "running": "Đang chạy",
+        "exited": "Đã thoát",
+        "created": "Đã tạo",
+        "paused": "Tạm dừng",
+        "stopped": "Đã dừng",
+        "dead": "Đã chết",
+        "unknown": "Không rõ"
+      },
+      "actions": {
+        "refresh": "Làm mới container",
+        "start": "Khởi động",
+        "stop": "Dừng",
+        "restart": "Khởi động lại",
+        "pause": "Tạm dừng",
+        "unpause": "Tiếp tục",
+        "remove": "Xóa",
+        "logs": "Xem log",
+        "follow_logs": "Theo dõi log",
+        "exec": "Mở shell",
+        "run": "Chạy container",
+        "stats": "Dùng tài nguyên",
+        "create": "Tạo",
+        "prune": "Dọn dẹp",
+        "tag": "Gắn nhãn",
+        "history": "Lịch sử",
+        "inspect": "Khám sát",
+        "save": "Lưu archive",
+        "pull": "Tải ảnh",
+        "push": "Đẩy ảnh",
+        "build": "Xây dựng ảnh",
+        "search": "Tìm kiếm",
+        "attach": "Gắn vào",
+        "healthcheck": "Chạy healthcheck",
+        "rename": "Đổi tên",
+        "more": "Đổi tên container",
+        "usage": "Được dùng bởi",
+      "prune_dangling": "Dọn ảnh lơ lửng",
+      "prune_unused": "Xóa ảnh không dùng"
+      },
+      "confirm": {
+        "title": "Xác nhận hành động Podman",
+        "cancel": "Hủy",
+        "start_desc": "Khởi động container {{name}} ({{id}})?",
+        "stop_desc": "Dừng container {{name}} ({{id}})? Công việc đang chạy trong container có thể bị gián đoạn.",
+        "restart_desc": "Khởi động lại container {{name}} ({{id}})? Công việc đang chạy trong container sẽ bị gián đoạn.",
+        "pause_desc": "Tạm dừng container {{name}} ({{id}})?",
+        "unpause_desc": "Tiếp tục container {{name}} ({{id}})?",
+        "remove_desc": "Xóa container {{name}} ({{id}})? Không thể hoàn tác.",
+      "run": "Xác nhận"
+      },
+      "logs": {
+        "title": "Log: {{name}}",
+        "loading": "Đang tải log...",
+        "empty": "Không có log gần đây.",
+        "close": "Đóng log"
+      },
+      "follow_title": "Log Podman: {{name}}",
+      "exec_title": "Podman: {{name}}",
+      "toast": {
+        "action_already_running": "Một hành động Podman đang chạy.",
+        "logs_already_running": "Log Podman đang được tải.",
+        "connection_missing": "Kết nối đã chọn không còn khả dụng.",
+        "action_failed": "Hành động Podman thất bại.",
+        "logs_failed": "Không thể tải log Podman.",
+        "exec_terminal_missing": "Không có tuyến SSH nào khả dụng cho container này.",
+        "exec_opened": "Đã mở shell cho {{name}}.",
+        "follow_opened": "Đang theo dõi log của {{name}}.",
+        "attach_opened": "Đang gắn vào {{name}}.",
+        "terminal_opened": "Đã mở terminal cho lệnh Podman này.",
+        "action_succeeded": "Hành động Podman hoàn tất cho {{name}}."
+      }
+    },
+    "host_redis": {
+      "loading": "Đang kiểm tra Redis...",
+      "unavailable": "Không tìm thấy redis-cli trên máy này. Mục tiêu: 127.0.0.1:6379.",
+      "no_server": "Không có máy chủ Redis nào đang lắng nghe tại 127.0.0.1:6379.",
+      "auth_required": "Máy chủ Redis tại 127.0.0.1:6379 yêu cầu xác thực; việc kiểm tra này không dùng thông tin xác thực.",
+      "error": "Kiểm tra Redis thất bại: {{error}}",
+      "reachable": "Redis có thể truy cập tại 127.0.0.1:6379.",
+      "probe_target": "127.0.0.1:6379",
+      "actions": {
+        "refresh": "Kiểm tra Redis"
+      },
+      "toast": {
+        "connection_missing": "Kết nối đã chọn không còn khả dụng.",
+        "probe_failed": "Kiểm tra Redis thất bại."
       }
     },
     "host_services": {

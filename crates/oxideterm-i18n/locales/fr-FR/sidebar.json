@@ -73,6 +73,7 @@
       "logs": "Journaux",
       "tmux": "tmux",
       "docker": "Docker",
+      "podman": "Podman",
       "tmux_management": "Gestion de tmux",
       "docker_management": "Gestion de Docker",
       "session_manager": "Gestionnaire de sessions",
@@ -86,7 +87,8 @@
       "ports": "Ports",
       "schedules": "Tâches planifiées",
       "filesystems": "Disques",
-      "packages": "Paquets"
+      "packages": "Paquets",
+      "redis": "Redis"
     },
     "tooltips": {
       "switch_to_light": "Passer au thème clair",
@@ -206,7 +208,10 @@
         "exec": "Ouvrir un shell",
         "start": "Démarrer",
         "stop": "Arrêter",
-        "restart": "Redémarrer"
+        "restart": "Redémarrer",
+        "pause": "Suspendre",
+        "unpause": "Reprendre",
+        "remove": "Supprimer"
       },
       "exec_title": "Docker : {{name}}",
       "follow_title": "Logs Docker : {{name}}",
@@ -221,7 +226,10 @@
         "cancel": "Annuler",
         "start_desc": "Démarrer le conteneur {{name}} ({{id}}) ?",
         "stop_desc": "Arrêter le conteneur {{name}} ({{id}}) ? Le travail en cours dans le conteneur peut être interrompu.",
-        "restart_desc": "Redémarrer le conteneur {{name}} ({{id}}) ? Le travail en cours dans le conteneur sera interrompu."
+        "restart_desc": "Redémarrer le conteneur {{name}} ({{id}}) ? Le travail en cours dans le conteneur sera interrompu.",
+        "pause_desc": "Suspendre le conteneur {{name}} ({{id}}) ?",
+        "unpause_desc": "Reprendre le conteneur {{name}} ({{id}}) ?",
+        "remove_desc": "Supprimer le conteneur {{name}} ({{id}}) ? Cette action est irréversible."
       },
       "toast": {
         "action_already_running": "Une action Docker est déjà en cours.",
@@ -233,6 +241,181 @@
         "connection_missing": "La connexion sélectionnée n’est plus disponible.",
         "action_failed": "L’action Docker a échoué.",
         "action_succeeded": "L’action Docker pour {{name}} est terminée."
+      }
+    },
+    "host_podman": {
+      "tabs": {
+        "containers": "Conteneurs",
+        "images": "Images",
+        "volumes": "Volumes",
+        "networks": "Réseaux"
+      },
+      "images": {
+        "count_suffix": "images",
+        "empty": "Aucune image correspondante"
+      },
+      "volumes": {
+        "count_suffix": "volumes"
+      },
+      "networks": {
+        "count_suffix": "réseaux"
+      },
+      "stats": {
+        "count_suffix": "conteneurs"
+      },
+      "resources_empty": "Rien pour le moment",
+      "inputs": {
+        "run_title": "Lancer un conteneur",
+        "run_placeholder": "-d --name web -p 8080:80 nginx",
+        "rename_title": "Renommer le conteneur",
+        "rename_placeholder": "Nouveau nom",
+        "pull_title": "Tirer une image",
+        "pull_placeholder": "docker.io/library/nginx:alpine",
+        "push_title": "Pousser une image",
+        "push_placeholder": "registry.example.com/me/web:latest",
+        "build_title": "Construire une image",
+        "build_placeholder": "-t mon-image:latest /chemin/contexte",
+        "tag_title": "Taguer une image",
+        "tag_placeholder": "registry.example.com/me/web:latest",
+        "save_title": "Sauvegarder",
+        "save_placeholder": "/chemin/web.tar",
+        "load_title": "Charger une archive",
+        "load_placeholder": "/chemin/image.tar",
+        "import_title": "Importer un rootfs",
+        "import_placeholder": "/chemin/rootfs.tar mon-image:latest",
+        "export_title": "Exporter le système de fichiers",
+        "export_placeholder": "/chemin/fs.tar",
+        "copy_title": "Copier des fichiers",
+        "copy_placeholder": "/chemin/conteneur /chemin/distant",
+        "volume_title": "Créer un volume",
+        "volume_placeholder": "nom-volume",
+        "network_title": "Créer un réseau",
+        "network_placeholder": "nom-réseau [driver]",
+        "search_title": "Rechercher des images",
+        "search_placeholder": "Terme de recherche",
+        "login_title": "Connexion au registry",
+        "login_placeholder": "registry.example.com"
+      },
+      "confirms": {
+        "run": "Lancer",
+        "remove_image": "Supprimer l'image {{name}} ? Irréversible.",
+        "tag_image": "Taguer l'image {{name}} ?",
+        "rename": "Renommer en {{name}} ?",
+        "healthcheck": "Lancer le healthcheck maintenant ?",
+        "create_volume": "Créer le volume {{name}} ?",
+        "remove_volume": "Supprimer le volume {{name}} ? Irréversible.",
+        "prune_volumes": "Supprimer TOUS les volumes inutilisés de cet hôte ? Irréversible.",
+        "create_network": "Créer le réseau {{name}} ?",
+        "remove_network": "Supprimer le réseau {{name}} ?",
+        "logout": "Se déconnecter de ce registry ?",
+      "prune_dangling_images": "Supprimer toutes les images suspendues (sans tag) ? Irréversible.",
+      "prune_unused_images": "Supprimer TOUTES les images qu'aucun conteneur n'utilise sur cet hôte ? Irréversible."
+      },
+      "captures": {
+        "loading": "Chargement...",
+        "close": "Fermer",
+      "failed": "Échec de la capture Podman."
+      },
+      "attach_title": "Attacher : {{name}}",
+      "search_placeholder": "Rechercher des conteneurs...",
+      "count_suffix": "conteneurs",
+      "sampling": "Récupération des conteneurs Podman...",
+      "empty": "Aucun conteneur correspondant",
+      "unavailable": "Podman n'est pas disponible sur cet hôte.",
+      "unavailable_detail": "Podman est inaccessible sur cet hôte : {{detail}}",
+      "error": "Échec de la commande Podman : {{error}}",
+      "columns": {
+        "container": "Conteneur / Image",
+        "image": "Image",
+        "state": "État"
+      },
+      "states": {
+        "running": "En cours",
+        "exited": "Terminé",
+        "created": "Créé",
+        "paused": "En pause",
+        "stopped": "Arrêté",
+        "dead": "Mort",
+        "unknown": "Inconnu"
+      },
+      "actions": {
+        "refresh": "Actualiser les conteneurs",
+        "start": "Démarrer",
+        "stop": "Arrêter",
+        "restart": "Redémarrer",
+        "pause": "Suspendre",
+        "unpause": "Reprendre",
+        "remove": "Supprimer",
+        "logs": "Voir les journaux",
+        "follow_logs": "Suivre les journaux",
+        "exec": "Ouvrir un shell",
+        "run": "Lancer un conteneur",
+        "stats": "Utilisation des ressources",
+        "create": "Créer",
+        "prune": "Nettoyer les inutilisés",
+        "tag": "Taguer",
+        "history": "Historique",
+        "inspect": "Inspecter",
+        "save": "Sauvegarder",
+        "pull": "Tirer une image",
+        "push": "Pousser une image",
+        "build": "Construire une image",
+        "search": "Rechercher",
+        "attach": "Attacher",
+        "healthcheck": "Lancer le healthcheck",
+        "rename": "Renommer",
+        "more": "Renommer le conteneur",
+        "usage": "Utilisé par",
+      "prune_dangling": "Nettoyer les suspendues",
+      "prune_unused": "Supprimer les inutilisées"
+      },
+      "confirm": {
+        "title": "Confirmer l'action Podman",
+        "cancel": "Annuler",
+        "start_desc": "Démarrer le conteneur {{name}} ({{id}}) ?",
+        "stop_desc": "Arrêter le conteneur {{name}} ({{id}}) ? Le travail en cours dans le conteneur peut être interrompu.",
+        "restart_desc": "Redémarrer le conteneur {{name}} ({{id}}) ? Le travail en cours dans le conteneur sera interrompu.",
+        "pause_desc": "Suspendre le conteneur {{name}} ({{id}}) ?",
+        "unpause_desc": "Reprendre le conteneur {{name}} ({{id}}) ?",
+        "remove_desc": "Supprimer le conteneur {{name}} ({{id}}) ? Cette action est irréversible.",
+      "run": "Confirmer"
+      },
+      "logs": {
+        "title": "Journaux : {{name}}",
+        "loading": "Chargement des journaux...",
+        "empty": "Aucun journal récent.",
+        "close": "Fermer les journaux"
+      },
+      "follow_title": "Journaux Podman : {{name}}",
+      "exec_title": "Podman : {{name}}",
+      "toast": {
+        "action_already_running": "Une action Podman est déjà en cours.",
+        "logs_already_running": "Les journaux Podman sont déjà en cours de chargement.",
+        "connection_missing": "La connexion sélectionnée n'est plus disponible.",
+        "action_failed": "L'action Podman a échoué.",
+        "logs_failed": "Échec du chargement des journaux Podman.",
+        "exec_terminal_missing": "Aucune route de terminal SSH disponible pour ce conteneur.",
+        "exec_opened": "Shell ouvert pour {{name}}.",
+        "follow_opened": "Suivi des journaux de {{name}}.",
+        "attach_opened": "Connexion à {{name}}.",
+        "terminal_opened": "Un terminal a été ouvert pour cette commande Podman.",
+        "action_succeeded": "Action Podman terminée pour {{name}}."
+      }
+    },
+    "host_redis": {
+      "loading": "Vérification de Redis...",
+      "unavailable": "redis-cli est introuvable sur cet hôte. Cible : 127.0.0.1:6379.",
+      "no_server": "Aucun serveur Redis n'écoute sur 127.0.0.1:6379.",
+      "auth_required": "Le serveur Redis sur 127.0.0.1:6379 exige une authentification ; cette vérification est non authentifiée.",
+      "error": "Échec de la vérification Redis : {{error}}",
+      "reachable": "Redis est joignable sur 127.0.0.1:6379.",
+      "probe_target": "127.0.0.1:6379",
+      "actions": {
+        "refresh": "Vérifier Redis"
+      },
+      "toast": {
+        "connection_missing": "La connexion sélectionnée n'est plus disponible.",
+        "probe_failed": "Échec de la vérification Redis."
       }
     },
     "host_services": {

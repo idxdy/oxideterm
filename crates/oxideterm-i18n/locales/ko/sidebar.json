@@ -73,6 +73,7 @@
       "logs": "로그",
       "tmux": "tmux",
       "docker": "Docker",
+      "podman": "Podman",
       "tmux_management": "tmux 관리",
       "docker_management": "Docker 관리",
       "session_manager": "세션 관리자",
@@ -86,7 +87,8 @@
       "ports": "포트",
       "schedules": "예약 작업",
       "filesystems": "디스크",
-      "packages": "패키지"
+      "packages": "패키지",
+      "redis": "Redis"
     },
     "tooltips": {
       "switch_to_light": "밝은 테마로 전환",
@@ -206,7 +208,10 @@
         "exec": "셸 열기",
         "start": "시작",
         "stop": "중지",
-        "restart": "재시작"
+        "restart": "재시작",
+        "pause": "일시 중지",
+        "unpause": "재개",
+        "remove": "제거"
       },
       "exec_title": "Docker: {{name}}",
       "follow_title": "Docker 로그: {{name}}",
@@ -221,7 +226,10 @@
         "cancel": "취소",
         "start_desc": "컨테이너 {{name}}({{id}})를 시작할까요?",
         "stop_desc": "컨테이너 {{name}}({{id}})를 중지할까요? 컨테이너 안에서 실행 중인 작업이 중단될 수 있습니다.",
-        "restart_desc": "컨테이너 {{name}}({{id}})를 재시작할까요? 컨테이너 안에서 실행 중인 작업이 중단됩니다."
+        "restart_desc": "컨테이너 {{name}}({{id}})를 재시작할까요? 컨테이너 안에서 실행 중인 작업이 중단됩니다.",
+        "pause_desc": "컨테이너 {{name}}({{id}})을(를) 일시 중지할까요?",
+        "unpause_desc": "컨테이너 {{name}}({{id}})을(를) 재개할까요?",
+        "remove_desc": "컨테이너 {{name}}({{id}})을(를) 제거할까요? 되돌릴 수 없습니다."
       },
       "toast": {
         "action_already_running": "Docker 작업이 이미 실행 중입니다.",
@@ -233,6 +241,181 @@
         "connection_missing": "선택한 연결을 사용할 수 없습니다.",
         "action_failed": "Docker 작업에 실패했습니다.",
         "action_succeeded": "{{name}}의 Docker 작업을 완료했습니다."
+      }
+    },
+    "host_podman": {
+      "tabs": {
+        "containers": "컨테이너",
+        "images": "이미지",
+        "volumes": "볼륨",
+        "networks": "네트워크"
+      },
+      "images": {
+        "count_suffix": "개 이미지",
+        "empty": "일치하는 이미지 없음"
+      },
+      "volumes": {
+        "count_suffix": "개 볼륨"
+      },
+      "networks": {
+        "count_suffix": "개 네트워크"
+      },
+      "stats": {
+        "count_suffix": "개 컨테이너"
+      },
+      "resources_empty": "아직 없습니다",
+      "inputs": {
+        "run_title": "컨테이너 실행",
+        "run_placeholder": "-d --name web -p 8080:80 nginx",
+        "rename_title": "컨테이너 이름 변경",
+        "rename_placeholder": "새 컨테이너 이름",
+        "pull_title": "이미지 가져오기",
+        "pull_placeholder": "docker.io/library/nginx:alpine",
+        "push_title": "이미지 푸시",
+        "push_placeholder": "registry.example.com/me/web:latest",
+        "build_title": "이미지 빌드",
+        "build_placeholder": "-t my-image:latest /컨텍스트경로",
+        "tag_title": "태그 지정",
+        "tag_placeholder": "registry.example.com/me/web:latest",
+        "save_title": "아카이브 저장",
+        "save_placeholder": "/path/to/web.tar",
+        "load_title": "아카이브 불러오기",
+        "load_placeholder": "/path/to/image.tar",
+        "import_title": "rootfs 가져오기",
+        "import_placeholder": "/path/to/rootfs.tar my-image:latest",
+        "export_title": "컨테이너 FS 내보내기",
+        "export_placeholder": "/path/to/fs.tar",
+        "copy_title": "파일 복사",
+        "copy_placeholder": "/컨테이너경로 /원격경로",
+        "volume_title": "볼륨 생성",
+        "volume_placeholder": "볼륨 이름",
+        "network_title": "네트워크 생성",
+        "network_placeholder": "네트워크 이름 [드라이버]",
+        "search_title": "이미지 검색",
+        "search_placeholder": "검색어",
+        "login_title": "레지스트리 로그인",
+        "login_placeholder": "registry.example.com"
+      },
+      "confirms": {
+        "run": "실행",
+        "remove_image": "이미지 {{name}}을(를) 제거할까요? 되돌릴 수 없습니다.",
+        "tag_image": "이미지 {{name}}에 태그를 지정할까요?",
+        "rename": "{{name}}(으)로 이름을 변경할까요?",
+        "healthcheck": "지금 헬스체크를 실행할까요?",
+        "create_volume": "볼륨 {{name}}을(를) 생성할까요?",
+        "remove_volume": "볼륨 {{name}}을(를) 제거할까요? 되돌릴 수 없습니다.",
+        "prune_volumes": "이 호스트의 모든 미사용 볼륨을 제거할까요? 되돌릴 수 없습니다.",
+        "create_network": "네트워크 {{name}}을(를) 생성할까요?",
+        "remove_network": "네트워크 {{name}}을(를) 제거할까요?",
+        "logout": "이 레지스트리에서 로그아웃할까요?",
+      "prune_dangling_images": "댕글링(태그 없는) 이미지를 모두 제거할까요? 되돌릴 수 없습니다.",
+      "prune_unused_images": "이 호스트에서 컨테이너가 사용하지 않는 모든 이미지를 제거할까요? 되돌릴 수 없습니다."
+      },
+      "captures": {
+        "loading": "불러오는 중...",
+        "close": "닫기",
+      "failed": "Podman 캡처에 실패했습니다."
+      },
+      "attach_title": "연결: {{name}}",
+      "search_placeholder": "컨테이너 검색...",
+      "count_suffix": "개 컨테이너",
+      "sampling": "Podman 컨테이너 수집 중...",
+      "empty": "일치하는 컨테이너 없음",
+      "unavailable": "이 호스트에서 Podman을 사용할 수 없습니다.",
+      "unavailable_detail": "이 호스트의 Podman에 연결할 수 없습니다: {{detail}}",
+      "error": "Podman 명령이 실패했습니다: {{error}}",
+      "columns": {
+        "container": "컨테이너 / 이미지",
+        "image": "이미지",
+        "state": "상태"
+      },
+      "states": {
+        "running": "실행 중",
+        "exited": "종료됨",
+        "created": "생성됨",
+        "paused": "일시 중지",
+        "stopped": "중지됨",
+        "dead": "비정상 종료",
+        "unknown": "알 수 없음"
+      },
+      "actions": {
+        "refresh": "컨테이너 새로 고침",
+        "start": "시작",
+        "stop": "중지",
+        "restart": "재시작",
+        "pause": "일시 중지",
+        "unpause": "재개",
+        "remove": "제거",
+        "logs": "로그 보기",
+        "follow_logs": "로그 따라가기",
+        "exec": "셸 열기",
+        "run": "컨테이너 실행",
+        "stats": "리소스 사용량",
+        "create": "생성",
+        "prune": "미사용 정리",
+        "tag": "태그",
+        "history": "히스토리",
+        "inspect": "검사",
+        "save": "아카이브 저장",
+        "pull": "이미지 가져오기",
+        "push": "이미지 푸시",
+        "build": "이미지 빌드",
+        "search": "검색",
+        "attach": "연결",
+        "healthcheck": "헬스체크 실행",
+        "rename": "이름 변경",
+        "more": "컨테이너 이름 변경",
+        "usage": "사용 중인 컨테이너",
+      "prune_dangling": "댕글링 정리",
+      "prune_unused": "미사용 제거"
+      },
+      "confirm": {
+        "title": "Podman 작업 확인",
+        "cancel": "취소",
+        "start_desc": "컨테이너 {{name}}({{id}})을(를) 시작할까요?",
+        "stop_desc": "컨테이너 {{name}}({{id}})을(를) 중지할까요? 컨테이너 내 실행 중인 작업이 중단될 수 있습니다.",
+        "restart_desc": "컨테이너 {{name}}({{id}})을(를) 재시작할까요? 컨테이너 내 실행 중인 작업이 중단됩니다.",
+        "pause_desc": "컨테이너 {{name}}({{id}})을(를) 일시 중지할까요?",
+        "unpause_desc": "컨테이너 {{name}}({{id}})을(를) 재개할까요?",
+        "remove_desc": "컨테이너 {{name}}({{id}})을(를) 제거할까요? 되돌릴 수 없습니다.",
+      "run": "확인"
+      },
+      "logs": {
+        "title": "로그: {{name}}",
+        "loading": "로그 불러오는 중...",
+        "empty": "최근 로그가 없습니다.",
+        "close": "로그 닫기"
+      },
+      "follow_title": "Podman 로그: {{name}}",
+      "exec_title": "Podman: {{name}}",
+      "toast": {
+        "action_already_running": "Podman 작업이 이미 실행 중입니다.",
+        "logs_already_running": "Podman 로그를 이미 불러오는 중입니다.",
+        "connection_missing": "선택한 연결을 더 이상 사용할 수 없습니다.",
+        "action_failed": "Podman 작업에 실패했습니다.",
+        "logs_failed": "Podman 로그를 불러오지 못했습니다.",
+        "exec_terminal_missing": "이 컨테이너에 사용 가능한 SSH 경로가 없습니다.",
+        "exec_opened": "{{name}}의 셸을 열었습니다.",
+        "follow_opened": "{{name}}의 로그를 따라가는 중입니다.",
+        "attach_opened": "{{name}}에 연결하는 중입니다.",
+        "terminal_opened": "이 Podman 명령을 위한 터미널을 열었습니다.",
+        "action_succeeded": "Podman 작업 완료: {{name}}."
+      }
+    },
+    "host_redis": {
+      "loading": "Redis 확인 중...",
+      "unavailable": "이 호스트에서 redis-cli를 찾을 수 없습니다. 확인 대상: 127.0.0.1:6379.",
+      "no_server": "127.0.0.1:6379에서 수신 대기 중인 Redis 서버가 없습니다.",
+      "auth_required": "127.0.0.1:6379의 Redis 서버는 인증이 필요합니다. 이 확인은 인증 없이 수행됩니다.",
+      "error": "Redis 확인 실패: {{error}}",
+      "reachable": "Redis에 연결 가능합니다(127.0.0.1:6379).",
+      "probe_target": "127.0.0.1:6379",
+      "actions": {
+        "refresh": "Redis 확인"
+      },
+      "toast": {
+        "connection_missing": "선택한 연결을 더 이상 사용할 수 없습니다.",
+        "probe_failed": "Redis 확인에 실패했습니다."
       }
     },
     "host_services": {

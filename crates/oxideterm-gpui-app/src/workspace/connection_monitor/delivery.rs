@@ -11,6 +11,10 @@ pub(super) enum HostToolsReliableDelivery {
     ProcessAction(HostProcessActionDelivery),
     DockerAction(HostDockerActionDelivery),
     DockerLogs(HostDockerLogsDelivery),
+    PodmanAction(HostPodmanActionDelivery),
+    PodmanLogs(HostPodmanLogsDelivery),
+    PodmanCapture(HostPodmanCaptureDelivery),
+    PodmanResourceAction(HostPodmanResourceActionDelivery),
     ServiceSnapshot(HostServiceSnapshotDelivery),
     ServiceAction(HostServiceActionDelivery),
     ServiceLogs(HostServiceLogsDelivery),
@@ -18,6 +22,7 @@ pub(super) enum HostToolsReliableDelivery {
     TmuxAction(HostTmuxActionDelivery),
     LogSnapshot(HostLogSnapshotDelivery),
     PortSnapshot(HostPortSnapshotDelivery),
+    RedisSnapshot(HostRedisSnapshotDelivery),
     FilesystemSnapshot(HostFilesystemSnapshotDelivery),
     PackageSnapshot(HostPackageSnapshotDelivery),
     ScheduleSnapshot(HostScheduleSnapshotDelivery),
@@ -188,6 +193,18 @@ impl HostToolsEntity {
                 HostToolsReliableDelivery::DockerLogs(delivery) => {
                     self.finish_host_docker_logs(delivery, cx);
                 }
+                HostToolsReliableDelivery::PodmanAction(delivery) => {
+                    self.finish_host_podman_action(delivery, cx);
+                }
+                HostToolsReliableDelivery::PodmanLogs(delivery) => {
+                    self.finish_host_podman_logs(delivery, cx);
+                }
+                HostToolsReliableDelivery::PodmanCapture(delivery) => {
+                    self.finish_host_podman_capture(delivery, cx);
+                }
+                HostToolsReliableDelivery::PodmanResourceAction(delivery) => {
+                    self.finish_host_podman_resource_action(delivery, cx);
+                }
                 HostToolsReliableDelivery::ServiceSnapshot(delivery) => {
                     self.finish_host_service_snapshot(delivery, cx);
                 }
@@ -208,6 +225,9 @@ impl HostToolsEntity {
                 }
                 HostToolsReliableDelivery::PortSnapshot(delivery) => {
                     self.finish_host_ports_snapshot(delivery, cx);
+                }
+                HostToolsReliableDelivery::RedisSnapshot(delivery) => {
+                    self.finish_host_redis_snapshot(delivery, cx);
                 }
                 HostToolsReliableDelivery::FilesystemSnapshot(delivery) => {
                     self.finish_host_filesystems_snapshot(delivery, cx);

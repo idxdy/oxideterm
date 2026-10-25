@@ -87,6 +87,12 @@ pub(in crate::workspace) enum ActiveWindowModalOwner {
         phase: oxideterm_gpui_ui::motion::ExitPhase,
     },
     HostDockerLogs,
+    HostPodmanConfirm {
+        phase: oxideterm_gpui_ui::motion::ExitPhase,
+    },
+    HostPodmanLogs,
+    HostPodmanInput,
+    HostPodmanCaptureText,
     HostServiceConfirm {
         phase: oxideterm_gpui_ui::motion::ExitPhase,
     },
@@ -167,33 +173,37 @@ impl ActiveWindowModalOwner {
             Self::HostProcessConfirm { .. } => 19,
             Self::HostDockerConfirm { .. } => 20,
             Self::HostDockerLogs => 21,
-            Self::HostServiceConfirm { .. } => 22,
-            Self::HostServiceLogs => 23,
-            Self::HostTmuxConfirm { .. } => 24,
-            Self::HostTmuxInput => 25,
-            Self::HostScheduleConfirm { .. } => 26,
-            Self::HostScheduleLogs => 27,
-            Self::NativePluginConfirm { .. } => 28,
-            Self::TabRename => 29,
-            Self::ArchiveCommand => 30,
+            Self::HostPodmanConfirm { .. } => 22,
+            Self::HostPodmanLogs => 23,
+            Self::HostPodmanInput => 50,
+            Self::HostPodmanCaptureText => 51,
+            Self::HostServiceConfirm { .. } => 24,
+            Self::HostServiceLogs => 25,
+            Self::HostTmuxConfirm { .. } => 26,
+            Self::HostTmuxInput => 27,
+            Self::HostScheduleConfirm { .. } => 28,
+            Self::HostScheduleLogs => 29,
+            Self::NativePluginConfirm { .. } => 30,
+            Self::TabRename => 31,
+            Self::ArchiveCommand => 32,
             Self::SshTunnel => 1,
-            Self::ActiveTabWindowModal { .. } => 31,
-            Self::TerminalCastPlayer => 32,
-            Self::ThemeEditor { .. } => 33,
-            Self::SettingsSshConfigImport { .. } => 34,
-            Self::TerminalCommandSpecsEditor => 35,
-            Self::QuickCommandsManager => 36,
-            Self::AiTextEditor => 37,
-            Self::OxideImport { .. } => 38,
-            Self::OxideExport { .. } => 39,
-            Self::CommandPalette => 40,
-            Self::VersionMigration => 41,
-            Self::Onboarding => 42,
-            Self::LegalNotice { .. } => 43,
-            Self::NativeUpdateReleaseNotes { .. } => 44,
-            Self::Shortcuts => 45,
-            Self::AppLockDialog => 46,
-            Self::MermaidZoom => 47,
+            Self::ActiveTabWindowModal { .. } => 33,
+            Self::TerminalCastPlayer => 34,
+            Self::ThemeEditor { .. } => 35,
+            Self::SettingsSshConfigImport { .. } => 36,
+            Self::TerminalCommandSpecsEditor => 37,
+            Self::QuickCommandsManager => 38,
+            Self::AiTextEditor => 39,
+            Self::OxideImport { .. } => 40,
+            Self::OxideExport { .. } => 41,
+            Self::CommandPalette => 42,
+            Self::VersionMigration => 43,
+            Self::Onboarding => 44,
+            Self::LegalNotice { .. } => 45,
+            Self::NativeUpdateReleaseNotes { .. } => 46,
+            Self::Shortcuts => 47,
+            Self::AppLockDialog => 48,
+            Self::MermaidZoom => 49,
         }
     }
 
@@ -214,6 +224,7 @@ impl ActiveWindowModalOwner {
             | Self::TabClose { phase }
             | Self::HostProcessConfirm { phase }
             | Self::HostDockerConfirm { phase }
+            | Self::HostPodmanConfirm { phase }
             | Self::HostServiceConfirm { phase }
             | Self::HostTmuxConfirm { phase }
             | Self::HostScheduleConfirm { phase }
@@ -233,8 +244,11 @@ impl ActiveWindowModalOwner {
             | Self::RemoteShellIntegration
             | Self::TerminalTriggerQuickCommand
             | Self::HostDockerLogs
+            | Self::HostPodmanLogs
+            | Self::HostPodmanCaptureText
             | Self::HostServiceLogs
             | Self::HostTmuxInput
+            | Self::HostPodmanInput
             | Self::HostScheduleLogs
             | Self::TabRename
             | Self::ArchiveCommand
@@ -259,6 +273,7 @@ impl ActiveWindowModalOwner {
                 | Self::JumpServer
                 | Self::KeyboardInteractiveChallenge
                 | Self::HostTmuxInput
+                | Self::HostPodmanInput
                 | Self::HostDockerLogs
                 | Self::HostServiceLogs
                 | Self::HostScheduleLogs
@@ -453,6 +468,18 @@ impl ActiveWindowModalProjection {
             }
             connection_monitor::HostToolsWindowModalSnapshot::DockerLogs => {
                 ActiveWindowModalOwner::HostDockerLogs
+            }
+            connection_monitor::HostToolsWindowModalSnapshot::PodmanConfirm(phase) => {
+                ActiveWindowModalOwner::HostPodmanConfirm { phase }
+            }
+            connection_monitor::HostToolsWindowModalSnapshot::PodmanLogs => {
+                ActiveWindowModalOwner::HostPodmanLogs
+            }
+            connection_monitor::HostToolsWindowModalSnapshot::PodmanInput => {
+                ActiveWindowModalOwner::HostPodmanInput
+            }
+            connection_monitor::HostToolsWindowModalSnapshot::PodmanCaptureText => {
+                ActiveWindowModalOwner::HostPodmanCaptureText
             }
             connection_monitor::HostToolsWindowModalSnapshot::ServiceConfirm(phase) => {
                 ActiveWindowModalOwner::HostServiceConfirm { phase }
@@ -1083,6 +1110,30 @@ impl WorkspaceApp {
             ActiveWindowModalOwner::HostDockerLogs => {
                 let _ = self.handle_host_tools_window_modal_key(
                     connection_monitor::HostToolsWindowModalSnapshot::DockerLogs,
+                    event,
+                    cx,
+                );
+            }
+            ActiveWindowModalOwner::HostPodmanConfirm { phase } => {
+                let _ = self.handle_host_tools_window_modal_key(
+                    connection_monitor::HostToolsWindowModalSnapshot::PodmanConfirm(phase),
+                    event,
+                    cx,
+                );
+            }
+            ActiveWindowModalOwner::HostPodmanLogs => {
+                let _ = self.handle_host_tools_window_modal_key(
+                    connection_monitor::HostToolsWindowModalSnapshot::PodmanLogs,
+                    event,
+                    cx,
+                );
+            }
+            ActiveWindowModalOwner::HostPodmanInput => {
+                self.handle_host_podman_input_key(event, window, cx);
+            }
+            ActiveWindowModalOwner::HostPodmanCaptureText => {
+                let _ = self.handle_host_tools_window_modal_key(
+                    connection_monitor::HostToolsWindowModalSnapshot::PodmanCaptureText,
                     event,
                     cx,
                 );

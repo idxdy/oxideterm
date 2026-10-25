@@ -31,6 +31,16 @@ pub(super) const HOST_DOCKER_LIST_ESTIMATED_ROW_HEIGHT: f32 = 64.0;
 pub(super) const HOST_DOCKER_TABLE_HEADER_HEIGHT: f32 = 28.0;
 pub(super) const HOST_DOCKER_TABLE_MAIN_ROW_HEIGHT: f32 = 36.0;
 pub(super) const HOST_DOCKER_STATE_COLUMN_WIDTH: f32 = 72.0;
+pub(super) const HOST_PODMAN_LIST_ESTIMATED_ROW_HEIGHT: f32 = 64.0;
+pub(super) const HOST_PODMAN_TABLE_HEADER_HEIGHT: f32 = 28.0;
+pub(super) const HOST_PODMAN_TABLE_MAIN_ROW_HEIGHT: f32 = 36.0;
+pub(super) const HOST_PODMAN_STATE_COLUMN_WIDTH: f32 = 72.0;
+pub(super) const HOST_PODMAN_ACTION_TIMEOUT: Duration = Duration::from_secs(12);
+pub(super) const HOST_PODMAN_ACTION_MAX_OUTPUT_SIZE: usize = 4096;
+pub(super) const HOST_PODMAN_LOGS_TIMEOUT: Duration = Duration::from_secs(8);
+pub(super) const HOST_PODMAN_LOGS_MAX_OUTPUT_SIZE: usize = 128 * 1024;
+pub(super) const HOST_PODMAN_LOGS_DIALOG_WIDTH: f32 = 760.0;
+pub(super) const HOST_PODMAN_LOGS_DIALOG_MAX_HEIGHT: f32 = 520.0;
 pub(super) const HOST_DOCKER_PORTS_COLUMN_MIN_WIDTH: f32 = 92.0;
 pub(super) const HOST_DOCKER_ACTION_TIMEOUT: Duration = Duration::from_secs(12);
 pub(super) const HOST_DOCKER_ACTION_MAX_OUTPUT_SIZE: usize = 4096;
@@ -51,6 +61,10 @@ pub(super) const HOST_SERVICE_ACTION_TIMEOUT: Duration = Duration::from_secs(15)
 pub(super) const HOST_SERVICE_ACTION_MAX_OUTPUT_SIZE: usize = 4096;
 pub(super) const HOST_SERVICE_LOGS_MAX_OUTPUT_SIZE: usize = 128 * 1024;
 pub(super) const HOST_SERVICE_LOGS_DIALOG_WIDTH: f32 = 760.0;
+// The PING probe self-bounds with `redis-cli -t 3`; the runner timeout only
+// covers a hung connection setup on top of it.
+pub(super) const HOST_REDIS_PROBE_TIMEOUT: Duration = Duration::from_secs(12);
+pub(super) const HOST_REDIS_PROBE_MAX_OUTPUT_SIZE: usize = 64 * 1024;
 pub(super) const HOST_SERVICE_LOGS_DIALOG_MAX_HEIGHT: f32 = 520.0;
 pub(super) const HOST_LOG_LIST_ESTIMATED_ROW_HEIGHT: f32 = 56.0;
 pub(super) const HOST_LOG_TABLE_HEADER_HEIGHT: f32 = 28.0;
@@ -409,6 +423,221 @@ impl HostServicesState {
     }
 }
 
+#[derive(Clone, Eq, PartialEq)]
+pub(super) struct HostRedisSnapshotRequest {
+    pub(super) connection_id: String,
+    pub(super) connection_fallback: String,
+    pub(super) failure_fallback: String,
+}
+
+pub(super) struct HostRedisSnapshotDelivery {
+    pub(super) request: HostRedisSnapshotRequest,
+    pub(super) result: Result<SshCommandOutput, ()>,
+}
+
+pub(super) struct HostRedisSnapshotPending {
+    pub(super) request: HostRedisSnapshotRequest,
+    pub(super) runtime: tokio::runtime::Handle,
+}
+
+pub(super) struct HostRedisState {
+    pub(super) snapshot_connection_id: Option<String>,
+    pub(super) snapshot: Option<oxideterm_connection_monitor::ResourceRedisSnapshot>,
+    pub(super) snapshot_running: Option<HostRedisSnapshotRequest>,
+    pub(super) snapshot_pending: Option<HostRedisSnapshotPending>,
+    pub(super) snapshot_in_flight: bool,
+}
+
+impl HostRedisState {
+    pub(super) fn new() -> Self {
+        Self {
+            snapshot_connection_id: None,
+            snapshot: None,
+            snapshot_running: None,
+            snapshot_pending: None,
+            snapshot_in_flight: false,
+        }
+    }
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub(super) struct HostPodmanActionRequest {
+    pub(super) connection_id: String,
+    pub(super) container_id: String,
+    pub(super) container_name: String,
+    pub(super) action: PodmanActionKind,
+}
+
+pub(super) struct HostPodmanActionDelivery {
+    pub(super) request: HostPodmanActionRequest,
+    pub(super) result: Result<bool, ()>,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub(super) struct HostPodmanLogsRequest {
+    pub(super) connection_id: String,
+    pub(super) container_id: String,
+    pub(super) container_name: String,
+    pub(super) failure_fallback: String,
+    pub(super) empty_fallback: String,
+}
+
+pub(super) struct HostPodmanLogsDelivery {
+    pub(super) request: HostPodmanLogsRequest,
+    pub(super) result: Result<SshCommandOutput, ()>,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub(super) struct HostPodmanLogsDialog {
+    pub(super) request: HostPodmanLogsRequest,
+    // Podman output stays in one shared zeroizing buffer while rendered.
+    pub(super) output: Option<Arc<zeroize::Zeroizing<String>>>,
+    pub(super) error: Option<String>,
+    pub(super) loading: bool,
+}
+
+pub(super) struct HostPodmanOperationsState {
+    pub(super) pending_confirm: Option<HostToolConfirmState<HostPodmanActionRequest>>,
+    pub(super) action_running: Option<HostPodmanActionRequest>,
+    pub(super) logs_dialog: Option<HostPodmanLogsDialog>,
+}
+
+impl HostPodmanOperationsState {
+    pub(super) fn new() -> Self {
+        Self {
+            pending_confirm: None,
+            action_running: None,
+            logs_dialog: None,
+        }
+    }
+}
+
+/// Which Podman resource sub-view is active inside the Host Tool panel.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(in crate::workspace) enum HostPodmanTab {
+    #[default]
+    Containers,
+    Images,
+    Volumes,
+    Networks,
+}
+
+/// User-composed terminal operations live in the input dialog until submit;
+/// the buffers zeroize when the dialog closes or the command is built.
+#[derive(Clone, Eq, PartialEq)]
+pub(in crate::workspace) enum HostPodmanInputDialogKind {
+    RunContainer,
+    RenameContainer { container_id: String },
+    PullImage,
+    PushImage,
+    BuildImage,
+    TagImage { image_id: String },
+    SaveImage { image_id: String },
+    LoadImage,
+    ImportImage,
+    ExportContainer { container_id: String },
+    CopyFiles { container_id: String },
+    CreateVolume,
+    CreateNetwork,
+    SearchImages,
+    Login,
+}
+
+pub(in crate::workspace) struct HostPodmanInputDialog {
+    pub(in crate::workspace) kind: HostPodmanInputDialogKind,
+    // Composed command inputs zeroize when the dialog closes or the value
+    // hands off to command construction.
+    pub(in crate::workspace) value: zeroize::Zeroizing<String>,
+}
+
+#[derive(Clone)]
+pub(in crate::workspace) struct HostPodmanTextDialog {
+    pub(in crate::workspace) title: String,
+    pub(in crate::workspace) output: Option<Arc<zeroize::Zeroizing<String>>>,
+    pub(in crate::workspace) error: Option<String>,
+    pub(in crate::workspace) loading: bool,
+    /// Shared scroll state so the rendered scrollbar and wheel scrolling
+    /// stay in sync across re-renders while content streams in.
+    pub(in crate::workspace) scroll_handle: gpui::ScrollHandle,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub(in crate::workspace) enum HostPodmanCaptureKind {
+    Resources,
+    Stats,
+    Search { term: String },
+    Inspect { reference: String },
+    History { image_id: String },
+    Top { container_id: String },
+    Diff { container_id: String },
+    VolumeInspect { name: String },
+    NetworkInspect { name: String },
+    VolumeUsage { name: String },
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub(in crate::workspace) struct HostPodmanCaptureRequest {
+    pub(in crate::workspace) connection_id: String,
+    pub(in crate::workspace) kind: HostPodmanCaptureKind,
+    pub(in crate::workspace) failure_fallback: String,
+}
+
+pub(in crate::workspace) struct HostPodmanCaptureDelivery {
+    pub(in crate::workspace) request: HostPodmanCaptureRequest,
+    pub(in crate::workspace) result: Result<SshCommandOutput, ()>,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub(in crate::workspace) struct HostPodmanResourceActionRequest {
+    pub(in crate::workspace) connection_id: String,
+    pub(in crate::workspace) description: String,
+    pub(in crate::workspace) action: PodmanResourceAction,
+}
+
+pub(in crate::workspace) struct HostPodmanResourceActionDelivery {
+    pub(in crate::workspace) request: HostPodmanResourceActionRequest,
+    pub(in crate::workspace) result: Result<bool, ()>,
+}
+
+pub(super) struct HostPodmanResourcesState {
+    pub(super) snapshot_connection_id: Option<String>,
+    pub(super) images: Option<ResourcePodmanImagesSnapshot>,
+    pub(super) volumes: Option<ResourcePodmanVolumesSnapshot>,
+    pub(super) networks: Option<ResourcePodmanNetworksSnapshot>,
+    pub(super) snapshot_running: bool,
+    pub(super) snapshot_pending: Option<HostPodmanCaptureRequest>,
+    /// Last resources capture failure; cleared on the next successful capture.
+    pub(super) resources_error: Option<String>,
+    pub(super) stats: Option<ResourcePodmanStatsSnapshot>,
+    pub(super) stats_in_flight: bool,
+    pub(super) search_in_flight: bool,
+    pub(super) text_dialog: Option<HostPodmanTextDialog>,
+    pub(super) text_dialog_running: Option<HostPodmanCaptureRequest>,
+    pub(super) resource_confirm: Option<HostToolConfirmState<HostPodmanResourceActionRequest>>,
+    pub(super) resource_action_running: bool,
+}
+
+impl HostPodmanResourcesState {
+    pub(super) fn new() -> Self {
+        Self {
+            snapshot_connection_id: None,
+            images: None,
+            volumes: None,
+            networks: None,
+            snapshot_running: false,
+            snapshot_pending: None,
+            resources_error: None,
+            stats: None,
+            stats_in_flight: false,
+            search_in_flight: false,
+            text_dialog: None,
+            text_dialog_running: None,
+            resource_confirm: None,
+            resource_action_running: false,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::workspace) enum HostSnapshotFeedback {
     Silent,
@@ -421,6 +650,10 @@ pub(in crate::workspace) enum HostToolsWindowModalSnapshot {
     ProcessConfirm(oxideterm_gpui_ui::motion::ExitPhase),
     DockerConfirm(oxideterm_gpui_ui::motion::ExitPhase),
     DockerLogs,
+    PodmanConfirm(oxideterm_gpui_ui::motion::ExitPhase),
+    PodmanLogs,
+    PodmanInput,
+    PodmanCaptureText,
     ServiceConfirm(oxideterm_gpui_ui::motion::ExitPhase),
     ServiceLogs,
     TmuxConfirm(oxideterm_gpui_ui::motion::ExitPhase),
@@ -791,10 +1024,12 @@ pub(in crate::workspace) enum HostToolsTextInput {
     ProcessSearch,
     ProcessRenice,
     DockerSearch,
+    PodmanSearch,
     ServiceSearch,
     LogSearch,
     TmuxSearch,
     TmuxDialog,
+    PodmanDialog,
     PortSearch,
     ScheduleSearch,
     FilesystemSearch,
@@ -902,6 +1137,9 @@ pub(in crate::workspace) struct HostToolsMessages {
     pub(super) schedule_unknown_error: String,
     pub(super) tmux_unknown_error: String,
     pub(super) tmux_unavailable: String,
+    pub(super) redis_connection_missing: String,
+    pub(super) redis_probe_failed: String,
+    pub(super) podman_capture_failed: String,
 }
 
 impl HostToolsMessages {
@@ -916,6 +1154,9 @@ impl HostToolsMessages {
             schedule_unknown_error: i18n.t("sidebar.host_schedules.toast.unknown_error"),
             tmux_unknown_error: i18n.t("sidebar.host_tmux.toast.unknown_error"),
             tmux_unavailable: i18n.t("sidebar.host_tmux.unavailable"),
+            redis_connection_missing: i18n.t("sidebar.host_redis.toast.connection_missing"),
+            redis_probe_failed: i18n.t("sidebar.host_redis.toast.probe_failed"),
+            podman_capture_failed: i18n.t("sidebar.host_podman.captures.failed"),
         }
     }
 }
@@ -994,6 +1235,12 @@ pub(in crate::workspace) struct HostToolsUiState {
     pub(in crate::workspace) host_docker_expanded_id: Option<String>,
     pub(super) host_docker_list_state: ListState,
     pub(super) host_docker_list_cache: RefCell<VirtualListSignatureCache>,
+    pub(in crate::workspace) host_podman_search_query: String,
+    pub(in crate::workspace) host_podman_expanded_id: Option<String>,
+    pub(in crate::workspace) host_podman_tab: HostPodmanTab,
+    pub(in crate::workspace) host_podman_stats_visible: bool,
+    pub(super) host_podman_list_state: ListState,
+    pub(super) host_podman_list_cache: RefCell<VirtualListSignatureCache>,
     pub(in crate::workspace) host_service_search_query: String,
     pub(in crate::workspace) host_service_expanded_id: Option<String>,
     pub(super) host_service_list_state: ListState,
@@ -1003,6 +1250,7 @@ pub(in crate::workspace) struct HostToolsUiState {
     pub(in crate::workspace) host_tmux_expanded_session_id: Option<String>,
     pub(in crate::workspace) host_tmux_expanded_window_id: Option<String>,
     pub(in crate::workspace) host_tmux_input_dialog: Option<HostTmuxInputDialog>,
+    pub(in crate::workspace) host_podman_input_dialog: Option<HostPodmanInputDialog>,
     pub(super) host_tmux_list_state: ListState,
     pub(super) host_tmux_list_cache: RefCell<VirtualListSignatureCache>,
     pub(in crate::workspace) host_port_search_query: String,
@@ -1035,6 +1283,16 @@ impl HostToolsUiState {
                 TauriVirtualListSpec::new(px(HOST_DOCKER_LIST_ESTIMATED_ROW_HEIGHT), 8),
             ),
             host_docker_list_cache: RefCell::new(VirtualListSignatureCache::default()),
+            host_podman_search_query: String::new(),
+            host_podman_expanded_id: None,
+            host_podman_tab: HostPodmanTab::Containers,
+            host_podman_stats_visible: false,
+            host_podman_list_state: tauri_virtual_list_state(
+                0,
+                ListAlignment::Top,
+                TauriVirtualListSpec::new(px(HOST_PODMAN_LIST_ESTIMATED_ROW_HEIGHT), 8),
+            ),
+            host_podman_list_cache: RefCell::new(VirtualListSignatureCache::default()),
             host_service_search_query: String::new(),
             host_service_expanded_id: None,
             host_service_list_state: tauri_virtual_list_state(
@@ -1048,6 +1306,7 @@ impl HostToolsUiState {
             host_tmux_expanded_session_id: None,
             host_tmux_expanded_window_id: None,
             host_tmux_input_dialog: None,
+            host_podman_input_dialog: None,
             host_tmux_list_state: tauri_virtual_list_state(
                 0,
                 ListAlignment::Top,
@@ -1078,6 +1337,9 @@ impl HostToolsUiState {
             ) | (
                 Some(HostToolsTextInput::DockerSearch),
                 ContextSidebarTool::Docker
+            ) | (
+                Some(HostToolsTextInput::PodmanSearch | HostToolsTextInput::PodmanDialog),
+                ContextSidebarTool::Podman
             ) | (
                 Some(HostToolsTextInput::ServiceSearch),
                 ContextSidebarTool::Services
@@ -1118,11 +1380,16 @@ impl HostToolsUiState {
             HostToolsTextInput::ProcessSearch => Some(&self.host_process_search_query),
             HostToolsTextInput::ProcessRenice => Some(&self.host_process_renice_value),
             HostToolsTextInput::DockerSearch => Some(&self.host_docker_search_query),
+            HostToolsTextInput::PodmanSearch => Some(&self.host_podman_search_query),
             HostToolsTextInput::ServiceSearch => Some(&self.host_service_search_query),
             HostToolsTextInput::LogSearch => Some(&self.host_log_search_query),
             HostToolsTextInput::TmuxSearch => Some(&self.host_tmux_search_query),
             HostToolsTextInput::TmuxDialog => self
                 .host_tmux_input_dialog
+                .as_ref()
+                .map(|dialog| dialog.value.as_str()),
+            HostToolsTextInput::PodmanDialog => self
+                .host_podman_input_dialog
                 .as_ref()
                 .map(|dialog| dialog.value.as_str()),
             HostToolsTextInput::PortSearch => Some(&self.host_port_search_query),
@@ -1143,11 +1410,16 @@ impl HostToolsUiState {
             HostToolsTextInput::ProcessSearch => Some(&mut self.host_process_search_query),
             HostToolsTextInput::ProcessRenice => Some(&mut self.host_process_renice_value),
             HostToolsTextInput::DockerSearch => Some(&mut self.host_docker_search_query),
+            HostToolsTextInput::PodmanSearch => Some(&mut self.host_podman_search_query),
             HostToolsTextInput::ServiceSearch => Some(&mut self.host_service_search_query),
             HostToolsTextInput::LogSearch => Some(&mut self.host_log_search_query),
             HostToolsTextInput::TmuxSearch => Some(&mut self.host_tmux_search_query),
             HostToolsTextInput::TmuxDialog => self
                 .host_tmux_input_dialog
+                .as_mut()
+                .map(|dialog| &mut *dialog.value),
+            HostToolsTextInput::PodmanDialog => self
+                .host_podman_input_dialog
                 .as_mut()
                 .map(|dialog| &mut *dialog.value),
             HostToolsTextInput::PortSearch => Some(&mut self.host_port_search_query),

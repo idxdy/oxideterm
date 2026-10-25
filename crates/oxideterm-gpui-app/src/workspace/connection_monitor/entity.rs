@@ -63,7 +63,10 @@ pub(in crate::workspace) struct HostToolsEntity {
     pub(in crate::workspace) ui: HostToolsUiState,
     pub(super) host_process_actions: HostProcessActionsState,
     pub(super) host_docker_operations: HostDockerOperationsState,
+    pub(super) host_podman_operations: HostPodmanOperationsState,
+    pub(super) host_podman_resources: HostPodmanResourcesState,
     pub(super) host_services: HostServicesState,
+    pub(super) host_redis: HostRedisState,
     pub(super) host_tmux: HostTmuxState,
     pub(super) host_gpu: HostGpuViewState,
     pub(super) host_logs: HostLogsState,
@@ -550,6 +553,20 @@ impl HostToolsEntity {
             Some(HostToolsWindowModalSnapshot::DockerConfirm(
                 confirm.presence.phase(),
             ))
+        } else if self.host_podman_resources.text_dialog.is_some() {
+            Some(HostToolsWindowModalSnapshot::PodmanCaptureText)
+        } else if self.ui.host_podman_input_dialog.is_some() {
+            Some(HostToolsWindowModalSnapshot::PodmanInput)
+        } else if let Some(confirm) = self.host_podman_resources.resource_confirm.as_ref() {
+            Some(HostToolsWindowModalSnapshot::PodmanConfirm(
+                confirm.presence.phase(),
+            ))
+        } else if self.host_podman_operations.logs_dialog.is_some() {
+            Some(HostToolsWindowModalSnapshot::PodmanLogs)
+        } else if let Some(confirm) = self.host_podman_operations.pending_confirm.as_ref() {
+            Some(HostToolsWindowModalSnapshot::PodmanConfirm(
+                confirm.presence.phase(),
+            ))
         } else {
             self.host_process_actions
                 .pending_confirm
@@ -590,7 +607,10 @@ impl HostToolsEntity {
             ui: HostToolsUiState::new(),
             host_process_actions: HostProcessActionsState::new(),
             host_docker_operations: HostDockerOperationsState::new(),
+            host_podman_operations: HostPodmanOperationsState::new(),
+            host_podman_resources: HostPodmanResourcesState::new(),
             host_services: HostServicesState::new(),
+            host_redis: HostRedisState::new(),
             host_tmux: HostTmuxState::new(),
             host_gpu: HostGpuViewState::new(gpu_update_tx),
             host_logs: HostLogsState::new(),
@@ -673,6 +693,9 @@ impl HostToolsEntity {
         match input {
             HostToolsTextInput::ProcessSearch => self.ui.host_process_expanded_pid = None,
             HostToolsTextInput::DockerSearch => self.ui.host_docker_expanded_id = None,
+            HostToolsTextInput::PodmanSearch => self.ui.host_podman_expanded_id = None,
+            // Podman dialog input lives in the zeroizing dialog buffer.
+            HostToolsTextInput::PodmanDialog => {}
             HostToolsTextInput::ServiceSearch => self.ui.host_service_expanded_id = None,
             HostToolsTextInput::LogSearch => self.host_logs.expanded_index = None,
             HostToolsTextInput::TmuxSearch => {
@@ -1258,6 +1281,219 @@ impl HostToolsEntity {
         true
     }
 
+    pub(super) fn spawn_redis_snapshot_capture(
+        &self,
+        command: String,
+        request: HostRedisSnapshotRequest,
+        timeout: Duration,
+        max_output_size: usize,
+        runtime: tokio::runtime::Handle,
+    ) -> bool {
+        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+            return false;
+        };
+        let delivery_tx = self.reliable_delivery_tx.clone();
+        // Probe output stays inside the Entity and is parsed before render.
+        runtime.spawn(async move {
+            let result = handle
+                .run_command_capture(&command, timeout, max_output_size)
+                .await
+                .map_err(|_| ());
+            let _ = delivery_tx.send(super::delivery::HostToolsReliableDelivery::RedisSnapshot(
+                HostRedisSnapshotDelivery { request, result },
+            ));
+        });
+        true
+    }
+
+    pub(super) fn spawn_podman_action(
+        &self,
+        command: String,
+        request: HostPodmanActionRequest,
+        timeout: Duration,
+        max_output_size: usize,
+        runtime: tokio::runtime::Handle,
+    ) -> bool {
+        let audit = self.host_tool_audit(
+            &request.connection_id,
+            "container_action",
+            Some(&format!(
+                "container={} action={:?}",
+                request.container_id, request.action
+            )),
+        );
+        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+            audit.finish(
+                oxideterm_audit::AuditOutcome::Failed,
+                oxideterm_audit::AuditEvidence::Request,
+                None,
+                None,
+            );
+            return false;
+        };
+        let delivery_tx = self.reliable_delivery_tx.clone();
+        // Podman action output is not product data. Clear it before delivery.
+        runtime.spawn(async move {
+            let mut audit_exit_code = None;
+            let result = handle
+                .run_command_capture(&command, timeout, max_output_size)
+                .await
+                .map(|mut output| {
+                    audit_exit_code = output.exit_code;
+                    let succeeded = output.exit_code.unwrap_or(0) == 0;
+                    zeroize::Zeroize::zeroize(&mut output.stdout);
+                    zeroize::Zeroize::zeroize(&mut output.stderr);
+                    succeeded
+                })
+                .map_err(|_| ());
+            let audit_outcome = match (&result, audit_exit_code) {
+                (Err(_), _) => oxideterm_audit::AuditOutcome::Failed,
+                (_, Some(0)) => oxideterm_audit::AuditOutcome::Succeeded,
+                (_, Some(_)) => oxideterm_audit::AuditOutcome::Failed,
+                (_, None) => oxideterm_audit::AuditOutcome::Unknown,
+            };
+            audit.finish(
+                audit_outcome,
+                if audit_exit_code.is_some() {
+                    oxideterm_audit::AuditEvidence::ExitCode
+                } else {
+                    oxideterm_audit::AuditEvidence::Protocol
+                },
+                audit_exit_code,
+                None,
+            );
+            let _ = delivery_tx.send(super::delivery::HostToolsReliableDelivery::PodmanAction(
+                HostPodmanActionDelivery { request, result },
+            ));
+        });
+        true
+    }
+
+    pub(super) fn spawn_podman_logs_capture(
+        &self,
+        command: String,
+        request: HostPodmanLogsRequest,
+        timeout: Duration,
+        max_output_size: usize,
+        runtime: tokio::runtime::Handle,
+    ) -> bool {
+        let audit = self.host_tool_audit(
+            &request.connection_id,
+            "query_container_logs",
+            Some(&format!("container_id={}", request.container_id)),
+        );
+        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+            audit.finish(
+                oxideterm_audit::AuditOutcome::Failed,
+                oxideterm_audit::AuditEvidence::Request,
+                None,
+                None,
+            );
+            return false;
+        };
+        let delivery_tx = self.reliable_delivery_tx.clone();
+        // Raw logs remain inside the Entity delivery and dialog state.
+        runtime.spawn(async move {
+            let result = handle
+                .run_command_capture(&command, timeout, max_output_size)
+                .await
+                .map_err(|_| ());
+            finish_host_query_audit(audit, &result);
+            let _ = delivery_tx.send(super::delivery::HostToolsReliableDelivery::PodmanLogs(
+                HostPodmanLogsDelivery { request, result },
+            ));
+        });
+        true
+    }
+
+    pub(super) fn spawn_podman_capture(
+        &self,
+        command: String,
+        request: HostPodmanCaptureRequest,
+        timeout: Duration,
+        max_output_size: usize,
+        runtime: tokio::runtime::Handle,
+    ) -> bool {
+        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+            return false;
+        };
+        let delivery_tx = self.reliable_delivery_tx.clone();
+        // Capture output stays inside the Entity and is parsed before render.
+        runtime.spawn(async move {
+            let result = handle
+                .run_command_capture(&command, timeout, max_output_size)
+                .await
+                .map_err(|_| ());
+            let _ = delivery_tx.send(super::delivery::HostToolsReliableDelivery::PodmanCapture(
+                HostPodmanCaptureDelivery { request, result },
+            ));
+        });
+        true
+    }
+
+    /// Audits the action class and target only; composed command arguments
+    /// (run flags, copy paths) never reach the audit record.
+    pub(super) fn spawn_podman_resource_action(
+        &self,
+        command: String,
+        request: HostPodmanResourceActionRequest,
+        timeout: Duration,
+        max_output_size: usize,
+        runtime: tokio::runtime::Handle,
+    ) -> bool {
+        let audit = self.host_tool_audit(
+            &request.connection_id,
+            "container_action",
+            Some(&format!("resource={:?}", request.action)),
+        );
+        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+            audit.finish(
+                oxideterm_audit::AuditOutcome::Failed,
+                oxideterm_audit::AuditEvidence::Request,
+                None,
+                None,
+            );
+            return false;
+        };
+        let delivery_tx = self.reliable_delivery_tx.clone();
+        runtime.spawn(async move {
+            let mut audit_exit_code = None;
+            let result = handle
+                .run_command_capture(&command, timeout, max_output_size)
+                .await
+                .map(|mut output| {
+                    audit_exit_code = output.exit_code;
+                    let succeeded = output.exit_code.unwrap_or(0) == 0;
+                    zeroize::Zeroize::zeroize(&mut output.stdout);
+                    zeroize::Zeroize::zeroize(&mut output.stderr);
+                    succeeded
+                })
+                .map_err(|_| ());
+            let audit_outcome = match (&result, audit_exit_code) {
+                (Err(_), _) => oxideterm_audit::AuditOutcome::Failed,
+                (_, Some(0)) => oxideterm_audit::AuditOutcome::Succeeded,
+                (_, Some(_)) => oxideterm_audit::AuditOutcome::Failed,
+                (_, None) => oxideterm_audit::AuditOutcome::Unknown,
+            };
+            audit.finish(
+                audit_outcome,
+                if audit_exit_code.is_some() {
+                    oxideterm_audit::AuditEvidence::ExitCode
+                } else {
+                    oxideterm_audit::AuditEvidence::Protocol
+                },
+                audit_exit_code,
+                None,
+            );
+            let _ = delivery_tx.send(
+                super::delivery::HostToolsReliableDelivery::PodmanResourceAction(
+                    HostPodmanResourceActionDelivery { request, result },
+                ),
+            );
+        });
+        true
+    }
+
     pub(super) fn spawn_service_action(
         &self,
         command: String,
@@ -1552,6 +1788,13 @@ impl HostToolsEntity {
         if tool != ContextSidebarTool::Docker {
             self.dismiss_docker_confirm(cx);
         }
+        if tool != ContextSidebarTool::Podman {
+            self.dismiss_podman_confirm(cx);
+            self.dismiss_podman_logs_dialog(cx);
+            self.dismiss_podman_input_dialog(cx);
+            self.dismiss_podman_text_dialog(cx);
+            self.dismiss_podman_resource_confirm(cx);
+        }
         if tool != ContextSidebarTool::Services {
             self.dismiss_service_confirm(cx);
             self.pause_service_refreshes();
@@ -1694,6 +1937,8 @@ impl HostToolsEntity {
         self.select_connection(connection_id, focus_origin, cx);
         self.dismiss_process_confirm(cx);
         self.dismiss_docker_confirm(cx);
+        self.dismiss_podman_confirm(cx);
+        self.dismiss_podman_logs_dialog(cx);
         self.dismiss_service_confirm(cx);
         self.dismiss_tmux_input_dialog(cx);
         self.dismiss_tmux_confirm(cx);
@@ -1713,6 +1958,13 @@ impl HostToolsEntity {
             cx,
         );
         self.request_active_tool_snapshot(HostSnapshotFeedback::Silent, cx);
+        // A resources snapshot for the previous connection is stale; refresh
+        // it eagerly so switching hosts never shows another host's data.
+        if !matches!(self.ui.host_podman_tab, HostPodmanTab::Containers)
+            && let Some(connection_id) = self.selected_connection_id_owned()
+        {
+            self.request_podman_capture(connection_id, HostPodmanCaptureKind::Resources, cx);
+        }
     }
 
     pub(super) fn request_active_tool_snapshot(
@@ -1742,6 +1994,7 @@ impl HostToolsEntity {
                     | ContextSidebarTool::Gpu
                     | ContextSidebarTool::Processes
                     | ContextSidebarTool::Docker
+                    | ContextSidebarTool::Podman
             )
         {
             // Tests record the command boundary without opening a real SSH channel.
@@ -1808,10 +2061,21 @@ impl HostToolsEntity {
                 messages.package_unknown_error,
                 cx,
             ),
+            ContextSidebarTool::Redis => {
+                self.request_redis_snapshot(
+                    connection_id,
+                    runtime,
+                    messages.redis_connection_missing,
+                    messages.redis_probe_failed,
+                    cx,
+                );
+                Vec::new()
+            }
             ContextSidebarTool::Monitor
             | ContextSidebarTool::Gpu
             | ContextSidebarTool::Processes
-            | ContextSidebarTool::Docker => Vec::new(),
+            | ContextSidebarTool::Docker
+            | ContextSidebarTool::Podman => Vec::new(),
         };
         for notice in notices {
             cx.emit(HostToolsEvent::ShowNotice(notice));
@@ -2099,6 +2363,34 @@ impl WorkspaceApp {
                 }
                 true
             }
+            HostToolsWindowModalSnapshot::PodmanConfirm(_) => {
+                self.handle_host_podman_confirm_key(event, cx)
+            }
+            HostToolsWindowModalSnapshot::PodmanLogs => {
+                if self.handle_host_log_search_key(event, cx) {
+                    return true;
+                }
+                if event.keystroke.key.as_str() == "escape" {
+                    self.host_tools.update(cx, |host_tools, cx| {
+                        host_tools.dismiss_podman_logs_dialog(cx);
+                    });
+                }
+                true
+            }
+            HostToolsWindowModalSnapshot::PodmanCaptureText => {
+                if self.handle_host_log_search_key(event, cx) {
+                    return true;
+                }
+                if event.keystroke.key.as_str() == "escape" {
+                    self.host_tools.update(cx, |host_tools, cx| {
+                        host_tools.dismiss_podman_text_dialog(cx);
+                    });
+                }
+                true
+            }
+            // The input dialog owns its Enter/Escape routing through the
+            // window-aware modal path; nothing to do here.
+            HostToolsWindowModalSnapshot::PodmanInput => false,
             HostToolsWindowModalSnapshot::ServiceConfirm(_) => {
                 self.handle_host_service_confirm_key(event, cx)
             }
@@ -2280,6 +2572,9 @@ mod tests {
                 schedule_unknown_error: "Schedule capture failed".to_string(),
                 tmux_unknown_error: "tmux capture failed".to_string(),
                 tmux_unavailable: "tmux unavailable".to_string(),
+                redis_connection_missing: "Redis connection missing".to_string(),
+                redis_probe_failed: "Redis probe failed".to_string(),
+                podman_capture_failed: "Podman capture failed".to_string(),
             });
             entity.select_connection(connection_id.clone(), None, cx);
             entity.active_tool = ContextSidebarTool::Gpu;
@@ -2402,6 +2697,84 @@ mod tests {
         });
         assert_eq!(handle.info().ref_count, 1);
         assert_eq!(handle.info().consumers, vec![node_consumer]);
+    }
+
+    #[gpui::test]
+    fn redis_dispatches_a_probe_while_podman_stays_on_the_sampler(cx: &mut TestAppContext) {
+        // The tested boundary is the snapshot dispatch: one-shot Redis records
+        // a command dispatch, continuous Podman must dispatch nothing.
+        cx.executor().allow_parking();
+        let runtime = tokio::runtime::Runtime::new().expect("create test runtime");
+        let registry = SshConnectionRegistry::default();
+        let handle = registry.acquire(
+            SshConfig {
+                host: "host.example".to_string(),
+                username: "alice".to_string(),
+                auth: AuthMethod::Agent,
+                ..SshConfig::default()
+            },
+            ConnectionConsumer::NodeRouter("node-redis-dispatch".to_string()),
+        );
+        assert!(handle.set_remote_env(RemoteEnvInfo {
+            os_type: "Linux".to_string(),
+            os_version: None,
+            kernel: None,
+            arch: None,
+            shell: Some("/bin/sh".to_string()),
+            home: None,
+            zdotdir: None,
+            xdg_config_home: None,
+            detected_at: 1,
+        }));
+        let connection_id = handle.connection_id().to_string();
+        let (profiler_update_tx, profiler_update_rx) = tokio::sync::mpsc::channel(1);
+        let entity =
+            cx.new(|cx| HostToolsEntity::new(profiler_update_tx, profiler_update_rx, registry, cx));
+        entity.update(cx, |entity, cx| {
+            entity.lifecycle_runtime = Some(runtime.handle().clone());
+            entity.visibility = HostToolsVisibility::VisibleSidebar;
+            entity.test_resource_sampler = Some(Arc::new(VisibilityCountingSampler {
+                shell_open_count: Arc::new(AtomicUsize::new(0)),
+                shell_close_count: Arc::new(AtomicUsize::new(0)),
+            }));
+            entity.test_snapshot_dispatches = Some(Vec::new());
+            entity.messages = Some(HostToolsMessages {
+                service_connection_missing: "Service connection missing".to_string(),
+                service_action_failed: "Service action failed".to_string(),
+                log_unknown_error: "Log capture failed".to_string(),
+                port_unknown_error: "Port capture failed".to_string(),
+                filesystem_unknown_error: "Filesystem capture failed".to_string(),
+                package_unknown_error: "Package capture failed".to_string(),
+                schedule_unknown_error: "Schedule capture failed".to_string(),
+                tmux_unknown_error: "tmux capture failed".to_string(),
+                tmux_unavailable: "tmux unavailable".to_string(),
+                redis_connection_missing: "Redis connection missing".to_string(),
+                redis_probe_failed: "Redis probe failed".to_string(),
+                podman_capture_failed: "Podman capture failed".to_string(),
+            });
+            entity.select_connection(connection_id.clone(), None, cx);
+
+            entity.active_tool = ContextSidebarTool::Redis;
+            entity.request_active_tool_snapshot(HostSnapshotFeedback::Silent, cx);
+            assert_eq!(
+                entity
+                    .test_snapshot_dispatches
+                    .as_ref()
+                    .expect("snapshot test hook"),
+                &[ContextSidebarTool::Redis]
+            );
+
+            entity.active_tool = ContextSidebarTool::Podman;
+            entity.request_active_tool_snapshot(HostSnapshotFeedback::Silent, cx);
+            assert_eq!(
+                entity
+                    .test_snapshot_dispatches
+                    .as_ref()
+                    .expect("snapshot test hook"),
+                &[ContextSidebarTool::Redis],
+                "podman must ride the sampler instead of dispatching a snapshot command"
+            );
+        });
     }
 
     #[gpui::test]
@@ -2691,6 +3064,9 @@ mod tests {
                 schedule_unknown_error: "Schedule capture failed".to_string(),
                 tmux_unknown_error: "tmux capture failed".to_string(),
                 tmux_unavailable: "tmux unavailable".to_string(),
+                redis_connection_missing: "Redis connection missing".to_string(),
+                redis_probe_failed: "Redis probe failed".to_string(),
+                podman_capture_failed: "Podman capture failed".to_string(),
             });
             entity.select_tool(ContextSidebarTool::Services, cx);
             assert!(

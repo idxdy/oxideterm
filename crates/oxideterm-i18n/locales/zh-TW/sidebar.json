@@ -73,6 +73,7 @@
       "logs": "日誌",
       "tmux": "tmux",
       "docker": "Docker",
+      "podman": "Podman",
       "tmux_management": "tmux 管理",
       "docker_management": "Docker 管理",
       "session_manager": "工作階段管理器",
@@ -86,7 +87,8 @@
       "ports": "連接埠",
       "schedules": "排程任務",
       "filesystems": "磁碟",
-      "packages": "套件"
+      "packages": "套件",
+      "redis": "Redis"
     },
     "tooltips": {
       "switch_to_light": "切換為淺色主題",
@@ -206,7 +208,10 @@
         "exec": "開啟 Shell",
         "start": "啟動",
         "stop": "停止",
-        "restart": "重新啟動"
+        "restart": "重新啟動",
+        "pause": "暫停",
+        "unpause": "繼續",
+        "remove": "刪除"
       },
       "exec_title": "Docker：{{name}}",
       "follow_title": "Docker 日誌：{{name}}",
@@ -221,7 +226,10 @@
         "cancel": "取消",
         "start_desc": "要啟動容器 {{name}}（{{id}}）嗎？",
         "stop_desc": "要停止容器 {{name}}（{{id}}）嗎？容器內正在執行的工作可能會中斷。",
-        "restart_desc": "要重新啟動容器 {{name}}（{{id}}）嗎？容器內正在執行的工作會中斷。"
+        "restart_desc": "要重新啟動容器 {{name}}（{{id}}）嗎？容器內正在執行的工作會中斷。",
+        "pause_desc": "暫停容器 {{name}}（{{id}}）？",
+        "unpause_desc": "繼續容器 {{name}}（{{id}}）？",
+        "remove_desc": "刪除容器 {{name}}（{{id}}）？此操作無法復原。"
       },
       "toast": {
         "action_already_running": "已有 Docker 操作正在執行。",
@@ -233,6 +241,181 @@
         "connection_missing": "所選連線已無法使用。",
         "action_failed": "Docker 操作失敗。",
         "action_succeeded": "容器 {{name}} 的 Docker 操作已完成。"
+      }
+    },
+    "host_podman": {
+      "tabs": {
+        "containers": "容器",
+        "images": "映像",
+        "volumes": "儲存區",
+        "networks": "網路"
+      },
+      "images": {
+        "count_suffix": "個映像",
+        "empty": "沒有符合的映像"
+      },
+      "volumes": {
+        "count_suffix": "個儲存區"
+      },
+      "networks": {
+        "count_suffix": "個網路"
+      },
+      "stats": {
+        "count_suffix": "個容器"
+      },
+      "resources_empty": "目前沒有內容",
+      "inputs": {
+        "run_title": "執行容器",
+        "run_placeholder": "-d --name web -p 8080:80 nginx",
+        "rename_title": "重新命名容器",
+        "rename_placeholder": "新容器名稱",
+        "pull_title": "拉取映像",
+        "pull_placeholder": "docker.io/library/nginx:alpine",
+        "push_title": "推送映像",
+        "push_placeholder": "registry.example.com/me/web:latest",
+        "build_title": "建置映像",
+        "build_placeholder": "-t my-image:latest /上下文路徑",
+        "tag_title": "標籤",
+        "tag_placeholder": "registry.example.com/me/web:latest",
+        "save_title": "儲存映像歸檔",
+        "save_placeholder": "/path/to/web.tar",
+        "load_title": "載入映像歸檔",
+        "load_placeholder": "/path/to/image.tar",
+        "import_title": "匯入 rootfs",
+        "import_placeholder": "/path/to/rootfs.tar my-image:latest",
+        "export_title": "匯出容器檔案系統",
+        "export_placeholder": "/path/to/fs.tar",
+        "copy_title": "複製檔案",
+        "copy_placeholder": "/容器內路徑 /遠端主機路徑",
+        "volume_title": "建立儲存區",
+        "volume_placeholder": "儲存區名稱",
+        "network_title": "建立網路",
+        "network_placeholder": "網路名稱 [驅動]",
+        "search_title": "搜尋映像",
+        "search_placeholder": "搜尋詞",
+        "login_title": "登錄映像倉庫",
+        "login_placeholder": "registry.example.com"
+      },
+      "confirms": {
+        "run": "執行",
+        "remove_image": "刪除映像 {{name}}？此操作無法復原。",
+        "tag_image": "為映像 {{name}} 加標籤？",
+        "rename": "重新命名為 {{name}}？",
+        "healthcheck": "立即執行容器健康檢查？",
+        "create_volume": "建立儲存區 {{name}}？",
+        "remove_volume": "刪除儲存區 {{name}}？此操作無法復原。",
+        "prune_volumes": "刪除此主機上所有未使用的儲存區？此操作無法復原。",
+        "create_network": "建立網路 {{name}}？",
+        "remove_network": "刪除網路 {{name}}？",
+        "logout": "登出該映像倉庫？",
+      "prune_dangling_images": "刪除所有虛懸（無標籤）映像？此操作無法復原。",
+      "prune_unused_images": "刪除此主機上所有未被任何容器使用的映像？此操作無法復原。"
+      },
+      "captures": {
+        "loading": "正在載入...",
+        "close": "關閉",
+      "failed": "Podman 資料擷取失敗。"
+      },
+      "attach_title": "附加：{{name}}",
+      "search_placeholder": "搜尋容器...",
+      "count_suffix": "個容器",
+      "sampling": "正在取樣 Podman 容器...",
+      "empty": "沒有符合的容器",
+      "unavailable": "此主機上 Podman 無法使用。",
+      "unavailable_detail": "此主機上的 Podman 無法連線：{{detail}}",
+      "error": "Podman 指令執行失敗：{{error}}",
+      "columns": {
+        "container": "容器 / 映像",
+        "image": "映像",
+        "state": "狀態"
+      },
+      "states": {
+        "running": "執行中",
+        "exited": "已結束",
+        "created": "已建立",
+        "paused": "已暫停",
+        "stopped": "已停止",
+        "dead": "已失效",
+        "unknown": "未知"
+      },
+      "actions": {
+        "refresh": "重新整理容器",
+        "start": "啟動",
+        "stop": "停止",
+        "restart": "重新啟動",
+        "pause": "暫停",
+        "unpause": "繼續",
+        "remove": "刪除",
+        "logs": "檢視日誌",
+        "follow_logs": "追蹤日誌",
+        "exec": "開啟 Shell",
+        "run": "執行容器",
+        "stats": "資源佔用",
+        "create": "建立",
+        "prune": "清理未使用",
+        "tag": "標籤",
+        "history": "歷史",
+        "inspect": "檢查詳情",
+        "save": "匯出歸檔",
+        "pull": "拉取映像",
+        "push": "推送映像",
+        "build": "建置映像",
+        "search": "搜尋",
+        "attach": "附加",
+        "healthcheck": "執行健康檢查",
+        "rename": "重新命名",
+        "more": "重新命名容器",
+        "usage": "被哪些容器使用",
+      "prune_dangling": "清理虛懸",
+      "prune_unused": "清除未使用"
+      },
+      "confirm": {
+        "title": "確認 Podman 操作",
+        "cancel": "取消",
+        "start_desc": "啟動容器 {{name}}（{{id}}）？",
+        "stop_desc": "停止容器 {{name}}（{{id}}）？容器內執行中的工作可能被中斷。",
+        "restart_desc": "重新啟動容器 {{name}}（{{id}}）？容器內執行中的工作將被中斷。",
+        "pause_desc": "暫停容器 {{name}}（{{id}}）？",
+        "unpause_desc": "繼續容器 {{name}}（{{id}}）？",
+        "remove_desc": "刪除容器 {{name}}（{{id}}）？此操作無法復原。",
+      "run": "確認"
+      },
+      "logs": {
+        "title": "日誌：{{name}}",
+        "loading": "正在載入日誌...",
+        "empty": "目前沒有日誌。",
+        "close": "關閉日誌"
+      },
+      "follow_title": "Podman 日誌：{{name}}",
+      "exec_title": "Podman：{{name}}",
+      "toast": {
+        "action_already_running": "已有 Podman 操作正在執行。",
+        "logs_already_running": "Podman 日誌正在載入。",
+        "connection_missing": "所選連線已無法使用。",
+        "action_failed": "Podman 操作失敗。",
+        "logs_failed": "載入 Podman 日誌失敗。",
+        "exec_terminal_missing": "此容器沒有可用的 SSH 終端路由。",
+        "exec_opened": "已開啟 {{name}} 的 Shell。",
+        "follow_opened": "正在追蹤 {{name}} 的日誌。",
+        "attach_opened": "正在附加到 {{name}}。",
+        "terminal_opened": "已為此 Podman 指令開啟終端機。",
+        "action_succeeded": "Podman 操作已完成：{{name}}。"
+      }
+    },
+    "host_redis": {
+      "loading": "正在探測 Redis...",
+      "unavailable": "此主機上找不到 redis-cli。探測目標：127.0.0.1:6379。",
+      "no_server": "127.0.0.1:6379 上沒有正在監聽的 Redis 伺服器。",
+      "auth_required": "127.0.0.1:6379 的 Redis 伺服器需要驗證；此探測不會傳送憑證。",
+      "error": "Redis 探測失敗：{{error}}",
+      "reachable": "Redis 可連線（127.0.0.1:6379）。",
+      "probe_target": "127.0.0.1:6379",
+      "actions": {
+        "refresh": "探測 Redis"
+      },
+      "toast": {
+        "connection_missing": "所選連線已無法使用。",
+        "probe_failed": "Redis 探測失敗。"
       }
     },
     "host_services": {

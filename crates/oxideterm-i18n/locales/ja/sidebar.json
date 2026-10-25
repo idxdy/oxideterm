@@ -73,6 +73,7 @@
       "logs": "ログ",
       "tmux": "tmux",
       "docker": "Docker",
+      "podman": "Podman",
       "tmux_management": "tmux 管理",
       "docker_management": "Docker 管理",
       "session_manager": "セッションマネージャー",
@@ -86,7 +87,8 @@
       "ports": "ポート",
       "schedules": "スケジュール",
       "filesystems": "ディスク",
-      "packages": "パッケージ"
+      "packages": "パッケージ",
+      "redis": "Redis"
     },
     "tooltips": {
       "switch_to_light": "ライトテーマに切り替え",
@@ -206,7 +208,10 @@
         "exec": "シェルを開く",
         "start": "開始",
         "stop": "停止",
-        "restart": "再起動"
+        "restart": "再起動",
+        "pause": "一時停止",
+        "unpause": "再開",
+        "remove": "削除"
       },
       "exec_title": "Docker: {{name}}",
       "follow_title": "Docker ログ: {{name}}",
@@ -221,7 +226,10 @@
         "cancel": "キャンセル",
         "start_desc": "コンテナ {{name}}（{{id}}）を開始しますか？",
         "stop_desc": "コンテナ {{name}}（{{id}}）を停止しますか？コンテナ内の実行中の処理が中断される可能性があります。",
-        "restart_desc": "コンテナ {{name}}（{{id}}）を再起動しますか？コンテナ内の実行中の処理は中断されます。"
+        "restart_desc": "コンテナ {{name}}（{{id}}）を再起動しますか？コンテナ内の実行中の処理は中断されます。",
+        "pause_desc": "コンテナ {{name}}（{{id}}）を一時停止しますか？",
+        "unpause_desc": "コンテナ {{name}}（{{id}}）を再開しますか？",
+        "remove_desc": "コンテナ {{name}}（{{id}}）を削除しますか？この操作は元に戻せません。"
       },
       "toast": {
         "action_already_running": "Docker 操作を実行中です。",
@@ -233,6 +241,181 @@
         "connection_missing": "選択した接続は利用できません。",
         "action_failed": "Docker 操作に失敗しました。",
         "action_succeeded": "{{name}} の Docker 操作が完了しました。"
+      }
+    },
+    "host_podman": {
+      "tabs": {
+        "containers": "コンテナ",
+        "images": "イメージ",
+        "volumes": "ボリューム",
+        "networks": "ネットワーク"
+      },
+      "images": {
+        "count_suffix": "個のイメージ",
+        "empty": "一致するイメージがありません"
+      },
+      "volumes": {
+        "count_suffix": "個のボリューム"
+      },
+      "networks": {
+        "count_suffix": "個のネットワーク"
+      },
+      "stats": {
+        "count_suffix": "個のコンテナ"
+      },
+      "resources_empty": "まだ何もありません",
+      "inputs": {
+        "run_title": "コンテナを実行",
+        "run_placeholder": "-d --name web -p 8080:80 nginx",
+        "rename_title": "コンテナ名を変更",
+        "rename_placeholder": "新しいコンテナ名",
+        "pull_title": "イメージを取得",
+        "pull_placeholder": "docker.io/library/nginx:alpine",
+        "push_title": "イメージを送信",
+        "push_placeholder": "registry.example.com/me/web:latest",
+        "build_title": "イメージを構築",
+        "build_placeholder": "-t my-image:latest /コンテキストパス",
+        "tag_title": "タグ付け",
+        "tag_placeholder": "registry.example.com/me/web:latest",
+        "save_title": "アーカイブを保存",
+        "save_placeholder": "/path/to/web.tar",
+        "load_title": "アーカイブを読み込む",
+        "load_placeholder": "/path/to/image.tar",
+        "import_title": "rootfs をインポート",
+        "import_placeholder": "/path/to/rootfs.tar my-image:latest",
+        "export_title": "コンテナFSをエクスポート",
+        "export_placeholder": "/path/to/fs.tar",
+        "copy_title": "ファイルコピー",
+        "copy_placeholder": "/コンテナ内パス /リモートパス",
+        "volume_title": "ボリューム作成",
+        "volume_placeholder": "ボリューム名",
+        "network_title": "ネットワーク作成",
+        "network_placeholder": "ネットワーク名 [ドライバ]",
+        "search_title": "イメージを検索",
+        "search_placeholder": "検索語",
+        "login_title": "レジストリにログイン",
+        "login_placeholder": "registry.example.com"
+      },
+      "confirms": {
+        "run": "実行",
+        "remove_image": "イメージ {{name}} を削除しますか？元に戻せません。",
+        "tag_image": "イメージ {{name}} にタグを付けますか？",
+        "rename": "{{name}} に名前を変更しますか？",
+        "healthcheck": "ヘルスチェックを今実行しますか？",
+        "create_volume": "ボリューム {{name}} を作成しますか？",
+        "remove_volume": "ボリューム {{name}} を削除しますか？元に戻せません。",
+        "prune_volumes": "このホストの未使用ボリュームをすべて削除しますか？元に戻せません。",
+        "create_network": "ネットワーク {{name}} を作成しますか？",
+        "remove_network": "ネットワーク {{name}} を削除しますか？",
+        "logout": "このレジストリからログアウトしますか？",
+      "prune_dangling_images": "ダングリング（タグなし）イメージをすべて削除しますか？元に戻せません。",
+      "prune_unused_images": "このホストでどのコンテナにも使われていないイメージをすべて削除しますか？元に戻せません。"
+      },
+      "captures": {
+        "loading": "読み込み中...",
+        "close": "閉じる",
+      "failed": "Podman の取得に失敗しました。"
+      },
+      "attach_title": "アタッチ: {{name}}",
+      "search_placeholder": "コンテナを検索...",
+      "count_suffix": "個のコンテナ",
+      "sampling": "Podman コンテナを取得中...",
+      "empty": "一致するコンテナがありません",
+      "unavailable": "このホストでは Podman を利用できません。",
+      "unavailable_detail": "このホストの Podman に接続できません: {{detail}}",
+      "error": "Podman コマンドが失敗しました: {{error}}",
+      "columns": {
+        "container": "コンテナ / イメージ",
+        "image": "イメージ",
+        "state": "状態"
+      },
+      "states": {
+        "running": "実行中",
+        "exited": "終了",
+        "created": "作成済み",
+        "paused": "一時停止",
+        "stopped": "停止",
+        "dead": "停止不能",
+        "unknown": "不明"
+      },
+      "actions": {
+        "refresh": "コンテナを更新",
+        "start": "開始",
+        "stop": "停止",
+        "restart": "再起動",
+        "pause": "一時停止",
+        "unpause": "再開",
+        "remove": "削除",
+        "logs": "ログを表示",
+        "follow_logs": "ログを追従",
+        "exec": "シェルを開く",
+        "run": "コンテナを実行",
+        "stats": "リソース使用量",
+        "create": "作成",
+        "prune": "未使用を削除",
+        "tag": "タグ",
+        "history": "履歴",
+        "inspect": "詳細",
+        "save": "アーカイブ保存",
+        "pull": "イメージ取得",
+        "push": "イメージ送信",
+        "build": "イメージ構築",
+        "search": "検索",
+        "attach": "アタッチ",
+        "healthcheck": "ヘルスチェック実行",
+        "rename": "名前変更",
+        "more": "コンテナ名を変更",
+        "usage": "使用中のコンテナ",
+      "prune_dangling": "ダングリング削除",
+      "prune_unused": "未使用を削除"
+      },
+      "confirm": {
+        "title": "Podman 操作の確認",
+        "cancel": "キャンセル",
+        "start_desc": "コンテナ {{name}}（{{id}}）を開始しますか？",
+        "stop_desc": "コンテナ {{name}}（{{id}}）を停止しますか？コンテナ内の実行中の処理が中断される可能性があります。",
+        "restart_desc": "コンテナ {{name}}（{{id}}）を再起動しますか？コンテナ内の実行中の処理は中断されます。",
+        "pause_desc": "コンテナ {{name}}（{{id}}）を一時停止しますか？",
+        "unpause_desc": "コンテナ {{name}}（{{id}}）を再開しますか？",
+        "remove_desc": "コンテナ {{name}}（{{id}}）を削除しますか？この操作は元に戻せません。",
+      "run": "確認"
+      },
+      "logs": {
+        "title": "ログ: {{name}}",
+        "loading": "ログを読み込み中...",
+        "empty": "最近のログはありません。",
+        "close": "ログを閉じる"
+      },
+      "follow_title": "Podman ログ: {{name}}",
+      "exec_title": "Podman: {{name}}",
+      "toast": {
+        "action_already_running": "Podman 操作が既に実行中です。",
+        "logs_already_running": "Podman ログを既に読み込み中です。",
+        "connection_missing": "選択した接続は利用できなくなりました。",
+        "action_failed": "Podman 操作に失敗しました。",
+        "logs_failed": "Podman ログの読み込みに失敗しました。",
+        "exec_terminal_missing": "このコンテナには利用可能な SSH 経路がありません。",
+        "exec_opened": "{{name}} のシェルを開きました。",
+        "follow_opened": "{{name}} のログを追従中です。",
+        "attach_opened": "{{name}} に接続中です。",
+        "terminal_opened": "この Podman コマンド用のターミナルを開きました。",
+        "action_succeeded": "Podman 操作が完了しました: {{name}}。"
+      }
+    },
+    "host_redis": {
+      "loading": "Redis を確認中...",
+      "unavailable": "このホストに redis-cli が見つかりません。確認先: 127.0.0.1:6379。",
+      "no_server": "127.0.0.1:6379 で待機している Redis サーバーがありません。",
+      "auth_required": "127.0.0.1:6379 の Redis サーバーは認証が必要です。この確認は認証なしで行われます。",
+      "error": "Redis の確認に失敗しました: {{error}}",
+      "reachable": "Redis に到達できます（127.0.0.1:6379）。",
+      "probe_target": "127.0.0.1:6379",
+      "actions": {
+        "refresh": "Redis を確認"
+      },
+      "toast": {
+        "connection_missing": "選択した接続は利用できなくなりました。",
+        "probe_failed": "Redis の確認に失敗しました。"
       }
     },
     "host_services": {

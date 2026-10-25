@@ -304,6 +304,7 @@ impl WorkspaceApp {
             gpu: host_tools.monitor_enabled && host_tools.gpu_enabled,
             processes: host_tools.processes_enabled,
             docker: host_tools.docker_enabled,
+            podman: host_tools.podman_enabled,
         }
     }
 
