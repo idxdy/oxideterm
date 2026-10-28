@@ -222,7 +222,10 @@ const REDIS_HOST_CLI_FUNCTION: &str = concat!(
     "oxide_cli() { ",
     "if [ -n \"$oxide_pw\" ]; then REDISCLI_AUTH=$oxide_pw redis-cli -t 5 \"$@\"; ",
     "else redis-cli -t 5 \"$@\"; fi; ",
-    "}; "
+    "}; ",
+    // A host process inherits the caller's pipe directly, so streaming writes
+    // share the same helper as the plain calls.
+    "oxide_cli_stdin() { oxide_cli \"$@\"; }; "
 );
 
 const REDIS_CONTAINER_CLI_FUNCTION: &str = concat!(
@@ -232,6 +235,14 @@ const REDIS_CONTAINER_CLI_FUNCTION: &str = concat!(
     "if [ -n \"$oxide_pw\" ]; then ",
     "REDISCLI_AUTH=$oxide_pw $oxide_runtime exec -e REDISCLI_AUTH {container} redis-cli -t 5 \"$@\"; ",
     "else $oxide_runtime exec {container} redis-cli -t 5 \"$@\"; fi; ",
+    "}; ",
+    // `redis-cli -x` reads the value from stdin, and `podman/docker exec` only
+    // forwards stdin with `-i`. Only the streaming writes use this variant, and
+    // each one is fed by its own pipe, so the script's stdin stays untouched.
+    "oxide_cli_stdin() { ",
+    "if [ -n \"$oxide_pw\" ]; then ",
+    "REDISCLI_AUTH=$oxide_pw $oxide_runtime exec -i -e REDISCLI_AUTH {container} redis-cli -t 5 \"$@\"; ",
+    "else $oxide_runtime exec -i {container} redis-cli -t 5 \"$@\"; fi; ",
     "}; "
 );
 
@@ -305,7 +316,7 @@ const REDIS_SET_VALUE_TAIL: &str = concat!(
     "case \"$oxide_db\" in ''|*[!0-9]*) oxide_db=0;; esac; ",
     "oxide_value=$(cat); ",
     "if [ -z \"$oxide_key\" ]; then printf 'status\\terror\\tmissing key\\n'; else ",
-    "oxide_reply=$(printf '%s' \"$oxide_value\" | oxide_cli -n \"$oxide_db\" -x SET \"$oxide_key\" 2>&1 | head -n 1 | tr -d '\\r'); ",
+    "oxide_reply=$(printf '%s' \"$oxide_value\" | oxide_cli_stdin -n \"$oxide_db\" -x SET \"$oxide_key\" 2>&1 | head -n 1 | tr -d '\\r'); ",
     "case \"$oxide_reply\" in ",
     "OK) printf 'status\\tok\\n' ;; ",
     "*) printf 'status\\terror\\t%s\\n' \"$(printf '%s' \"$oxide_reply\" | tr '\\t' ' ')\" ;; ",
@@ -332,34 +343,34 @@ impl RedisCreateKind {
     fn write_script(self) -> &'static str {
         match self {
             Self::String | Self::Json => concat!(
-                "oxide_out=$(printf '%s' \"$oxide_body\" | oxide_cli -n \"$oxide_db\" -x SET \"$oxide_key\" 2>&1); ",
+                "oxide_out=$(printf '%s' \"$oxide_body\" | oxide_cli_stdin -n \"$oxide_db\" -x SET \"$oxide_key\" 2>&1); ",
             ),
             Self::Hash => concat!(
                 "oxide_out=$(printf '%s\\n' \"$oxide_body\" | ",
                 "while IFS='\t' read -r oxide_field oxide_field_value; do ",
                 "if [ -z \"$oxide_field\" ]; then continue; fi; ",
-                "printf '%s' \"$oxide_field_value\" | oxide_cli -n \"$oxide_db\" -x HSET \"$oxide_key\" \"$oxide_field\"; echo; ",
+                "printf '%s' \"$oxide_field_value\" | oxide_cli_stdin -n \"$oxide_db\" -x HSET \"$oxide_key\" \"$oxide_field\"; echo; ",
                 "done); ",
             ),
             Self::List => concat!(
                 "oxide_out=$(printf '%s\\n' \"$oxide_body\" | ",
                 "while IFS= read -r oxide_item; do ",
                 "if [ -z \"$oxide_item\" ]; then continue; fi; ",
-                "printf '%s' \"$oxide_item\" | oxide_cli -n \"$oxide_db\" -x RPUSH \"$oxide_key\"; echo; ",
+                "printf '%s' \"$oxide_item\" | oxide_cli_stdin -n \"$oxide_db\" -x RPUSH \"$oxide_key\"; echo; ",
                 "done); ",
             ),
             Self::Set => concat!(
                 "oxide_out=$(printf '%s\\n' \"$oxide_body\" | ",
                 "while IFS= read -r oxide_item; do ",
                 "if [ -z \"$oxide_item\" ]; then continue; fi; ",
-                "printf '%s' \"$oxide_item\" | oxide_cli -n \"$oxide_db\" -x SADD \"$oxide_key\"; echo; ",
+                "printf '%s' \"$oxide_item\" | oxide_cli_stdin -n \"$oxide_db\" -x SADD \"$oxide_key\"; echo; ",
                 "done); ",
             ),
             Self::SortedSet => concat!(
                 "oxide_out=$(printf '%s\\n' \"$oxide_body\" | ",
                 "while IFS='\t' read -r oxide_member oxide_score; do ",
                 "if [ -z \"$oxide_member\" ]; then continue; fi; ",
-                "printf '%s' \"$oxide_member\" | oxide_cli -n \"$oxide_db\" -x ZADD \"$oxide_key\" \"$oxide_score\"; echo; ",
+                "printf '%s' \"$oxide_member\" | oxide_cli_stdin -n \"$oxide_db\" -x ZADD \"$oxide_key\" \"$oxide_score\"; echo; ",
                 "done); ",
             ),
         }
@@ -1519,7 +1530,7 @@ mod tests {
         assert!(command.contains("IFS= read -r oxide_key"));
         assert!(command.contains("oxide_value=$(cat)"));
         // `-x` reads the value from the pipe: it must never be an argument.
-        assert!(command.contains("oxide_cli -n \"$oxide_db\" -x SET \"$oxide_key\""));
+        assert!(command.contains("oxide_cli_stdin -n \"$oxide_db\" -x SET \"$oxide_key\""));
         assert!(!command.contains("-a "));
         assert!(redis_set_value_command(&endpoint, "Windows").is_none());
     }
@@ -1531,27 +1542,27 @@ mod tests {
         for (kind, write) in [
             (
                 RedisCreateKind::String,
-                "oxide_cli -n \"$oxide_db\" -x SET \"$oxide_key\"",
+                "oxide_cli_stdin -n \"$oxide_db\" -x SET \"$oxide_key\"",
             ),
             (
                 RedisCreateKind::Json,
-                "oxide_cli -n \"$oxide_db\" -x SET \"$oxide_key\"",
+                "oxide_cli_stdin -n \"$oxide_db\" -x SET \"$oxide_key\"",
             ),
             (
                 RedisCreateKind::Hash,
-                "oxide_cli -n \"$oxide_db\" -x HSET \"$oxide_key\" \"$oxide_field\"",
+                "oxide_cli_stdin -n \"$oxide_db\" -x HSET \"$oxide_key\" \"$oxide_field\"",
             ),
             (
                 RedisCreateKind::List,
-                "oxide_cli -n \"$oxide_db\" -x RPUSH \"$oxide_key\"",
+                "oxide_cli_stdin -n \"$oxide_db\" -x RPUSH \"$oxide_key\"",
             ),
             (
                 RedisCreateKind::Set,
-                "oxide_cli -n \"$oxide_db\" -x SADD \"$oxide_key\"",
+                "oxide_cli_stdin -n \"$oxide_db\" -x SADD \"$oxide_key\"",
             ),
             (
                 RedisCreateKind::SortedSet,
-                "oxide_cli -n \"$oxide_db\" -x ZADD \"$oxide_key\" \"$oxide_score\"",
+                "oxide_cli_stdin -n \"$oxide_db\" -x ZADD \"$oxide_key\" \"$oxide_score\"",
             ),
         ] {
             let command = redis_create_key_command(&endpoint, "Linux", kind, Some(120)).unwrap();

@@ -49,7 +49,7 @@ const PODMAN_SAMPLE_COMMAND_UNIX: &str = concat!(
     "echo '===PODMAN==='; ",
     "if command -v podman >/dev/null 2>&1; then ",
     "oxide_podman_ps=$(podman ps -a --no-trunc --format '",
-    "{{json .}}",
+    "{{json .}}\t{{.Status}}",
     "' 2>&1); ",
     "oxide_podman_status=$?; ",
     "if [ \"$oxide_podman_status\" -eq 0 ]; then ",
@@ -69,7 +69,7 @@ const PODMAN_SAMPLE_COMMAND_WINDOWS: &str = concat!(
     "Write-Output '===PODMAN===';",
     "if(Get-Command podman -ErrorAction SilentlyContinue){",
     "$oxidePodmanPs=& podman ps -a --no-trunc --format '",
-    "{{json .}}",
+    "{{json .}}\t{{.Status}}",
     "' 2>&1;",
     "if($LASTEXITCODE -eq 0){",
     "$oxidePodmanPs|ForEach-Object{Write-Output ('PS'+[char]9+$_)}",
@@ -187,7 +187,14 @@ pub fn podman_state_label_key(state: &str) -> &'static str {
 
 fn parse_podman_container_line(line: &str) -> Option<ResourcePodmanContainer> {
     let payload = line.strip_prefix(PODMAN_ROW_PREFIX)?;
-    let value = serde_json::from_str::<serde_json::Value>(payload).ok()?;
+    // The sample command appends `{{.Status}}` after the JSON payload because
+    // podman 5/6 leave the JSON `Status` field empty. JSON never contains a raw
+    // tab, so the first tab is a safe separator.
+    let (json_text, status_text) = match payload.split_once('\t') {
+        Some((json, status)) => (json, Some(status.trim())),
+        None => (payload, None),
+    };
+    let value = serde_json::from_str::<serde_json::Value>(json_text).ok()?;
     let id = clean_json_container_field(&value, "Id")
         .or_else(|| clean_json_container_field(&value, "ID"))?;
     if id.is_empty() {
@@ -199,8 +206,12 @@ fn parse_podman_container_line(line: &str) -> Option<ResourcePodmanContainer> {
         name: clean_json_names_field(&value).unwrap_or_else(|| id.to_string()),
         image: clean_json_container_field(&value, "Image").unwrap_or_else(|| "-".to_string()),
         state: clean_json_container_field(&value, "State").unwrap_or_else(|| "unknown".to_string()),
-        status: clean_json_container_field(&value, "Status").unwrap_or_else(|| "-".to_string()),
-        ports: clean_json_container_field(&value, "Ports"),
+        status: status_text
+            .filter(|status| !status.is_empty())
+            .map(str::to_string)
+            .or_else(|| clean_json_container_field(&value, "Status"))
+            .unwrap_or_else(|| "-".to_string()),
+        ports: podman_ports_text(&value),
     })
 }
 
@@ -216,6 +227,60 @@ fn clean_json_names_field(value: &serde_json::Value) -> Option<String> {
         Some(serde_json::Value::String(name)) => {
             let name = name.trim().trim_start_matches('/').to_string();
             (!name.is_empty()).then_some(name)
+        }
+        _ => None,
+    }
+}
+
+/// Podman renders ports either as docker-style text (`0.0.0.0:8080->80/tcp`)
+/// or, on podman 5/6, as an array of `{host_ip, host_port, container_port,
+/// range, protocol}` objects. Both shapes collapse into one display string.
+fn podman_ports_text(value: &serde_json::Value) -> Option<String> {
+    match value.get("Ports") {
+        Some(serde_json::Value::String(text)) => {
+            let text = text.trim();
+            (!text.is_empty()).then(|| text.to_string())
+        }
+        Some(serde_json::Value::Array(items)) => {
+            let mut rendered = Vec::new();
+            for item in items {
+                let host_ip = item
+                    .get("host_ip")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::trim)
+                    .filter(|ip| !ip.is_empty())
+                    .unwrap_or("0.0.0.0");
+                let host_port = item.get("host_port").and_then(serde_json::Value::as_u64);
+                let container_port = item
+                    .get("container_port")
+                    .and_then(serde_json::Value::as_u64);
+                let range = item
+                    .get("range")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or(1)
+                    .max(1);
+                let protocol = item
+                    .get("protocol")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("tcp");
+                match (host_port, container_port) {
+                    (Some(host), Some(container)) if host > 0 && range == 1 => {
+                        rendered.push(format!("{host_ip}:{host}->{container}/{protocol}"));
+                    }
+                    (Some(host), Some(container)) if host > 0 => {
+                        rendered.push(format!(
+                            "{host_ip}:{host}-{}->{container}-{}/{protocol}",
+                            host.saturating_add(range - 1),
+                            container.saturating_add(range - 1)
+                        ));
+                    }
+                    (_, Some(container)) => {
+                        rendered.push(format!("{container}/{protocol}"));
+                    }
+                    _ => {}
+                }
+            }
+            (!rendered.is_empty()).then(|| rendered.join(", "))
         }
         _ => None,
     }
@@ -810,8 +875,62 @@ mod tests {
     }
 
     #[test]
+    fn podman_parser_reads_a_real_podman_6_row() {
+        // Captured from `podman 6.1.4 ps --format '{{json .}}\t{{.Status}}'`
+        // for a redis container published on 16379.
+        let row = concat!(
+            "{\"Id\":\"c6d920d1533d\",\"Names\":[\"oxide-redis-probe\"],",
+            "\"Image\":\"docker.io/library/redis:7-alpine\",\"State\":\"running\",",
+            "\"Status\":\"\",\"Ports\":[{\"host_ip\":\"\",\"container_port\":6379,",
+            "\"host_port\":16379,\"range\":1,\"protocol\":\"tcp\"}]}"
+        );
+        let snapshot = parse_podman_snapshot(&format!(
+            "===PODMAN===\nPS\t{row}\tUp 4 minutes\n===PODMAN_END==="
+        ));
+        let container = &snapshot.containers[0];
+        assert_eq!(container.name, "oxide-redis-probe");
+        assert_eq!(container.state, "running");
+        assert_eq!(container.status, "Up 4 minutes");
+        assert_eq!(container.ports.as_deref(), Some("0.0.0.0:16379->6379/tcp"));
+    }
+
+    #[test]
+    fn podman_ports_render_from_array_and_string_shapes() {
+        // podman 5/6: `Ports` is an array of mapping objects.
+        let array_row = concat!(
+            "{\"Id\":\"a1b2c3d4e5f6\",\"Names\":[\"web\"],\"Image\":\"nginx:alpine\",",
+            "\"State\":\"running\",\"Status\":\"\",",
+            "\"Ports\":[{\"host_ip\":\"0.0.0.0\",\"container_port\":80,\"host_port\":18080,\"range\":1,\"protocol\":\"tcp\"},",
+            "{\"host_ip\":\"\",\"container_port\":443,\"host_port\":0,\"range\":1,\"protocol\":\"tcp\"}]}"
+        );
+        let snapshot = parse_podman_snapshot(&format!(
+            "===PODMAN===\nPS\t{array_row}\tUp 8 seconds\n===PODMAN_END==="
+        ));
+        let container = &snapshot.containers[0];
+        // Docker-style text matches what the Docker tool prints for the column.
+        assert_eq!(
+            container.ports.as_deref(),
+            Some("0.0.0.0:18080->80/tcp, 443/tcp")
+        );
+        // The appended template column supplies the status podman omits in JSON.
+        assert_eq!(container.status, "Up 8 seconds");
+
+        // Older podman/docker-style string ports keep their text verbatim.
+        let string_row = concat!(
+            "{\"Id\":\"f6e5d4c3b2a1\",\"Names\":\"db\",\"Image\":\"postgres:16\",",
+            "\"State\":\"exited\",\"Status\":\"Exited (0) 1 hour ago\",",
+            "\"Ports\":\"0.0.0.0:5432->5432/tcp\"}"
+        );
+        let snapshot =
+            parse_podman_snapshot(&format!("===PODMAN===\nPS\t{string_row}\n===PODMAN_END==="));
+        let container = &snapshot.containers[0];
+        assert_eq!(container.ports.as_deref(), Some("0.0.0.0:5432->5432/tcp"));
+        assert_eq!(container.status, "Exited (0) 1 hour ago");
+    }
+
+    #[test]
     fn podman_sample_command_keeps_machine_readable_format_without_sudo() {
-        let expected_format = "{{json .}}";
+        let expected_format = "{{json .}}\t{{.Status}}";
         assert!(podman_sample_command("Linux").contains(expected_format));
         assert!(podman_sample_command("Windows").contains(expected_format));
         assert!(podman_sample_command("Linux").contains("--no-trunc"));
