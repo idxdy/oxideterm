@@ -75,6 +75,30 @@ pub(in crate::workspace) enum ScheduleActionNoticeKind {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(in crate::workspace) enum HostToolsNotice {
+    RedisKeyCopied {
+        key: String,
+    },
+    RedisValueCopied {
+        key: String,
+    },
+    RedisValueCopyFailed {
+        key: String,
+    },
+    RedisKeyDeleted {
+        key: String,
+    },
+    RedisKeyRenamed {
+        key: String,
+    },
+    RedisValueSet {
+        key: String,
+    },
+    RedisKeyCreated {
+        key: String,
+    },
+    RedisKeyActionFailed {
+        message: String,
+    },
     ProcessActionAlreadyRunning,
     ProcessInvalidNice,
     ProcessConnectionMissing,

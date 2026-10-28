@@ -1391,6 +1391,9 @@ impl WorkspaceApp {
         if self.handle_host_podman_search_key(event, cx) {
             return;
         }
+        if self.handle_host_redis_key(event, cx) {
+            return;
+        }
         if self.handle_host_service_search_key(event, cx) {
             return;
         }

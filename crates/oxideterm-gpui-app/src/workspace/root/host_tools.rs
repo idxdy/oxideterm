@@ -624,6 +624,44 @@ impl WorkspaceApp {
                     )
                 }
             }
+            HostToolsNotice::RedisKeyCopied { key } => (
+                self.i18n_replace("sidebar.host_redis.toast.key_copied", &[("key", key)]),
+                TerminalNoticeVariant::Success,
+            ),
+            HostToolsNotice::RedisValueCopied { key } => (
+                self.i18n_replace("sidebar.host_redis.toast.value_copied", &[("key", key)]),
+                TerminalNoticeVariant::Success,
+            ),
+            HostToolsNotice::RedisValueCopyFailed { key } => (
+                self.i18n_replace(
+                    "sidebar.host_redis.toast.value_copy_failed",
+                    &[("key", key)],
+                ),
+                TerminalNoticeVariant::Error,
+            ),
+            HostToolsNotice::RedisKeyDeleted { key } => (
+                self.i18n_replace("sidebar.host_redis.toast.key_deleted", &[("key", key)]),
+                TerminalNoticeVariant::Success,
+            ),
+            HostToolsNotice::RedisKeyRenamed { key } => (
+                self.i18n_replace("sidebar.host_redis.toast.key_renamed", &[("key", key)]),
+                TerminalNoticeVariant::Success,
+            ),
+            HostToolsNotice::RedisValueSet { key } => (
+                self.i18n_replace("sidebar.host_redis.toast.value_set", &[("key", key)]),
+                TerminalNoticeVariant::Success,
+            ),
+            HostToolsNotice::RedisKeyCreated { key } => (
+                self.i18n_replace("sidebar.host_redis.toast.key_created", &[("key", key)]),
+                TerminalNoticeVariant::Success,
+            ),
+            HostToolsNotice::RedisKeyActionFailed { message } => (
+                self.i18n_replace(
+                    "sidebar.host_redis.toast.key_action_failed",
+                    &[("message", message)],
+                ),
+                TerminalNoticeVariant::Error,
+            ),
         };
         self.push_workspace_notice(
             TerminalNotice {

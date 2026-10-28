@@ -23,6 +23,11 @@ pub(super) enum HostToolsReliableDelivery {
     LogSnapshot(HostLogSnapshotDelivery),
     PortSnapshot(HostPortSnapshotDelivery),
     RedisSnapshot(HostRedisSnapshotDelivery),
+    RedisKeys(HostRedisKeysDelivery),
+    RedisValue(HostRedisValueDelivery),
+    RedisMutation(HostRedisMutationDelivery),
+    RedisSetValue(HostRedisSetValueDelivery),
+    RedisCreateKey(HostRedisCreateKeyDelivery),
     FilesystemSnapshot(HostFilesystemSnapshotDelivery),
     PackageSnapshot(HostPackageSnapshotDelivery),
     ScheduleSnapshot(HostScheduleSnapshotDelivery),
@@ -228,6 +233,21 @@ impl HostToolsEntity {
                 }
                 HostToolsReliableDelivery::RedisSnapshot(delivery) => {
                     self.finish_host_redis_snapshot(delivery, cx);
+                }
+                HostToolsReliableDelivery::RedisKeys(delivery) => {
+                    self.finish_host_redis_keys(delivery, cx);
+                }
+                HostToolsReliableDelivery::RedisValue(delivery) => {
+                    self.finish_host_redis_value(delivery, cx);
+                }
+                HostToolsReliableDelivery::RedisMutation(delivery) => {
+                    self.finish_host_redis_mutation(delivery, cx);
+                }
+                HostToolsReliableDelivery::RedisSetValue(delivery) => {
+                    self.finish_host_redis_set_value(delivery, cx);
+                }
+                HostToolsReliableDelivery::RedisCreateKey(delivery) => {
+                    self.finish_host_redis_create_key(delivery, cx);
                 }
                 HostToolsReliableDelivery::FilesystemSnapshot(delivery) => {
                     self.finish_host_filesystems_snapshot(delivery, cx);

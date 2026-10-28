@@ -573,6 +573,9 @@ impl WorkspaceApp {
                 } else if this.handle_host_filesystem_search_key(event, cx) {
                     window.prevent_default();
                     cx.stop_propagation();
+                } else if this.handle_host_redis_key(event, cx) {
+                    window.prevent_default();
+                    cx.stop_propagation();
                 } else if this.handle_host_package_search_key(event, cx) {
                     window.prevent_default();
                     cx.stop_propagation();
@@ -1367,6 +1370,23 @@ impl WorkspaceApp {
             })
             .when_some(
                 self.render_host_podman_capture_dialog(cx),
+                |root, dialog| root.child(dialog),
+            )
+            .when_some(self.render_host_redis_value_dialog(cx), |root, dialog| {
+                root.child(dialog)
+            })
+            .when_some(self.render_host_redis_delete_dialog(cx), |root, dialog| {
+                root.child(dialog)
+            })
+            .when_some(self.render_host_redis_rename_dialog(cx), |root, dialog| {
+                root.child(dialog)
+            })
+            .when_some(
+                self.render_host_redis_set_value_dialog(cx),
+                |root, dialog| root.child(dialog),
+            )
+            .when_some(
+                self.render_host_redis_create_key_dialog(cx),
                 |root, dialog| root.child(dialog),
             )
             .when_some(

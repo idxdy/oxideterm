@@ -327,7 +327,8 @@
       "columns": {
         "container": "컨테이너 / 이미지",
         "image": "이미지",
-        "state": "상태"
+        "state": "상태",
+        "ports": "포트"
       },
       "states": {
         "running": "실행 중",
@@ -336,6 +337,8 @@
         "paused": "일시 중지",
         "stopped": "중지됨",
         "dead": "비정상 종료",
+        "restarting": "재시작 중",
+        "removing": "삭제 중",
         "unknown": "알 수 없음"
       },
       "actions": {
@@ -403,19 +406,113 @@
       }
     },
     "host_redis": {
-      "loading": "Redis 확인 중...",
-      "unavailable": "이 호스트에서 redis-cli를 찾을 수 없습니다. 확인 대상: 127.0.0.1:6379.",
-      "no_server": "127.0.0.1:6379에서 수신 대기 중인 Redis 서버가 없습니다.",
-      "auth_required": "127.0.0.1:6379의 Redis 서버는 인증이 필요합니다. 이 확인은 인증 없이 수행됩니다.",
+      "loading": "Redis를 확인하는 중...",
+      "unavailable": "이 호스트에는 redis-cli가 없고 실행 중인 Redis 컨테이너도 없습니다.",
+      "no_endpoint": "실행 중인 Redis 서버나 컨테이너가 없습니다.",
+      "auth_required": "이 Redis 서버는 인증이 필요합니다. 비밀번호를 입력하면 키를 볼 수 있습니다.",
+      "password_placeholder": "비밀번호 (선택)",
+      "keys_empty": "키를 찾을 수 없습니다.",
+      "key_count": "{{count}}개 키",
+      "tree_hint": "{{rows}}행",
+      "endpoint_hint": "엔드포인트",
+      "browse_unsupported": "키를 보려면 POSIX 호스트 셸이 필요합니다.",
+      "tree_current": "{current}",
+      "filter_all_databases": "모든 DB 보기",
+      "filter_only_with_keys": "키가 있는 DB만 보기",
+      "value": {
+        "type": "유형",
+        "size": "크기",
+        "ttl": "TTL",
+        "ttl_never": "만료 없음",
+        "ttl_missing": "키가 더 이상 없습니다",
+        "ttl_seconds": "{{seconds}}초",
+        "loading": "값을 읽는 중...",
+        "empty": "빈 값",
+        "unsupported": "{{type}} 유형의 값은 표시하지 않습니다.",
+        "view_text": "텍스트",
+        "view_json": "JSON"
+      },
+      "rename": {
+        "title": "키 이름 변경",
+        "current": "현재 키: {{key}}",
+        "placeholder": "새 키 이름",
+        "confirm": "변경",
+        "cancel": "취소",
+        "invalid": "다른 키 이름을 입력하세요."
+      },
+      "set_value": {
+        "title": "값 설정",
+        "key": "{{db}} · {{key}}",
+        "placeholder": "새 값",
+        "json_hint": "JSON 보기: 값이 올바른 JSON이어야 합니다.",
+        "text_hint": "텍스트 보기: 아무 값이나 입력할 수 있습니다.",
+        "confirm": "설정",
+        "cancel": "취소",
+        "invalid_json": "잘못된 JSON: {{error}}",
+        "string_only": "string 형식의 값만 바꿀 수 있습니다."
+      },
+      "create_key": {
+        "title": "새 키",
+        "name_placeholder": "new:key:name",
+        "type": "유형",
+        "types": {
+          "string": "string",
+          "hash": "hash",
+          "list": "list",
+          "set": "set",
+          "sorted_set": "sorted set",
+          "json": "json"
+        },
+        "ttl_never": "만료 없음",
+        "ttl_placeholder": "TTL(초)",
+        "value_placeholder": "값",
+        "value_hint": "값이 그대로 기록됩니다.",
+        "json_hint": "올바른 JSON이어야 합니다.",
+        "field_placeholder": "필드",
+        "element_placeholder": "값 / 요소",
+        "add_entry": "추가",
+        "remove_entry": "삭제",
+        "entries_empty": "항목이 없습니다.",
+        "hash_hint": "각 항목은 HSET 필드 값으로 추가됩니다.",
+        "list_hint": "각 항목은 RPUSH로 추가됩니다.",
+        "set_hint": "각 항목은 SADD로 추가됩니다.",
+        "zset_hint": "`member score`를 입력하세요(score 생략 시 0).",
+        "confirm": "만들기",
+        "cancel": "취소",
+        "invalid_name": "올바른 키 이름을 입력하세요.",
+        "invalid_ttl": "0보다 큰 정수 초를 입력하세요.",
+        "invalid_field": "탭이 없는 필드 이름을 입력하세요.",
+        "empty_entries": "항목을 하나 이상 추가하세요.",
+        "exists": "해당 키가 이미 있습니다."
+      },
+      "delete": {
+        "title": "키 삭제",
+        "description": "{{key}}을(를) 삭제할까요? 되돌릴 수 없습니다.",
+        "confirm": "삭제",
+        "cancel": "취소"
+      },
       "error": "Redis 확인 실패: {{error}}",
-      "reachable": "Redis에 연결 가능합니다(127.0.0.1:6379).",
-      "probe_target": "127.0.0.1:6379",
       "actions": {
-        "refresh": "Redis 확인"
+        "refresh": "Redis 확인",
+        "new_key": "키 만들기",
+        "copy_key": "키 복사",
+        "copy_value": "값 복사",
+        "rename": "키 이름 변경",
+        "set_value": "값 설정",
+        "delete": "키 삭제",
+        "close": "닫기"
       },
       "toast": {
         "connection_missing": "선택한 연결을 더 이상 사용할 수 없습니다.",
-        "probe_failed": "Redis 확인에 실패했습니다."
+        "probe_failed": "Redis 확인에 실패했습니다.",
+        "key_copied": "키를 복사했습니다: {{key}}",
+        "value_copied": "값을 복사했습니다: {{key}}",
+        "value_copy_failed": "{{key}}의 값을 복사하지 못했습니다.",
+        "value_set": "값을 설정했습니다: {{key}}",
+        "key_deleted": "키를 삭제했습니다: {{key}}",
+        "key_renamed": "키 이름을 변경했습니다: {{key}}",
+        "key_created": "키를 만들었습니다: {{key}}",
+        "key_action_failed": "Redis 작업 실패: {{message}}"
       }
     },
     "host_services": {

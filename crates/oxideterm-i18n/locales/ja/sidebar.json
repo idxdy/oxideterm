@@ -327,7 +327,8 @@
       "columns": {
         "container": "コンテナ / イメージ",
         "image": "イメージ",
-        "state": "状態"
+        "state": "状態",
+        "ports": "ポート"
       },
       "states": {
         "running": "実行中",
@@ -336,6 +337,8 @@
         "paused": "一時停止",
         "stopped": "停止",
         "dead": "停止不能",
+        "restarting": "再起動中",
+        "removing": "削除中",
         "unknown": "不明"
       },
       "actions": {
@@ -403,19 +406,113 @@
       }
     },
     "host_redis": {
-      "loading": "Redis を確認中...",
-      "unavailable": "このホストに redis-cli が見つかりません。確認先: 127.0.0.1:6379。",
-      "no_server": "127.0.0.1:6379 で待機している Redis サーバーがありません。",
-      "auth_required": "127.0.0.1:6379 の Redis サーバーは認証が必要です。この確認は認証なしで行われます。",
-      "error": "Redis の確認に失敗しました: {{error}}",
-      "reachable": "Redis に到達できます（127.0.0.1:6379）。",
-      "probe_target": "127.0.0.1:6379",
+      "loading": "Redis を検出しています…",
+      "unavailable": "このホストには redis-cli がなく、実行中の Redis コンテナもありません。",
+      "no_endpoint": "実行中の Redis サーバーまたはコンテナがありません。",
+      "auth_required": "この Redis サーバーは認証が必要です。パスワードを入力するとキーを参照できます。",
+      "password_placeholder": "パスワード（任意）",
+      "keys_empty": "キーが見つかりません。",
+      "key_count": "{{count}} キー",
+      "tree_hint": "{{rows}} 行",
+      "endpoint_hint": "エンドポイント",
+      "browse_unsupported": "キーの参照には POSIX ホストシェルが必要です。",
+      "tree_current": "{current}",
+      "filter_all_databases": "すべての DB を表示",
+      "filter_only_with_keys": "キーのある DB のみ表示",
+      "value": {
+        "type": "型",
+        "size": "サイズ",
+        "ttl": "TTL",
+        "ttl_never": "無期限",
+        "ttl_missing": "キーは存在しません",
+        "ttl_seconds": "{{seconds}} 秒",
+        "loading": "値を読み込み中...",
+        "empty": "値は空です",
+        "unsupported": "{{type}} 型の値は表示されません。",
+        "view_text": "テキスト",
+        "view_json": "JSON"
+      },
+      "rename": {
+        "title": "キー名を変更",
+        "current": "現在のキー: {{key}}",
+        "placeholder": "新しいキー名",
+        "confirm": "変更",
+        "cancel": "キャンセル",
+        "invalid": "別のキー名を入力してください。"
+      },
+      "set_value": {
+        "title": "値を設定",
+        "key": "{{db}} · {{key}}",
+        "placeholder": "新しい値",
+        "json_hint": "JSON 表示: 値は有効な JSON である必要があります。",
+        "text_hint": "テキスト表示: 任意の値を入力できます。",
+        "confirm": "設定",
+        "cancel": "キャンセル",
+        "invalid_json": "無効な JSON: {{error}}",
+        "string_only": "string 型の値のみ置き換えできます。"
+      },
+      "create_key": {
+        "title": "新しいキー",
+        "name_placeholder": "new:key:name",
+        "type": "型",
+        "types": {
+          "string": "string",
+          "hash": "hash",
+          "list": "list",
+          "set": "set",
+          "sorted_set": "sorted set",
+          "json": "json"
+        },
+        "ttl_never": "無期限",
+        "ttl_placeholder": "TTL（秒）",
+        "value_placeholder": "値",
+        "value_hint": "値はそのまま書き込まれます。",
+        "json_hint": "有効な JSON である必要があります。",
+        "field_placeholder": "フィールド",
+        "element_placeholder": "値 / 要素",
+        "add_entry": "追加",
+        "remove_entry": "削除",
+        "entries_empty": "項目がありません。",
+        "hash_hint": "各項目は HSET フィールド 値 で追加します。",
+        "list_hint": "各項目は RPUSH で追加します。",
+        "set_hint": "各項目は SADD で追加します。",
+        "zset_hint": "`member score` を入力（score 省略時は 0）。",
+        "confirm": "作成",
+        "cancel": "キャンセル",
+        "invalid_name": "有効なキー名を入力してください。",
+        "invalid_ttl": "0 より大きい整数の秒数を入力してください。",
+        "invalid_field": "タブを含まないフィールド名を入力してください。",
+        "empty_entries": "項目を 1 つ以上追加してください。",
+        "exists": "そのキーは既に存在します。"
+      },
+      "delete": {
+        "title": "キーを削除",
+        "description": "{{key}} を削除しますか？この操作は元に戻せません。",
+        "confirm": "削除",
+        "cancel": "キャンセル"
+      },
+      "error": "Redis の検出に失敗しました: {{error}}",
       "actions": {
-        "refresh": "Redis を確認"
+        "refresh": "Redis を検出",
+        "new_key": "キーを作成",
+        "copy_key": "キーをコピー",
+        "copy_value": "値をコピー",
+        "rename": "キー名を変更",
+        "set_value": "値を設定",
+        "delete": "キーを削除",
+        "close": "閉じる"
       },
       "toast": {
-        "connection_missing": "選択した接続は利用できなくなりました。",
-        "probe_failed": "Redis の確認に失敗しました。"
+        "connection_missing": "選択した接続は利用できません。",
+        "probe_failed": "Redis の検出に失敗しました。",
+        "key_copied": "キーをコピーしました: {{key}}",
+        "value_copied": "値をコピーしました: {{key}}",
+        "value_copy_failed": "{{key}} の値をコピーできませんでした。",
+        "value_set": "値を設定しました: {{key}}",
+        "key_deleted": "キーを削除しました: {{key}}",
+        "key_renamed": "キー名を変更しました: {{key}}",
+        "key_created": "キーを作成しました: {{key}}",
+        "key_action_failed": "Redis 操作に失敗しました: {{message}}"
       }
     },
     "host_services": {

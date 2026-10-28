@@ -327,7 +327,8 @@
       "columns": {
         "container": "Container / Image",
         "image": "Image",
-        "state": "State"
+        "state": "State",
+        "ports": "Ports"
       },
       "states": {
         "running": "Running",
@@ -336,6 +337,8 @@
         "paused": "Paused",
         "stopped": "Stopped",
         "dead": "Dead",
+        "restarting": "Restarting",
+        "removing": "Removing",
         "unknown": "Unknown"
       },
       "actions": {
@@ -404,18 +407,112 @@
     },
     "host_redis": {
       "loading": "Probing Redis...",
-      "unavailable": "redis-cli was not found on this host. Probe target: 127.0.0.1:6379.",
-      "no_server": "No Redis server is listening on 127.0.0.1:6379.",
-      "auth_required": "The Redis server at 127.0.0.1:6379 requires authentication; this probe is unauthenticated.",
+      "unavailable": "redis-cli was not found on this host, and no Redis container is running.",
+      "no_endpoint": "No Redis server or Redis container is running.",
+      "auth_required": "This Redis server requires authentication. Enter the password to browse keys.",
+      "password_placeholder": "Password (optional)",
+      "keys_empty": "No keys found.",
+      "key_count": "{{count}} keys",
+      "tree_hint": "{{rows}} rows",
+      "endpoint_hint": "Endpoints",
+      "browse_unsupported": "Key browsing needs a POSIX host shell.",
+      "tree_current": "{current}",
+      "filter_all_databases": "Show all databases",
+      "filter_only_with_keys": "Show only databases with keys",
+      "value": {
+        "type": "Type",
+        "size": "Size",
+        "ttl": "TTL",
+        "ttl_never": "Never expires",
+        "ttl_missing": "Key no longer exists",
+        "ttl_seconds": "{{seconds}}s",
+        "loading": "Loading value...",
+        "empty": "Empty value",
+        "unsupported": "{{type}} values are not shown.",
+        "view_text": "Text",
+        "view_json": "JSON"
+      },
+      "rename": {
+        "title": "Rename key",
+        "current": "Current key: {{key}}",
+        "placeholder": "New key name",
+        "confirm": "Rename",
+        "cancel": "Cancel",
+        "invalid": "Enter a different key name."
+      },
+      "set_value": {
+        "title": "Set value",
+        "key": "{{db}} · {{key}}",
+        "placeholder": "New value",
+        "json_hint": "JSON view: the value must be valid JSON.",
+        "text_hint": "Text view: any value is accepted.",
+        "confirm": "Set",
+        "cancel": "Cancel",
+        "invalid_json": "Invalid JSON: {{error}}",
+        "string_only": "Only string values can be replaced."
+      },
+      "create_key": {
+        "title": "New key",
+        "name_placeholder": "new:key:name",
+        "type": "Type",
+        "types": {
+          "string": "string",
+          "hash": "hash",
+          "list": "list",
+          "set": "set",
+          "sorted_set": "sorted set",
+          "json": "json"
+        },
+        "ttl_never": "Never expires",
+        "ttl_placeholder": "TTL seconds",
+        "value_placeholder": "Value",
+        "value_hint": "The value is written as-is.",
+        "json_hint": "The value must be valid JSON.",
+        "field_placeholder": "Field",
+        "element_placeholder": "Value / element",
+        "add_entry": "Add",
+        "remove_entry": "Remove",
+        "entries_empty": "No entries yet.",
+        "hash_hint": "Each entry is added with HSET field value.",
+        "list_hint": "Each entry is appended with RPUSH.",
+        "set_hint": "Each entry is added with SADD.",
+        "zset_hint": "Enter `member score`; the score defaults to 0.",
+        "confirm": "Create",
+        "cancel": "Cancel",
+        "invalid_name": "Enter a valid key name.",
+        "invalid_ttl": "Enter a TTL in whole seconds greater than 0.",
+        "invalid_field": "Enter a field name without tabs.",
+        "empty_entries": "Add at least one entry.",
+        "exists": "That key already exists."
+      },
+      "delete": {
+        "title": "Delete key",
+        "description": "Delete {{key}}? This cannot be undone.",
+        "confirm": "Delete",
+        "cancel": "Cancel"
+      },
       "error": "Redis probe failed: {{error}}",
-      "reachable": "Redis is reachable at 127.0.0.1:6379.",
-      "probe_target": "127.0.0.1:6379",
       "actions": {
-        "refresh": "Probe Redis"
+        "refresh": "Probe Redis",
+        "new_key": "Create key",
+        "copy_key": "Copy key",
+        "copy_value": "Copy value",
+        "rename": "Rename key",
+        "set_value": "Set value",
+        "delete": "Delete key",
+        "close": "Close"
       },
       "toast": {
         "connection_missing": "The selected connection is no longer available.",
-        "probe_failed": "Failed to probe Redis."
+        "probe_failed": "Failed to probe Redis.",
+        "key_copied": "Key copied: {{key}}",
+        "value_copied": "Value copied: {{key}}",
+        "value_copy_failed": "Failed to copy the value of {{key}}.",
+        "value_set": "Value replaced: {{key}}",
+        "key_deleted": "Key deleted: {{key}}",
+        "key_renamed": "Key renamed to {{key}}",
+        "key_created": "Key created: {{key}}",
+        "key_action_failed": "Redis action failed: {{message}}"
       }
     },
     "host_services": {

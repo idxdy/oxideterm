@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use gpui::{Rgba, rgb, rgba};
 use oxideterm_gpui_ui::motion::ExitPresence;
-use oxideterm_ssh::SshCommandOutput;
+use oxideterm_ssh::{SshCommandOutput, SshSecretCommandOutput};
 use oxideterm_topology::TopologyViewStatus;
 use zeroize::Zeroize;
 
@@ -35,6 +35,7 @@ pub(super) const HOST_PODMAN_LIST_ESTIMATED_ROW_HEIGHT: f32 = 64.0;
 pub(super) const HOST_PODMAN_TABLE_HEADER_HEIGHT: f32 = 28.0;
 pub(super) const HOST_PODMAN_TABLE_MAIN_ROW_HEIGHT: f32 = 36.0;
 pub(super) const HOST_PODMAN_STATE_COLUMN_WIDTH: f32 = 72.0;
+pub(super) const HOST_PODMAN_PORTS_COLUMN_MIN_WIDTH: f32 = 92.0;
 pub(super) const HOST_PODMAN_ACTION_TIMEOUT: Duration = Duration::from_secs(12);
 pub(super) const HOST_PODMAN_ACTION_MAX_OUTPUT_SIZE: usize = 4096;
 pub(super) const HOST_PODMAN_LOGS_TIMEOUT: Duration = Duration::from_secs(8);
@@ -65,6 +66,23 @@ pub(super) const HOST_SERVICE_LOGS_DIALOG_WIDTH: f32 = 760.0;
 // covers a hung connection setup on top of it.
 pub(super) const HOST_REDIS_PROBE_TIMEOUT: Duration = Duration::from_secs(12);
 pub(super) const HOST_REDIS_PROBE_MAX_OUTPUT_SIZE: usize = 64 * 1024;
+// Browsing runs one bounded SCAN per database, so it needs room for several
+// databases worth of keys and a longer runner timeout than the PING probe.
+pub(super) const HOST_REDIS_KEYS_TIMEOUT: Duration = Duration::from_secs(30);
+pub(super) const HOST_REDIS_KEYS_MAX_OUTPUT_SIZE: usize = 512 * 1024;
+pub(super) const HOST_REDIS_TREE_ROW_HEIGHT: f32 = 24.0;
+pub(super) const HOST_REDIS_ENDPOINT_CHIP_HEIGHT: f32 = 26.0;
+// A value read runs TYPE plus one bounded range/scan on top of the password
+// handshake, so it needs more room than the key listing.
+pub(super) const HOST_REDIS_VALUE_TIMEOUT: Duration = Duration::from_secs(20);
+pub(super) const HOST_REDIS_VALUE_MAX_OUTPUT_SIZE: usize = 512 * 1024;
+pub(super) const HOST_REDIS_ACTION_TIMEOUT: Duration = Duration::from_secs(12);
+pub(super) const HOST_REDIS_ACTION_MAX_OUTPUT_SIZE: usize = 4096;
+pub(super) const HOST_REDIS_VALUE_DIALOG_WIDTH: f32 = 720.0;
+pub(super) const HOST_REDIS_VALUE_DIALOG_MAX_HEIGHT: f32 = 560.0;
+// The dialog is a viewer over a bounded capture; per-frame line output stops
+// here instead of building thousands of GPUI elements.
+pub(super) const HOST_REDIS_VALUE_MAX_LINES: usize = 400;
 pub(super) const HOST_SERVICE_LOGS_DIALOG_MAX_HEIGHT: f32 = 520.0;
 pub(super) const HOST_LOG_LIST_ESTIMATED_ROW_HEIGHT: f32 = 56.0;
 pub(super) const HOST_LOG_TABLE_HEADER_HEIGHT: f32 = 28.0;
@@ -440,12 +458,223 @@ pub(super) struct HostRedisSnapshotPending {
     pub(super) runtime: tokio::runtime::Handle,
 }
 
+/// One key-browsing request for a single endpoint.
+///
+/// The password lives only in this request and in the focused input buffer: it
+/// is never formatted, audited, or written to a snapshot.
+#[derive(Clone)]
+pub(super) struct HostRedisKeysRequest {
+    pub(super) connection_id: String,
+    pub(super) endpoint: oxideterm_connection_monitor::ResourceRedisEndpoint,
+    pub(super) password: zeroize::Zeroizing<String>,
+    pub(super) failure_fallback: String,
+}
+
+impl HostRedisKeysRequest {
+    /// Request identity ignores the credential so a re-typed password for the
+    /// same endpoint still replaces the in-flight result.
+    pub(super) fn same_target(&self, other: &Self) -> bool {
+        self.connection_id == other.connection_id && self.endpoint == other.endpoint
+    }
+}
+
+pub(super) struct HostRedisKeysDelivery {
+    pub(super) request: HostRedisKeysRequest,
+    pub(super) result: Result<SshSecretCommandOutput, ()>,
+}
+
+pub(super) struct HostRedisKeysPending {
+    pub(super) request: HostRedisKeysRequest,
+    pub(super) runtime: tokio::runtime::Handle,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum HostRedisValuePurpose {
+    /// The dialog is open and renders the value.
+    Open,
+    /// The row menu copies the value without opening the dialog.
+    Copy,
+}
+
+#[derive(Clone)]
+pub(super) struct HostRedisValueRequest {
+    pub(super) connection_id: String,
+    pub(super) endpoint: oxideterm_connection_monitor::ResourceRedisEndpoint,
+    /// Database the key lives in; a key name alone is ambiguous across dbs.
+    pub(super) database: u32,
+    pub(super) key: String,
+    pub(super) password: zeroize::Zeroizing<String>,
+    pub(super) purpose: HostRedisValuePurpose,
+    pub(super) failure_fallback: String,
+}
+
+impl HostRedisValueRequest {
+    pub(super) fn same_target(&self, other: &Self) -> bool {
+        self.connection_id == other.connection_id
+            && self.endpoint == other.endpoint
+            && self.database == other.database
+            && self.key == other.key
+            && self.purpose == other.purpose
+    }
+}
+
+pub(super) struct HostRedisValueDelivery {
+    pub(super) request: HostRedisValueRequest,
+    pub(super) result: Result<SshSecretCommandOutput, ()>,
+}
+
+pub(super) struct HostRedisValuePending {
+    pub(super) request: HostRedisValueRequest,
+    pub(super) runtime: tokio::runtime::Handle,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum HostRedisMutationKind {
+    Delete,
+    Rename,
+}
+
+#[derive(Clone)]
+pub(super) struct HostRedisMutationRequest {
+    pub(super) connection_id: String,
+    pub(super) endpoint: oxideterm_connection_monitor::ResourceRedisEndpoint,
+    pub(super) database: u32,
+    pub(super) kind: HostRedisMutationKind,
+    pub(super) key: String,
+    pub(super) new_key: Option<String>,
+    pub(super) password: zeroize::Zeroizing<String>,
+    pub(super) failure_fallback: String,
+}
+
+pub(super) struct HostRedisMutationDelivery {
+    pub(super) request: HostRedisMutationRequest,
+    pub(super) result: Result<SshSecretCommandOutput, ()>,
+}
+
+pub(super) struct HostRedisValueDialog {
+    pub(super) connection_id: String,
+    pub(super) endpoint: oxideterm_connection_monitor::ResourceRedisEndpoint,
+    pub(super) database: u32,
+    pub(super) key: String,
+    pub(super) value: Option<oxideterm_connection_monitor::ResourceRedisValue>,
+    pub(super) loading: bool,
+    pub(super) error: Option<String>,
+    pub(super) json_view: bool,
+}
+
+pub(super) struct HostRedisDeleteConfirm {
+    pub(super) connection_id: String,
+    pub(super) endpoint: oxideterm_connection_monitor::ResourceRedisEndpoint,
+    pub(super) database: u32,
+    pub(super) key: String,
+    pub(super) presence: ExitPresence,
+}
+
+pub(in crate::workspace) struct HostRedisCreateKeyDialog {
+    pub(super) connection_id: String,
+    pub(super) endpoint: oxideterm_connection_monitor::ResourceRedisEndpoint,
+    pub(super) database: u32,
+    /// New key name; zeroized when the dialog closes.
+    pub(super) name: zeroize::Zeroizing<String>,
+    pub(super) kind: oxideterm_connection_monitor::RedisCreateKind,
+    /// When true the key is created without an expiry and the TTL field is hidden.
+    pub(super) ttl_never: bool,
+    pub(super) ttl: zeroize::Zeroizing<String>,
+    /// Value for `string`/`json`, or the pending element while adding entries.
+    pub(super) value: zeroize::Zeroizing<String>,
+    /// Pending hash field while adding a pair.
+    pub(super) field: zeroize::Zeroizing<String>,
+    /// Committed elements: `field<TAB>value` for hash, `member<TAB>score` for a
+    /// sorted set, plain values otherwise.
+    pub(super) entries: Vec<zeroize::Zeroizing<String>>,
+    pub(super) error: Option<String>,
+    pub(super) loading: bool,
+}
+
+#[derive(Clone)]
+pub(super) struct HostRedisCreateKeyRequest {
+    pub(super) connection_id: String,
+    pub(super) endpoint: oxideterm_connection_monitor::ResourceRedisEndpoint,
+    pub(super) database: u32,
+    pub(super) key: String,
+    pub(super) password: zeroize::Zeroizing<String>,
+    pub(super) value: zeroize::Zeroizing<String>,
+    pub(super) failure_fallback: String,
+}
+
+pub(super) struct HostRedisCreateKeyDelivery {
+    pub(super) request: HostRedisCreateKeyRequest,
+    pub(super) result: Result<SshSecretCommandOutput, ()>,
+}
+
+pub(in crate::workspace) struct HostRedisSetValueDialog {
+    pub(super) connection_id: String,
+    pub(super) endpoint: oxideterm_connection_monitor::ResourceRedisEndpoint,
+    pub(super) database: u32,
+    pub(super) key: String,
+    /// Replacement value, zeroized when the dialog closes.
+    pub(super) value: zeroize::Zeroizing<String>,
+    /// JSON view was active, so the replacement must parse as JSON.
+    pub(super) json_only: bool,
+    pub(super) error: Option<String>,
+    pub(super) loading: bool,
+}
+
+#[derive(Clone)]
+pub(super) struct HostRedisSetValueRequest {
+    pub(super) connection_id: String,
+    pub(super) endpoint: oxideterm_connection_monitor::ResourceRedisEndpoint,
+    pub(super) database: u32,
+    pub(super) key: String,
+    pub(super) password: zeroize::Zeroizing<String>,
+    pub(super) value: zeroize::Zeroizing<String>,
+    pub(super) failure_fallback: String,
+}
+
+pub(super) struct HostRedisSetValueDelivery {
+    pub(super) request: HostRedisSetValueRequest,
+    pub(super) result: Result<SshSecretCommandOutput, ()>,
+}
+
+pub(in crate::workspace) struct HostRedisRenameDialog {
+    pub(super) connection_id: String,
+    pub(super) endpoint: oxideterm_connection_monitor::ResourceRedisEndpoint,
+    pub(super) database: u32,
+    pub(super) key: String,
+    /// New key name; zeroized when the dialog closes.
+    pub(super) value: zeroize::Zeroizing<String>,
+    pub(super) error: Option<String>,
+    pub(super) loading: bool,
+}
+
 pub(super) struct HostRedisState {
     pub(super) snapshot_connection_id: Option<String>,
     pub(super) snapshot: Option<oxideterm_connection_monitor::ResourceRedisSnapshot>,
     pub(super) snapshot_running: Option<HostRedisSnapshotRequest>,
     pub(super) snapshot_pending: Option<HostRedisSnapshotPending>,
     pub(super) snapshot_in_flight: bool,
+    pub(super) keys_connection_id: Option<String>,
+    pub(super) keys_endpoint: Option<oxideterm_connection_monitor::ResourceRedisEndpoint>,
+    pub(super) keys: Option<oxideterm_connection_monitor::ResourceRedisKeys>,
+    pub(super) keys_running: Option<HostRedisKeysRequest>,
+    pub(super) keys_pending: Option<HostRedisKeysPending>,
+    pub(super) keys_in_flight: bool,
+    pub(super) value_dialog: Option<HostRedisValueDialog>,
+    pub(super) value_running: Option<HostRedisValueRequest>,
+    pub(super) value_pending: Option<HostRedisValuePending>,
+    pub(super) value_in_flight: bool,
+    pub(super) mutation_running: Option<HostRedisMutationRequest>,
+    pub(super) set_value_running: Option<HostRedisSetValueRequest>,
+    pub(super) create_key_running: Option<HostRedisCreateKeyRequest>,
+    /// Key awaiting a delete confirmation.
+    pub(super) delete_confirm: Option<HostRedisDeleteConfirm>,
+    /// Databases the user collapsed. Databases start expanded.
+    pub(super) collapsed_databases: std::collections::BTreeSet<String>,
+    /// Key-tree segments the user expanded. Segments start collapsed, so a
+    /// freshly browsed database shows only its first-level prefixes.
+    pub(super) expanded_segments: std::collections::BTreeSet<String>,
+    pub(super) list_state: ListState,
+    pub(super) list_cache: std::cell::RefCell<VirtualListSignatureCache>,
 }
 
 impl HostRedisState {
@@ -456,6 +685,28 @@ impl HostRedisState {
             snapshot_running: None,
             snapshot_pending: None,
             snapshot_in_flight: false,
+            keys_connection_id: None,
+            keys_endpoint: None,
+            keys: None,
+            keys_running: None,
+            keys_pending: None,
+            keys_in_flight: false,
+            value_dialog: None,
+            value_running: None,
+            value_pending: None,
+            value_in_flight: false,
+            mutation_running: None,
+            set_value_running: None,
+            create_key_running: None,
+            delete_confirm: None,
+            collapsed_databases: std::collections::BTreeSet::new(),
+            expanded_segments: std::collections::BTreeSet::new(),
+            list_state: tauri_virtual_list_state(
+                0,
+                gpui::ListAlignment::Top,
+                TauriVirtualListSpec::new(px(HOST_REDIS_TREE_ROW_HEIGHT), 8),
+            ),
+            list_cache: std::cell::RefCell::new(VirtualListSignatureCache::default()),
         }
     }
 }
@@ -1034,6 +1285,13 @@ pub(in crate::workspace) enum HostToolsTextInput {
     ScheduleSearch,
     FilesystemSearch,
     PackageSearch,
+    RedisPassword,
+    RedisRename,
+    RedisSetValue,
+    RedisCreateKeyName,
+    RedisCreateKeyValue,
+    RedisCreateKeyField,
+    RedisCreateKeyTtl,
 }
 
 pub(super) struct HostTmuxState {
@@ -1139,6 +1397,16 @@ pub(in crate::workspace) struct HostToolsMessages {
     pub(super) tmux_unavailable: String,
     pub(super) redis_connection_missing: String,
     pub(super) redis_probe_failed: String,
+    pub(super) redis_key_action_failed: String,
+    pub(super) redis_rename_invalid: String,
+    pub(super) redis_auth_required: String,
+    pub(super) redis_key_missing: String,
+    pub(super) redis_value_set_invalid_json: String,
+    pub(super) redis_create_key_exists: String,
+    pub(super) redis_create_key_invalid_name: String,
+    pub(super) redis_create_key_invalid_ttl: String,
+    pub(super) redis_create_key_empty_entries: String,
+    pub(super) redis_create_key_invalid_field: String,
     pub(super) podman_capture_failed: String,
 }
 
@@ -1156,6 +1424,16 @@ impl HostToolsMessages {
             tmux_unavailable: i18n.t("sidebar.host_tmux.unavailable"),
             redis_connection_missing: i18n.t("sidebar.host_redis.toast.connection_missing"),
             redis_probe_failed: i18n.t("sidebar.host_redis.toast.probe_failed"),
+            redis_key_action_failed: i18n.t("sidebar.host_redis.toast.key_action_failed"),
+            redis_rename_invalid: i18n.t("sidebar.host_redis.rename.invalid"),
+            redis_auth_required: i18n.t("sidebar.host_redis.auth_required"),
+            redis_key_missing: i18n.t("sidebar.host_redis.value.ttl_missing"),
+            redis_value_set_invalid_json: i18n.t("sidebar.host_redis.set_value.invalid_json"),
+            redis_create_key_exists: i18n.t("sidebar.host_redis.create_key.exists"),
+            redis_create_key_invalid_name: i18n.t("sidebar.host_redis.create_key.invalid_name"),
+            redis_create_key_invalid_ttl: i18n.t("sidebar.host_redis.create_key.invalid_ttl"),
+            redis_create_key_empty_entries: i18n.t("sidebar.host_redis.create_key.empty_entries"),
+            redis_create_key_invalid_field: i18n.t("sidebar.host_redis.create_key.invalid_field"),
             podman_capture_failed: i18n.t("sidebar.host_podman.captures.failed"),
         }
     }
@@ -1251,12 +1529,19 @@ pub(in crate::workspace) struct HostToolsUiState {
     pub(in crate::workspace) host_tmux_expanded_window_id: Option<String>,
     pub(in crate::workspace) host_tmux_input_dialog: Option<HostTmuxInputDialog>,
     pub(in crate::workspace) host_podman_input_dialog: Option<HostPodmanInputDialog>,
+    pub(in crate::workspace) host_redis_rename_dialog: Option<HostRedisRenameDialog>,
+    pub(in crate::workspace) host_redis_set_value_dialog: Option<HostRedisSetValueDialog>,
+    pub(in crate::workspace) host_redis_create_key_dialog: Option<HostRedisCreateKeyDialog>,
     pub(super) host_tmux_list_state: ListState,
     pub(super) host_tmux_list_cache: RefCell<VirtualListSignatureCache>,
     pub(in crate::workspace) host_port_search_query: String,
     pub(in crate::workspace) host_schedule_search_query: String,
     pub(in crate::workspace) host_filesystem_search_query: String,
     pub(in crate::workspace) host_package_search_query: String,
+    /// Redis password buffer; zeroized when the field or panel is dropped.
+    pub(in crate::workspace) host_redis_password: zeroize::Zeroizing<String>,
+    /// When false the tree hides databases that hold no keys.
+    pub(in crate::workspace) host_redis_show_all_databases: bool,
 }
 
 impl HostToolsUiState {
@@ -1307,6 +1592,9 @@ impl HostToolsUiState {
             host_tmux_expanded_window_id: None,
             host_tmux_input_dialog: None,
             host_podman_input_dialog: None,
+            host_redis_rename_dialog: None,
+            host_redis_set_value_dialog: None,
+            host_redis_create_key_dialog: None,
             host_tmux_list_state: tauri_virtual_list_state(
                 0,
                 ListAlignment::Top,
@@ -1317,6 +1605,8 @@ impl HostToolsUiState {
             host_schedule_search_query: String::new(),
             host_filesystem_search_query: String::new(),
             host_package_search_query: String::new(),
+            host_redis_password: zeroize::Zeroizing::new(String::new()),
+            host_redis_show_all_databases: false,
         }
     }
 
@@ -1361,6 +1651,17 @@ impl HostToolsUiState {
             ) | (
                 Some(HostToolsTextInput::PackageSearch),
                 ContextSidebarTool::Packages
+            ) | (
+                Some(
+                    HostToolsTextInput::RedisPassword
+                        | HostToolsTextInput::RedisRename
+                        | HostToolsTextInput::RedisSetValue
+                        | HostToolsTextInput::RedisCreateKeyName
+                        | HostToolsTextInput::RedisCreateKeyValue
+                        | HostToolsTextInput::RedisCreateKeyField
+                        | HostToolsTextInput::RedisCreateKeyTtl
+                ),
+                ContextSidebarTool::Redis
             )
         );
         if !belongs_to_tool {
@@ -1396,7 +1697,86 @@ impl HostToolsUiState {
             HostToolsTextInput::ScheduleSearch => Some(&self.host_schedule_search_query),
             HostToolsTextInput::FilesystemSearch => Some(&self.host_filesystem_search_query),
             HostToolsTextInput::PackageSearch => Some(&self.host_package_search_query),
+            HostToolsTextInput::RedisPassword => Some(&self.host_redis_password),
+            HostToolsTextInput::RedisRename => self.host_redis_rename_value(),
+            HostToolsTextInput::RedisSetValue => self.host_redis_set_value(),
+            HostToolsTextInput::RedisCreateKeyName => self.host_redis_create_key_name(),
+            HostToolsTextInput::RedisCreateKeyValue => self.host_redis_create_key_value(),
+            HostToolsTextInput::RedisCreateKeyField => self.host_redis_create_key_field(),
+            HostToolsTextInput::RedisCreateKeyTtl => self.host_redis_create_key_ttl(),
         }
+    }
+
+    fn host_redis_create_key_name(&self) -> Option<&str> {
+        self.host_redis_create_key_dialog
+            .as_ref()
+            .map(|dialog| dialog.name.as_str())
+    }
+
+    fn host_redis_create_key_name_mut(&mut self) -> Option<&mut String> {
+        self.host_redis_create_key_dialog
+            .as_mut()
+            .map(|dialog| &mut *dialog.name)
+    }
+
+    fn host_redis_create_key_field(&self) -> Option<&str> {
+        self.host_redis_create_key_dialog
+            .as_ref()
+            .map(|dialog| dialog.field.as_str())
+    }
+
+    fn host_redis_create_key_field_mut(&mut self) -> Option<&mut String> {
+        self.host_redis_create_key_dialog
+            .as_mut()
+            .map(|dialog| &mut *dialog.field)
+    }
+
+    fn host_redis_create_key_ttl(&self) -> Option<&str> {
+        self.host_redis_create_key_dialog
+            .as_ref()
+            .map(|dialog| dialog.ttl.as_str())
+    }
+
+    fn host_redis_create_key_ttl_mut(&mut self) -> Option<&mut String> {
+        self.host_redis_create_key_dialog
+            .as_mut()
+            .map(|dialog| &mut *dialog.ttl)
+    }
+
+    fn host_redis_create_key_value(&self) -> Option<&str> {
+        self.host_redis_create_key_dialog
+            .as_ref()
+            .map(|dialog| dialog.value.as_str())
+    }
+
+    fn host_redis_create_key_value_mut(&mut self) -> Option<&mut String> {
+        self.host_redis_create_key_dialog
+            .as_mut()
+            .map(|dialog| &mut *dialog.value)
+    }
+
+    fn host_redis_set_value(&self) -> Option<&str> {
+        self.host_redis_set_value_dialog
+            .as_ref()
+            .map(|dialog| dialog.value.as_str())
+    }
+
+    fn host_redis_set_value_mut(&mut self) -> Option<&mut String> {
+        self.host_redis_set_value_dialog
+            .as_mut()
+            .map(|dialog| &mut *dialog.value)
+    }
+
+    fn host_redis_rename_value(&self) -> Option<&str> {
+        self.host_redis_rename_dialog
+            .as_ref()
+            .map(|dialog| dialog.value.as_str())
+    }
+
+    fn host_redis_rename_value_mut(&mut self) -> Option<&mut String> {
+        self.host_redis_rename_dialog
+            .as_mut()
+            .map(|dialog| &mut *dialog.value)
     }
 
     pub(in crate::workspace) fn input_value_mut(
@@ -1426,6 +1806,13 @@ impl HostToolsUiState {
             HostToolsTextInput::ScheduleSearch => Some(&mut self.host_schedule_search_query),
             HostToolsTextInput::FilesystemSearch => Some(&mut self.host_filesystem_search_query),
             HostToolsTextInput::PackageSearch => Some(&mut self.host_package_search_query),
+            HostToolsTextInput::RedisPassword => Some(&mut self.host_redis_password),
+            HostToolsTextInput::RedisRename => self.host_redis_rename_value_mut(),
+            HostToolsTextInput::RedisSetValue => self.host_redis_set_value_mut(),
+            HostToolsTextInput::RedisCreateKeyName => self.host_redis_create_key_name_mut(),
+            HostToolsTextInput::RedisCreateKeyValue => self.host_redis_create_key_value_mut(),
+            HostToolsTextInput::RedisCreateKeyField => self.host_redis_create_key_field_mut(),
+            HostToolsTextInput::RedisCreateKeyTtl => self.host_redis_create_key_ttl_mut(),
         }
     }
 }

@@ -327,7 +327,8 @@
       "columns": {
         "container": "Container / Ảnh",
         "image": "Ảnh",
-        "state": "Trạng thái"
+        "state": "Trạng thái",
+        "ports": "Cổng"
       },
       "states": {
         "running": "Đang chạy",
@@ -336,6 +337,8 @@
         "paused": "Tạm dừng",
         "stopped": "Đã dừng",
         "dead": "Đã chết",
+        "restarting": "Đang khởi động lại",
+        "removing": "Đang xóa",
         "unknown": "Không rõ"
       },
       "actions": {
@@ -403,19 +406,113 @@
       }
     },
     "host_redis": {
-      "loading": "Đang kiểm tra Redis...",
-      "unavailable": "Không tìm thấy redis-cli trên máy này. Mục tiêu: 127.0.0.1:6379.",
-      "no_server": "Không có máy chủ Redis nào đang lắng nghe tại 127.0.0.1:6379.",
-      "auth_required": "Máy chủ Redis tại 127.0.0.1:6379 yêu cầu xác thực; việc kiểm tra này không dùng thông tin xác thực.",
-      "error": "Kiểm tra Redis thất bại: {{error}}",
-      "reachable": "Redis có thể truy cập tại 127.0.0.1:6379.",
-      "probe_target": "127.0.0.1:6379",
+      "loading": "Đang dò Redis…",
+      "unavailable": "Máy chủ này không có redis-cli và không có container Redis nào đang chạy.",
+      "no_endpoint": "Không có máy chủ hay container Redis nào đang chạy.",
+      "auth_required": "Máy chủ Redis này yêu cầu xác thực. Nhập mật khẩu để duyệt các key.",
+      "password_placeholder": "Mật khẩu (tùy chọn)",
+      "keys_empty": "Không tìm thấy key nào.",
+      "key_count": "{{count}} key",
+      "tree_hint": "{{rows}} dòng",
+      "endpoint_hint": "Điểm cuối",
+      "browse_unsupported": "Duyệt key cần shell POSIX trên máy chủ.",
+      "tree_current": "{current}",
+      "filter_all_databases": "Xem tất cả DB",
+      "filter_only_with_keys": "Chỉ xem DB có key",
+      "value": {
+        "type": "Kiểu",
+        "size": "Kích thước",
+        "ttl": "TTL",
+        "ttl_never": "Không hết hạn",
+        "ttl_missing": "Key không còn tồn tại",
+        "ttl_seconds": "{{seconds}} giây",
+        "loading": "Đang tải value...",
+        "empty": "Value rỗng",
+        "unsupported": "Không hiển thị giá trị kiểu {{type}}.",
+        "view_text": "Văn bản",
+        "view_json": "JSON"
+      },
+      "rename": {
+        "title": "Đổi tên key",
+        "current": "Key hiện tại: {{key}}",
+        "placeholder": "Tên key mới",
+        "confirm": "Đổi tên",
+        "cancel": "Hủy",
+        "invalid": "Hãy nhập tên key khác."
+      },
+      "set_value": {
+        "title": "Đặt value",
+        "key": "{{db}} · {{key}}",
+        "placeholder": "Value mới",
+        "json_hint": "Chế độ JSON: value phải là JSON hợp lệ.",
+        "text_hint": "Chế độ văn bản: chấp nhận mọi nội dung.",
+        "confirm": "Đặt",
+        "cancel": "Hủy",
+        "invalid_json": "JSON không hợp lệ: {{error}}",
+        "string_only": "Chỉ có thể thay thế giá trị kiểu string."
+      },
+      "create_key": {
+        "title": "Key mới",
+        "name_placeholder": "new:key:name",
+        "type": "Kiểu",
+        "types": {
+          "string": "string",
+          "hash": "hash",
+          "list": "list",
+          "set": "set",
+          "sorted_set": "sorted set",
+          "json": "json"
+        },
+        "ttl_never": "Không hết hạn",
+        "ttl_placeholder": "TTL (giây)",
+        "value_placeholder": "Value",
+        "value_hint": "Value được ghi nguyên văn.",
+        "json_hint": "Value phải là JSON hợp lệ.",
+        "field_placeholder": "Trường",
+        "element_placeholder": "Value / phần tử",
+        "add_entry": "Thêm",
+        "remove_entry": "Xóa",
+        "entries_empty": "Chưa có mục nào.",
+        "hash_hint": "Mỗi mục được ghi bằng HSET trường value.",
+        "list_hint": "Mỗi mục được nối bằng RPUSH.",
+        "set_hint": "Mỗi mục được thêm bằng SADD.",
+        "zset_hint": "Nhập `member score`; bỏ score thì dùng 0.",
+        "confirm": "Tạo",
+        "cancel": "Hủy",
+        "invalid_name": "Nhập tên key hợp lệ.",
+        "invalid_ttl": "Nhập TTL là số giây nguyên lớn hơn 0.",
+        "invalid_field": "Nhập tên trường không chứa tab.",
+        "empty_entries": "Thêm ít nhất một mục.",
+        "exists": "Key này đã tồn tại."
+      },
+      "delete": {
+        "title": "Xóa key",
+        "description": "Xóa {{key}}? Không thể hoàn tác.",
+        "confirm": "Xóa",
+        "cancel": "Hủy"
+      },
+      "error": "Dò Redis thất bại: {{error}}",
       "actions": {
-        "refresh": "Kiểm tra Redis"
+        "refresh": "Dò Redis",
+        "new_key": "Tạo key",
+        "copy_key": "Sao chép key",
+        "copy_value": "Sao chép value",
+        "rename": "Đổi tên key",
+        "set_value": "Đặt value",
+        "delete": "Xóa key",
+        "close": "Đóng"
       },
       "toast": {
         "connection_missing": "Kết nối đã chọn không còn khả dụng.",
-        "probe_failed": "Kiểm tra Redis thất bại."
+        "probe_failed": "Không thể dò Redis.",
+        "key_copied": "Đã sao chép key: {{key}}",
+        "value_copied": "Đã sao chép value: {{key}}",
+        "value_copy_failed": "Không sao chép được value của {{key}}.",
+        "value_set": "Đã đặt value: {{key}}",
+        "key_deleted": "Đã xóa key: {{key}}",
+        "key_renamed": "Đã đổi tên key thành {{key}}",
+        "key_created": "Đã tạo key: {{key}}",
+        "key_action_failed": "Thao tác Redis thất bại: {{message}}"
       }
     },
     "host_services": {

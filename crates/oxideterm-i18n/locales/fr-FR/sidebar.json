@@ -327,7 +327,8 @@
       "columns": {
         "container": "Conteneur / Image",
         "image": "Image",
-        "state": "État"
+        "state": "État",
+        "ports": "Ports"
       },
       "states": {
         "running": "En cours",
@@ -336,6 +337,8 @@
         "paused": "En pause",
         "stopped": "Arrêté",
         "dead": "Mort",
+        "restarting": "Redémarrage",
+        "removing": "Suppression",
         "unknown": "Inconnu"
       },
       "actions": {
@@ -403,19 +406,113 @@
       }
     },
     "host_redis": {
-      "loading": "Vérification de Redis...",
-      "unavailable": "redis-cli est introuvable sur cet hôte. Cible : 127.0.0.1:6379.",
-      "no_server": "Aucun serveur Redis n'écoute sur 127.0.0.1:6379.",
-      "auth_required": "Le serveur Redis sur 127.0.0.1:6379 exige une authentification ; cette vérification est non authentifiée.",
-      "error": "Échec de la vérification Redis : {{error}}",
-      "reachable": "Redis est joignable sur 127.0.0.1:6379.",
-      "probe_target": "127.0.0.1:6379",
+      "loading": "Vérification de Redis…",
+      "unavailable": "redis-cli est absent de cet hôte et aucun conteneur Redis ne s'exécute.",
+      "no_endpoint": "Aucun serveur ni conteneur Redis ne s'exécute.",
+      "auth_required": "Ce serveur Redis exige une authentification. Saisissez le mot de passe pour parcourir les clés.",
+      "password_placeholder": "Mot de passe (facultatif)",
+      "keys_empty": "Aucune clé trouvée.",
+      "key_count": "{{count}} clés",
+      "tree_hint": "{{rows}} lignes",
+      "endpoint_hint": "Points de terminaison",
+      "browse_unsupported": "Le parcours des clés nécessite un shell d'hôte POSIX.",
+      "tree_current": "{current}",
+      "filter_all_databases": "Afficher toutes les bases",
+      "filter_only_with_keys": "Afficher seulement les bases avec clés",
+      "value": {
+        "type": "Type",
+        "size": "Taille",
+        "ttl": "TTL",
+        "ttl_never": "N'expire jamais",
+        "ttl_missing": "La clé n'existe plus",
+        "ttl_seconds": "{{seconds}} s",
+        "loading": "Chargement de la valeur…",
+        "empty": "Valeur vide",
+        "unsupported": "Les valeurs de type {{type}} ne sont pas affichées.",
+        "view_text": "Texte",
+        "view_json": "JSON"
+      },
+      "rename": {
+        "title": "Renommer la clé",
+        "current": "Clé actuelle : {{key}}",
+        "placeholder": "Nouveau nom de clé",
+        "confirm": "Renommer",
+        "cancel": "Annuler",
+        "invalid": "Saisissez un autre nom de clé."
+      },
+      "set_value": {
+        "title": "Définir la valeur",
+        "key": "{{db}} · {{key}}",
+        "placeholder": "Nouvelle valeur",
+        "json_hint": "Vue JSON : la valeur doit être un JSON valide.",
+        "text_hint": "Vue texte : toute valeur est acceptée.",
+        "confirm": "Définir",
+        "cancel": "Annuler",
+        "invalid_json": "JSON invalide : {{error}}",
+        "string_only": "Seules les valeurs de type string peuvent être remplacées."
+      },
+      "create_key": {
+        "title": "Nouvelle clé",
+        "name_placeholder": "new:key:name",
+        "type": "Type",
+        "types": {
+          "string": "string",
+          "hash": "hash",
+          "list": "list",
+          "set": "set",
+          "sorted_set": "sorted set",
+          "json": "json"
+        },
+        "ttl_never": "N'expire jamais",
+        "ttl_placeholder": "TTL en secondes",
+        "value_placeholder": "Valeur",
+        "value_hint": "La valeur est écrite telle quelle.",
+        "json_hint": "La valeur doit être un JSON valide.",
+        "field_placeholder": "Champ",
+        "element_placeholder": "Valeur / élément",
+        "add_entry": "Ajouter",
+        "remove_entry": "Retirer",
+        "entries_empty": "Aucune entrée pour l'instant.",
+        "hash_hint": "Chaque entrée est écrite avec HSET champ valeur.",
+        "list_hint": "Chaque entrée est ajoutée avec RPUSH.",
+        "set_hint": "Chaque entrée est ajoutée avec SADD.",
+        "zset_hint": "Saisir `member score` ; sans score, 0 est utilisé.",
+        "confirm": "Créer",
+        "cancel": "Annuler",
+        "invalid_name": "Saisissez un nom de clé valide.",
+        "invalid_ttl": "Saisir un TTL en secondes entières supérieur à 0.",
+        "invalid_field": "Saisir un nom de champ sans tabulation.",
+        "empty_entries": "Ajouter au moins une entrée.",
+        "exists": "Cette clé existe déjà."
+      },
+      "delete": {
+        "title": "Supprimer la clé",
+        "description": "Supprimer {{key}} ? Cette action est irréversible.",
+        "confirm": "Supprimer",
+        "cancel": "Annuler"
+      },
+      "error": "Échec de la vérification de Redis : {{error}}",
       "actions": {
-        "refresh": "Vérifier Redis"
+        "refresh": "Vérifier Redis",
+        "new_key": "Créer une clé",
+        "copy_key": "Copier la clé",
+        "copy_value": "Copier la valeur",
+        "rename": "Renommer la clé",
+        "set_value": "Définir la valeur",
+        "delete": "Supprimer la clé",
+        "close": "Fermer"
       },
       "toast": {
         "connection_missing": "La connexion sélectionnée n'est plus disponible.",
-        "probe_failed": "Échec de la vérification Redis."
+        "probe_failed": "Échec de la vérification de Redis.",
+        "key_copied": "Clé copiée : {{key}}",
+        "value_copied": "Valeur copiée : {{key}}",
+        "value_copy_failed": "Impossible de copier la valeur de {{key}}.",
+        "value_set": "Valeur définie : {{key}}",
+        "key_deleted": "Clé supprimée : {{key}}",
+        "key_renamed": "Clé renommée en {{key}}",
+        "key_created": "Clé créée : {{key}}",
+        "key_action_failed": "Échec de l'action Redis : {{message}}"
       }
     },
     "host_services": {

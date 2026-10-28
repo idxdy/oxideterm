@@ -327,7 +327,8 @@
       "columns": {
         "container": "Contenedor / Imagen",
         "image": "Imagen",
-        "state": "Estado"
+        "state": "Estado",
+        "ports": "Puertos"
       },
       "states": {
         "running": "En ejecución",
@@ -336,6 +337,8 @@
         "paused": "En pausa",
         "stopped": "Parado",
         "dead": "Muerto",
+        "restarting": "Reiniciando",
+        "removing": "Eliminando",
         "unknown": "Desconocido"
       },
       "actions": {
@@ -403,19 +406,113 @@
       }
     },
     "host_redis": {
-      "loading": "Comprobando Redis...",
-      "unavailable": "No se encontró redis-cli en este host. Destino: 127.0.0.1:6379.",
-      "no_server": "No hay ningún servidor Redis escuchando en 127.0.0.1:6379.",
-      "auth_required": "El servidor Redis en 127.0.0.1:6379 requiere autenticación; esta comprobación no envía credenciales.",
-      "error": "La comprobación de Redis falló: {{error}}",
-      "reachable": "Redis es accesible en 127.0.0.1:6379.",
-      "probe_target": "127.0.0.1:6379",
+      "loading": "Comprobando Redis…",
+      "unavailable": "No se encontró redis-cli en este host y no hay ningún contenedor Redis en ejecución.",
+      "no_endpoint": "No hay ningún servidor ni contenedor Redis en ejecución.",
+      "auth_required": "Este servidor Redis requiere autenticación. Introduce la contraseña para explorar las claves.",
+      "password_placeholder": "Contraseña (opcional)",
+      "keys_empty": "No se encontraron claves.",
+      "key_count": "{{count}} claves",
+      "tree_hint": "{{rows}} filas",
+      "endpoint_hint": "Puntos de conexión",
+      "browse_unsupported": "Explorar claves requiere un shell POSIX en el host.",
+      "tree_current": "{current}",
+      "filter_all_databases": "Ver todas las bases",
+      "filter_only_with_keys": "Ver solo las bases con claves",
+      "value": {
+        "type": "Tipo",
+        "size": "Tamaño",
+        "ttl": "TTL",
+        "ttl_never": "No caduca",
+        "ttl_missing": "La clave ya no existe",
+        "ttl_seconds": "{{seconds}} s",
+        "loading": "Cargando valor…",
+        "empty": "Valor vacío",
+        "unsupported": "No se muestran los valores de tipo {{type}}.",
+        "view_text": "Texto",
+        "view_json": "JSON"
+      },
+      "rename": {
+        "title": "Renombrar clave",
+        "current": "Clave actual: {{key}}",
+        "placeholder": "Nuevo nombre de clave",
+        "confirm": "Renombrar",
+        "cancel": "Cancelar",
+        "invalid": "Introduce otro nombre de clave."
+      },
+      "set_value": {
+        "title": "Establecer valor",
+        "key": "{{db}} · {{key}}",
+        "placeholder": "Nuevo valor",
+        "json_hint": "Vista JSON: el valor debe ser JSON válido.",
+        "text_hint": "Vista de texto: se acepta cualquier valor.",
+        "confirm": "Establecer",
+        "cancel": "Cancelar",
+        "invalid_json": "JSON no válido: {{error}}",
+        "string_only": "Solo se pueden reemplazar valores de tipo string."
+      },
+      "create_key": {
+        "title": "Nueva clave",
+        "name_placeholder": "new:key:name",
+        "type": "Tipo",
+        "types": {
+          "string": "string",
+          "hash": "hash",
+          "list": "list",
+          "set": "set",
+          "sorted_set": "sorted set",
+          "json": "json"
+        },
+        "ttl_never": "No caduca",
+        "ttl_placeholder": "TTL en segundos",
+        "value_placeholder": "Valor",
+        "value_hint": "El valor se escribe tal cual.",
+        "json_hint": "El valor debe ser JSON válido.",
+        "field_placeholder": "Campo",
+        "element_placeholder": "Valor / elemento",
+        "add_entry": "Añadir",
+        "remove_entry": "Quitar",
+        "entries_empty": "Aún no hay entradas.",
+        "hash_hint": "Cada entrada se escribe con HSET campo valor.",
+        "list_hint": "Cada entrada se añade con RPUSH.",
+        "set_hint": "Cada entrada se añade con SADD.",
+        "zset_hint": "Introduce `member score`; sin score se usa 0.",
+        "confirm": "Crear",
+        "cancel": "Cancelar",
+        "invalid_name": "Introduce un nombre de clave válido.",
+        "invalid_ttl": "Introduce un TTL en segundos enteros mayor que 0.",
+        "invalid_field": "Introduce un nombre de campo sin tabuladores.",
+        "empty_entries": "Añade al menos una entrada.",
+        "exists": "Esa clave ya existe."
+      },
+      "delete": {
+        "title": "Eliminar clave",
+        "description": "¿Eliminar {{key}}? Esta acción no se puede deshacer.",
+        "confirm": "Eliminar",
+        "cancel": "Cancelar"
+      },
+      "error": "Error al comprobar Redis: {{error}}",
       "actions": {
-        "refresh": "Comprobar Redis"
+        "refresh": "Comprobar Redis",
+        "new_key": "Crear clave",
+        "copy_key": "Copiar clave",
+        "copy_value": "Copiar valor",
+        "rename": "Renombrar clave",
+        "set_value": "Establecer valor",
+        "delete": "Eliminar clave",
+        "close": "Cerrar"
       },
       "toast": {
         "connection_missing": "La conexión seleccionada ya no está disponible.",
-        "probe_failed": "Error al comprobar Redis."
+        "probe_failed": "No se pudo comprobar Redis.",
+        "key_copied": "Clave copiada: {{key}}",
+        "value_copied": "Valor copiado: {{key}}",
+        "value_copy_failed": "No se pudo copiar el valor de {{key}}.",
+        "value_set": "Valor establecido: {{key}}",
+        "key_deleted": "Clave eliminada: {{key}}",
+        "key_renamed": "Clave renombrada a {{key}}",
+        "key_created": "Clave creada: {{key}}",
+        "key_action_failed": "Error de la acción de Redis: {{message}}"
       }
     },
     "host_services": {

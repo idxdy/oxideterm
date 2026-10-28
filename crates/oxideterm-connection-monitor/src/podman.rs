@@ -11,6 +11,8 @@ pub struct ResourcePodmanContainer {
     pub image: String,
     pub state: String,
     pub status: String,
+    /// Published ports as reported by `podman ps` (docker-compatible text).
+    pub ports: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -175,6 +177,8 @@ pub fn podman_state_label_key(state: &str) -> &'static str {
         "exited" => "sidebar.host_podman.states.exited",
         "created" => "sidebar.host_podman.states.created",
         "paused" => "sidebar.host_podman.states.paused",
+        "restarting" => "sidebar.host_podman.states.restarting",
+        "removing" => "sidebar.host_podman.states.removing",
         "stopped" => "sidebar.host_podman.states.stopped",
         "dead" => "sidebar.host_podman.states.dead",
         _ => "sidebar.host_podman.states.unknown",
@@ -196,6 +200,7 @@ fn parse_podman_container_line(line: &str) -> Option<ResourcePodmanContainer> {
         image: clean_json_container_field(&value, "Image").unwrap_or_else(|| "-".to_string()),
         state: clean_json_container_field(&value, "State").unwrap_or_else(|| "unknown".to_string()),
         status: clean_json_container_field(&value, "Status").unwrap_or_else(|| "-".to_string()),
+        ports: clean_json_container_field(&value, "Ports"),
     })
 }
 
@@ -221,6 +226,10 @@ fn podman_container_matches_query(container: &ResourcePodmanContainer, query: &s
         || container.name.to_lowercase().contains(query)
         || container.image.to_lowercase().contains(query)
         || container.state.to_lowercase().contains(query)
+        || container
+            .ports
+            .as_deref()
+            .is_some_and(|ports| ports.to_lowercase().contains(query))
 }
 
 /// Remote command output is untrusted: keep the first line only, replace
@@ -594,6 +603,37 @@ mod tests {
     }
 
     #[test]
+    fn podman_parser_keeps_published_ports_and_search_matches_them() {
+        let output = concat!(
+            "===PODMAN===\n",
+            "PS\t{\"Id\":\"a1b2c3d4e5f6\",\"Names\":[\"web\"],\"Image\":\"nginx:alpine\",",
+            "\"State\":\"running\",\"Status\":\"Up 2 minutes\",",
+            "\"Ports\":\"0.0.0.0:8080->80/tcp, 0.0.0.0:8443->443/tcp\"}\n",
+            "PS\t{\"Id\":\"f6e5d4c3b2a1\",\"Names\":[\"db\"],\"Image\":\"postgres:16\",",
+            "\"State\":\"exited\",\"Status\":\"Exited (0) 1 hour ago\"}\n",
+            "===PODMAN_END===",
+        );
+        let snapshot = parse_podman_snapshot(output);
+        assert_eq!(snapshot.status, ResourcePodmanStatus::Available);
+        assert_eq!(
+            snapshot.containers[0].ports.as_deref(),
+            Some("0.0.0.0:8080->80/tcp, 0.0.0.0:8443->443/tcp")
+        );
+        assert_eq!(snapshot.containers[1].ports, None);
+
+        // The search box looks at the same operational fields as docker.
+        let matched = visible_podman_rows(&snapshot.containers, "8443");
+        assert_eq!(
+            matched
+                .iter()
+                .map(|row| row.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["web"]
+        );
+        assert!(visible_podman_rows(&snapshot.containers, "nope").is_empty());
+    }
+
+    #[test]
     fn podman_parser_reports_unavailable_with_detail() {
         for (case, output, expected) in [
             (
@@ -674,6 +714,16 @@ mod tests {
         assert_eq!(
             podman_state_label_key("Stopped"),
             "sidebar.host_podman.states.stopped"
+        );
+        // Docker surfaces restart/remove as their own states; podman reports them
+        // through `podman ps` too, so the labels must exist here as well.
+        assert_eq!(
+            podman_state_label_key("restarting"),
+            "sidebar.host_podman.states.restarting"
+        );
+        assert_eq!(
+            podman_state_label_key("removing"),
+            "sidebar.host_podman.states.removing"
         );
         assert_eq!(
             podman_state_label_key("mystery"),

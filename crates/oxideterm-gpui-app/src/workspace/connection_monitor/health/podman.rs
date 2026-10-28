@@ -625,6 +625,13 @@ impl HostToolsEntity {
                     .w(px(HOST_PODMAN_STATE_COLUMN_WIDTH))
                     .child(i18n.t("sidebar.host_podman.columns.state")),
             )
+            .child(
+                div()
+                    .min_w(px(HOST_PODMAN_PORTS_COLUMN_MIN_WIDTH))
+                    .flex_1()
+                    .truncate()
+                    .child(i18n.t("sidebar.host_podman.columns.ports")),
+            )
             .into_any_element()
     }
 
@@ -645,6 +652,7 @@ impl HostToolsEntity {
         let expanded = self.ui.host_podman_expanded_id.as_deref() == Some(container.id.as_str());
         let theme = tokens.ui;
         let state_label = i18n.t(podman_state_label_key(&container.state));
+        let ports = container.ports.clone().unwrap_or_else(|| "—".to_string());
 
         div()
             .id(host_tools_row_id(
@@ -696,6 +704,17 @@ impl HostToolsEntity {
                             .text_color(rgb(podman_state_color(&container.state, theme.text_muted)))
                             .font_family(mono_font_family.clone())
                             .child(state_label),
+                    )
+                    .child(
+                        div()
+                            .min_w(px(HOST_PODMAN_PORTS_COLUMN_MIN_WIDTH))
+                            .flex_1()
+                            .truncate()
+                            .whitespace_nowrap()
+                            .text_size(px(HOST_PROCESS_TABLE_META_TEXT_SIZE))
+                            .text_color(rgb(theme.text_muted))
+                            .font_family(mono_font_family.clone())
+                            .child(ports),
                     ),
             )
             .child(
@@ -1363,6 +1382,11 @@ impl HostToolsEntity {
                 container.image.clone(),
                 mono_font_family.clone(),
             ))
+            .child(Self::render_host_podman_detail_line(
+                i18n.t("sidebar.host_podman.columns.ports"),
+                container.ports.clone().unwrap_or_else(|| "—".to_string()),
+                mono_font_family.clone(),
+            ))
             .child(
                 div()
                     .mt_1()
@@ -2011,7 +2035,7 @@ fn podman_state_color(state: &str, muted_color: u32) -> u32 {
     match state.trim().to_lowercase().as_str() {
         "running" => MONITOR_EMERALD,
         "created" | "configured" | "paused" | "restarting" => MONITOR_AMBER,
-        "dead" => MONITOR_RED,
+        "dead" | "removing" => MONITOR_RED,
         "exited" | "stopped" => muted_color,
         _ => muted_color,
     }

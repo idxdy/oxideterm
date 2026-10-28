@@ -327,7 +327,8 @@
       "columns": {
         "container": "Container / Immagine",
         "image": "Immagine",
-        "state": "Stato"
+        "state": "Stato",
+        "ports": "Porte"
       },
       "states": {
         "running": "In esecuzione",
@@ -336,6 +337,8 @@
         "paused": "In pausa",
         "stopped": "Fermato",
         "dead": "Morto",
+        "restarting": "Riavvio",
+        "removing": "Rimozione",
         "unknown": "Sconosciuto"
       },
       "actions": {
@@ -403,19 +406,113 @@
       }
     },
     "host_redis": {
-      "loading": "Verifica di Redis...",
-      "unavailable": "redis-cli non trovato su questo host. Destinazione: 127.0.0.1:6379.",
-      "no_server": "Nessun server Redis in ascolto su 127.0.0.1:6379.",
-      "auth_required": "Il server Redis su 127.0.0.1:6379 richiede l'autenticazione; questa verifica è non autenticata.",
+      "loading": "Verifica di Redis…",
+      "unavailable": "redis-cli non è presente su questo host e non è in esecuzione alcun container Redis.",
+      "no_endpoint": "Nessun server o container Redis in esecuzione.",
+      "auth_required": "Questo server Redis richiede l'autenticazione. Inserisci la password per sfogliare le chiavi.",
+      "password_placeholder": "Password (facoltativa)",
+      "keys_empty": "Nessuna chiave trovata.",
+      "key_count": "{{count}} chiavi",
+      "tree_hint": "{{rows}} righe",
+      "endpoint_hint": "Endpoint",
+      "browse_unsupported": "La navigazione delle chiavi richiede una shell POSIX sull'host.",
+      "tree_current": "{current}",
+      "filter_all_databases": "Mostra tutti i database",
+      "filter_only_with_keys": "Mostra solo i database con chiavi",
+      "value": {
+        "type": "Tipo",
+        "size": "Dimensione",
+        "ttl": "TTL",
+        "ttl_never": "Non scade",
+        "ttl_missing": "La chiave non esiste più",
+        "ttl_seconds": "{{seconds}} s",
+        "loading": "Caricamento del valore…",
+        "empty": "Valore vuoto",
+        "unsupported": "I valori di tipo {{type}} non vengono mostrati.",
+        "view_text": "Testo",
+        "view_json": "JSON"
+      },
+      "rename": {
+        "title": "Rinomina chiave",
+        "current": "Chiave attuale: {{key}}",
+        "placeholder": "Nuovo nome della chiave",
+        "confirm": "Rinomina",
+        "cancel": "Annulla",
+        "invalid": "Inserisci un nome di chiave diverso."
+      },
+      "set_value": {
+        "title": "Imposta valore",
+        "key": "{{db}} · {{key}}",
+        "placeholder": "Nuovo valore",
+        "json_hint": "Vista JSON: il valore deve essere JSON valido.",
+        "text_hint": "Vista testo: qualsiasi valore è accettato.",
+        "confirm": "Imposta",
+        "cancel": "Annulla",
+        "invalid_json": "JSON non valido: {{error}}",
+        "string_only": "Solo i valori di tipo string possono essere sostituiti."
+      },
+      "create_key": {
+        "title": "Nuova chiave",
+        "name_placeholder": "new:key:name",
+        "type": "Tipo",
+        "types": {
+          "string": "string",
+          "hash": "hash",
+          "list": "list",
+          "set": "set",
+          "sorted_set": "sorted set",
+          "json": "json"
+        },
+        "ttl_never": "Non scade",
+        "ttl_placeholder": "TTL in secondi",
+        "value_placeholder": "Valore",
+        "value_hint": "Il valore viene scritto così com'è.",
+        "json_hint": "Il valore deve essere JSON valido.",
+        "field_placeholder": "Campo",
+        "element_placeholder": "Valore / elemento",
+        "add_entry": "Aggiungi",
+        "remove_entry": "Rimuovi",
+        "entries_empty": "Nessun elemento.",
+        "hash_hint": "Ogni voce viene scritta con HSET campo valore.",
+        "list_hint": "Ogni voce viene aggiunta con RPUSH.",
+        "set_hint": "Ogni voce viene aggiunta con SADD.",
+        "zset_hint": "Inserisci `member score`; senza score vale 0.",
+        "confirm": "Crea",
+        "cancel": "Annulla",
+        "invalid_name": "Inserisci un nome di chiave valido.",
+        "invalid_ttl": "Inserisci un TTL in secondi interi maggiore di 0.",
+        "invalid_field": "Inserisci un nome di campo senza tabulazioni.",
+        "empty_entries": "Aggiungi almeno una voce.",
+        "exists": "Questa chiave esiste già."
+      },
+      "delete": {
+        "title": "Elimina chiave",
+        "description": "Eliminare {{key}}? L'operazione non è reversibile.",
+        "confirm": "Elimina",
+        "cancel": "Annulla"
+      },
       "error": "Verifica di Redis non riuscita: {{error}}",
-      "reachable": "Redis è raggiungibile su 127.0.0.1:6379.",
-      "probe_target": "127.0.0.1:6379",
       "actions": {
-        "refresh": "Verifica Redis"
+        "refresh": "Verifica Redis",
+        "new_key": "Crea chiave",
+        "copy_key": "Copia chiave",
+        "copy_value": "Copia valore",
+        "rename": "Rinomina chiave",
+        "set_value": "Imposta valore",
+        "delete": "Elimina chiave",
+        "close": "Chiudi"
       },
       "toast": {
         "connection_missing": "La connessione selezionata non è più disponibile.",
-        "probe_failed": "Verifica di Redis non riuscita."
+        "probe_failed": "Impossibile verificare Redis.",
+        "key_copied": "Chiave copiata: {{key}}",
+        "value_copied": "Valore copiato: {{key}}",
+        "value_copy_failed": "Impossibile copiare il valore di {{key}}.",
+        "value_set": "Valore impostato: {{key}}",
+        "key_deleted": "Chiave eliminata: {{key}}",
+        "key_renamed": "Chiave rinominata in {{key}}",
+        "key_created": "Chiave creata: {{key}}",
+        "key_action_failed": "Azione Redis non riuscita: {{message}}"
       }
     },
     "host_services": {

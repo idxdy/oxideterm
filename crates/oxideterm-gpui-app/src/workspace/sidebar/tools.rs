@@ -415,8 +415,11 @@ mod tests {
         assert!(tight < TOOLS.len());
         assert_eq!(overflow_tools(tight), TOOLS[tight..].to_vec());
         // Below the group divider only leading monitoring tools stay visible.
-        let below_divider =
-            visible_tool_count(stack(MONITORING_TOOL_COUNT) - 1.0, row_height, separator_height);
+        let below_divider = visible_tool_count(
+            stack(MONITORING_TOOL_COUNT) - 1.0,
+            row_height,
+            separator_height,
+        );
         assert!(below_divider < MONITORING_TOOL_COUNT);
         assert_eq!(
             overflow_tools(below_divider),

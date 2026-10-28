@@ -706,7 +706,15 @@ impl HostToolsEntity {
             HostToolsTextInput::ScheduleSearch => self.host_schedules.expanded_index = None,
             HostToolsTextInput::FilesystemSearch => self.host_filesystems.expanded_index = None,
             HostToolsTextInput::PackageSearch => self.host_packages.expanded_index = None,
-            HostToolsTextInput::ProcessRenice | HostToolsTextInput::TmuxDialog => {}
+            HostToolsTextInput::ProcessRenice
+            | HostToolsTextInput::TmuxDialog
+            | HostToolsTextInput::RedisPassword
+            | HostToolsTextInput::RedisRename
+            | HostToolsTextInput::RedisSetValue
+            | HostToolsTextInput::RedisCreateKeyName
+            | HostToolsTextInput::RedisCreateKeyValue
+            | HostToolsTextInput::RedisCreateKeyField
+            | HostToolsTextInput::RedisCreateKeyTtl => {}
         }
         true
     }
@@ -1306,6 +1314,167 @@ impl HostToolsEntity {
         true
     }
 
+    pub(super) fn spawn_redis_keys_capture(
+        &self,
+        command: String,
+        request: HostRedisKeysRequest,
+        timeout: Duration,
+        max_output_size: usize,
+        runtime: tokio::runtime::Handle,
+    ) -> bool {
+        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+            return false;
+        };
+        // The password travels on the exec channel's stdin: never in argv, the
+        // command text, an audit record, or a Debug formatter.
+        let mut payload = zeroize::Zeroizing::new(Vec::with_capacity(request.password.len() + 1));
+        payload.extend_from_slice(request.password.as_bytes());
+        payload.push(b'\n');
+        let delivery_tx = self.reliable_delivery_tx.clone();
+        // Browse output stays inside the Entity and is parsed before render.
+        runtime.spawn(async move {
+            let result = handle
+                .run_command_capture_with_stdin(&command, payload, timeout, max_output_size)
+                .await
+                .map_err(|_| ());
+            let _ = delivery_tx.send(super::delivery::HostToolsReliableDelivery::RedisKeys(
+                HostRedisKeysDelivery { request, result },
+            ));
+        });
+        true
+    }
+
+    pub(super) fn spawn_redis_value_capture(
+        &self,
+        command: String,
+        request: HostRedisValueRequest,
+        timeout: Duration,
+        max_output_size: usize,
+        runtime: tokio::runtime::Handle,
+    ) -> bool {
+        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+            return false;
+        };
+        // Password, database index and key ride the exec channel's stdin,
+        // never the command line.
+        let database = request.database.to_string();
+        let Some(payload) = redis_stdin_payload(&request.password, &[&database, &request.key])
+        else {
+            return false;
+        };
+        let delivery_tx = self.reliable_delivery_tx.clone();
+        runtime.spawn(async move {
+            let result = handle
+                .run_command_capture_with_stdin(&command, payload, timeout, max_output_size)
+                .await
+                .map_err(|_| ());
+            let _ = delivery_tx.send(super::delivery::HostToolsReliableDelivery::RedisValue(
+                HostRedisValueDelivery { request, result },
+            ));
+        });
+        true
+    }
+
+    pub(super) fn spawn_redis_set_value_capture(
+        &self,
+        command: String,
+        request: HostRedisSetValueRequest,
+        timeout: Duration,
+        max_output_size: usize,
+        runtime: tokio::runtime::Handle,
+    ) -> bool {
+        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+            return false;
+        };
+        // Password, database and key are lines; the replacement value follows
+        // verbatim and is piped to `redis-cli -x`, never put in argv.
+        let database = request.database.to_string();
+        let Some(payload) = redis_stdin_payload_with_body(
+            &request.password,
+            &[&database, &request.key],
+            request.value.as_str(),
+        ) else {
+            return false;
+        };
+        let delivery_tx = self.reliable_delivery_tx.clone();
+        runtime.spawn(async move {
+            let result = handle
+                .run_command_capture_with_stdin(&command, payload, timeout, max_output_size)
+                .await
+                .map_err(|_| ());
+            let _ = delivery_tx.send(super::delivery::HostToolsReliableDelivery::RedisSetValue(
+                HostRedisSetValueDelivery { request, result },
+            ));
+        });
+        true
+    }
+
+    pub(super) fn spawn_redis_create_key_capture(
+        &self,
+        command: String,
+        request: HostRedisCreateKeyRequest,
+        timeout: Duration,
+        max_output_size: usize,
+        runtime: tokio::runtime::Handle,
+    ) -> bool {
+        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+            return false;
+        };
+        // Password, database and key are lines; the value follows verbatim and
+        // is piped to `redis-cli -x`, never put in argv.
+        let database = request.database.to_string();
+        let Some(payload) = redis_stdin_payload_with_body(
+            &request.password,
+            &[&database, &request.key],
+            request.value.as_str(),
+        ) else {
+            return false;
+        };
+        let delivery_tx = self.reliable_delivery_tx.clone();
+        runtime.spawn(async move {
+            let result = handle
+                .run_command_capture_with_stdin(&command, payload, timeout, max_output_size)
+                .await
+                .map_err(|_| ());
+            let _ = delivery_tx.send(super::delivery::HostToolsReliableDelivery::RedisCreateKey(
+                HostRedisCreateKeyDelivery { request, result },
+            ));
+        });
+        true
+    }
+
+    pub(super) fn spawn_redis_mutation_capture(
+        &self,
+        command: String,
+        request: HostRedisMutationRequest,
+        timeout: Duration,
+        max_output_size: usize,
+        runtime: tokio::runtime::Handle,
+    ) -> bool {
+        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+            return false;
+        };
+        let database = request.database.to_string();
+        let values: Vec<&str> = match request.new_key.as_deref() {
+            Some(new_key) => vec![database.as_str(), request.key.as_str(), new_key],
+            None => vec![database.as_str(), request.key.as_str()],
+        };
+        let Some(payload) = redis_stdin_payload(&request.password, &values) else {
+            return false;
+        };
+        let delivery_tx = self.reliable_delivery_tx.clone();
+        runtime.spawn(async move {
+            let result = handle
+                .run_command_capture_with_stdin(&command, payload, timeout, max_output_size)
+                .await
+                .map_err(|_| ());
+            let _ = delivery_tx.send(super::delivery::HostToolsReliableDelivery::RedisMutation(
+                HostRedisMutationDelivery { request, result },
+            ));
+        });
+        true
+    }
+
     pub(super) fn spawn_podman_action(
         &self,
         command: String,
@@ -1805,6 +1974,11 @@ impl HostToolsEntity {
         }
         if tool != ContextSidebarTool::Schedules {
             self.dismiss_schedule_confirm(cx);
+        }
+        if tool != ContextSidebarTool::Redis {
+            // The Redis password is a credential: it lives only while that tool
+            // is on screen, and the buffer zeroizes on drop.
+            self.ui.host_redis_password = zeroize::Zeroizing::new(String::new());
         }
 
         if let Some(runtime) = self.lifecycle_runtime.clone() {
@@ -2574,6 +2748,16 @@ mod tests {
                 tmux_unavailable: "tmux unavailable".to_string(),
                 redis_connection_missing: "Redis connection missing".to_string(),
                 redis_probe_failed: "Redis probe failed".to_string(),
+                redis_key_action_failed: "Redis key action failed".to_string(),
+                redis_rename_invalid: "Redis rename invalid".to_string(),
+                redis_auth_required: "Redis authentication required".to_string(),
+                redis_key_missing: "Redis key missing".to_string(),
+                redis_value_set_invalid_json: "Redis value JSON invalid".to_string(),
+                redis_create_key_exists: "Redis create key exists".to_string(),
+                redis_create_key_invalid_name: "Redis create key invalid name".to_string(),
+                redis_create_key_invalid_ttl: "Redis create key invalid ttl".to_string(),
+                redis_create_key_empty_entries: "Redis create key empty entries".to_string(),
+                redis_create_key_invalid_field: "Redis create key invalid field".to_string(),
                 podman_capture_failed: "Podman capture failed".to_string(),
             });
             entity.select_connection(connection_id.clone(), None, cx);
@@ -2750,6 +2934,16 @@ mod tests {
                 tmux_unavailable: "tmux unavailable".to_string(),
                 redis_connection_missing: "Redis connection missing".to_string(),
                 redis_probe_failed: "Redis probe failed".to_string(),
+                redis_key_action_failed: "Redis key action failed".to_string(),
+                redis_rename_invalid: "Redis rename invalid".to_string(),
+                redis_auth_required: "Redis authentication required".to_string(),
+                redis_key_missing: "Redis key missing".to_string(),
+                redis_value_set_invalid_json: "Redis value JSON invalid".to_string(),
+                redis_create_key_exists: "Redis create key exists".to_string(),
+                redis_create_key_invalid_name: "Redis create key invalid name".to_string(),
+                redis_create_key_invalid_ttl: "Redis create key invalid ttl".to_string(),
+                redis_create_key_empty_entries: "Redis create key empty entries".to_string(),
+                redis_create_key_invalid_field: "Redis create key invalid field".to_string(),
                 podman_capture_failed: "Podman capture failed".to_string(),
             });
             entity.select_connection(connection_id.clone(), None, cx);
@@ -3066,6 +3260,16 @@ mod tests {
                 tmux_unavailable: "tmux unavailable".to_string(),
                 redis_connection_missing: "Redis connection missing".to_string(),
                 redis_probe_failed: "Redis probe failed".to_string(),
+                redis_key_action_failed: "Redis key action failed".to_string(),
+                redis_rename_invalid: "Redis rename invalid".to_string(),
+                redis_auth_required: "Redis authentication required".to_string(),
+                redis_key_missing: "Redis key missing".to_string(),
+                redis_value_set_invalid_json: "Redis value JSON invalid".to_string(),
+                redis_create_key_exists: "Redis create key exists".to_string(),
+                redis_create_key_invalid_name: "Redis create key invalid name".to_string(),
+                redis_create_key_invalid_ttl: "Redis create key invalid ttl".to_string(),
+                redis_create_key_empty_entries: "Redis create key empty entries".to_string(),
+                redis_create_key_invalid_field: "Redis create key invalid field".to_string(),
                 podman_capture_failed: "Podman capture failed".to_string(),
             });
             entity.select_tool(ContextSidebarTool::Services, cx);

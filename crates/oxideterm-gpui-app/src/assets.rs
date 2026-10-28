@@ -110,6 +110,7 @@ pub(crate) enum LucideIcon {
     PanelRight,
     PanelRightClose,
     Pencil,
+    PenLine,
     Pause,
     Pin,
     Play,
@@ -250,6 +251,7 @@ impl LucideIcon {
             "panelright" => Self::PanelRight,
             "panelrightclose" => Self::PanelRightClose,
             "pencil" => Self::Pencil,
+            "pen-line" => Self::PenLine,
             "pause" => Self::Pause,
             "pin" => Self::Pin,
             "play" => Self::Play,
@@ -385,6 +387,7 @@ impl LucideIcon {
             Self::PanelRight => "lucide/panel-right.svg",
             Self::PanelRightClose => "lucide/panel-right-close.svg",
             Self::Pencil => "lucide/pencil.svg",
+            Self::PenLine => "lucide/pen-line.svg",
             Self::Pause => "lucide/pause.svg",
             Self::Pin => "lucide/pin.svg",
             Self::Play => "lucide/play.svg",
@@ -598,6 +601,7 @@ impl AssetSource for NativeAssets {
             "lucide/panel-right.svg" => PANEL_RIGHT,
             "lucide/panel-right-close.svg" => PANEL_RIGHT_CLOSE,
             "lucide/pencil.svg" => PENCIL,
+            "lucide/pen-line.svg" => PEN_LINE,
             "lucide/pin.svg" => PIN,
             "lucide/pause.svg" => PAUSE,
             "lucide/play.svg" => PLAY,
@@ -742,6 +746,7 @@ impl AssetSource for NativeAssets {
                 "panel-right.svg",
                 "panel-right-close.svg",
                 "pencil.svg",
+                "pen-line.svg",
                 "pin.svg",
                 "pause.svg",
                 "play.svg",
@@ -976,6 +981,8 @@ const PANEL_LEFT: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" h
 const PANEL_LEFT_CLOSE: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/></svg>"#;
 const PANEL_RIGHT: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/></svg>"#;
 const PANEL_RIGHT_CLOSE: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m8 9 3 3-3 3"/></svg>"#;
+const PEN_LINE: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"/></svg>"#;
+
 const PENCIL: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>"#;
 const PIN: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>"#;
 const PAUSE: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></svg>"#;

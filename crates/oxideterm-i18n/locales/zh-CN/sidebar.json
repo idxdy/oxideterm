@@ -327,7 +327,8 @@
       "columns": {
         "container": "容器 / 镜像",
         "image": "镜像",
-        "state": "状态"
+        "state": "状态",
+        "ports": "端口"
       },
       "states": {
         "running": "运行中",
@@ -336,6 +337,8 @@
         "paused": "已暂停",
         "stopped": "已停止",
         "dead": "已僵死",
+        "restarting": "重启中",
+        "removing": "删除中",
         "unknown": "未知"
       },
       "actions": {
@@ -404,18 +407,112 @@
     },
     "host_redis": {
       "loading": "正在探测 Redis...",
-      "unavailable": "此主机上未找到 redis-cli。探测目标：127.0.0.1:6379。",
-      "no_server": "127.0.0.1:6379 上没有正在监听的 Redis 服务器。",
-      "auth_required": "127.0.0.1:6379 处的 Redis 服务器需要认证；此探测为无认证探测。",
+      "unavailable": "此主机上未找到 redis-cli，也没有正在运行的 Redis 容器。",
+      "no_endpoint": "没有正在运行的 Redis 服务或容器。",
+      "auth_required": "该 Redis 服务需要认证，输入密码后即可浏览 key。",
+      "password_placeholder": "密码（可选）",
+      "keys_empty": "未找到 key。",
+      "key_count": "{{count}} 个 key",
+      "tree_hint": "{{rows}} 行",
+      "endpoint_hint": "端点",
+      "browse_unsupported": "浏览 key 需要 POSIX 主机 Shell。",
+      "tree_current": "{current}",
+      "filter_all_databases": "查看全部 DB",
+      "filter_only_with_keys": "只查看有值的 DB",
+      "value": {
+        "type": "类型",
+        "size": "大小",
+        "ttl": "TTL",
+        "ttl_never": "永不过期",
+        "ttl_missing": "key 已不存在",
+        "ttl_seconds": "{{seconds}} 秒",
+        "loading": "正在读取 value...",
+        "empty": "空 value",
+        "unsupported": "不显示 {{type}} 类型的值。",
+        "view_text": "文本",
+        "view_json": "JSON"
+      },
+      "rename": {
+        "title": "重命名 key",
+        "current": "当前 key：{{key}}",
+        "placeholder": "新 key 名称",
+        "confirm": "重命名",
+        "cancel": "取消",
+        "invalid": "请输入不同的 key 名称。"
+      },
+      "set_value": {
+        "title": "设置 value",
+        "key": "{{db}} · {{key}}",
+        "placeholder": "新的 value",
+        "json_hint": "JSON 视图：value 必须是合法 JSON。",
+        "text_hint": "文本视图：可输入任意内容。",
+        "confirm": "设置",
+        "cancel": "取消",
+        "invalid_json": "JSON 无效：{{error}}",
+        "string_only": "只有 string 类型的值可以整体替换。"
+      },
+      "create_key": {
+        "title": "新建 key",
+        "name_placeholder": "new:key:name",
+        "type": "类型",
+        "types": {
+          "string": "string",
+          "hash": "hash",
+          "list": "list",
+          "set": "set",
+          "sorted_set": "sorted set",
+          "json": "json"
+        },
+        "ttl_never": "永不过期",
+        "ttl_placeholder": "TTL 秒数",
+        "value_placeholder": "value",
+        "value_hint": "按原样写入 string 值。",
+        "json_hint": "必须是合法 JSON。",
+        "field_placeholder": "字段",
+        "element_placeholder": "值 / 元素",
+        "add_entry": "添加",
+        "remove_entry": "移除",
+        "entries_empty": "尚未添加条目。",
+        "hash_hint": "每条按 HSET 字段 值 写入。",
+        "list_hint": "每条按 RPUSH 追加到列表。",
+        "set_hint": "每条按 SADD 加入集合。",
+        "zset_hint": "输入 `member score`，省略 score 时为 0。",
+        "confirm": "创建",
+        "cancel": "取消",
+        "invalid_name": "请输入合法的 key 名称。",
+        "invalid_ttl": "请输入大于 0 的整数秒数。",
+        "invalid_field": "字段名不能为空且不能包含制表符。",
+        "empty_entries": "至少添加一个条目。",
+        "exists": "该 key 已存在。"
+      },
+      "delete": {
+        "title": "删除 key",
+        "description": "删除 {{key}}？此操作无法撤销。",
+        "confirm": "删除",
+        "cancel": "取消"
+      },
       "error": "Redis 探测失败：{{error}}",
-      "reachable": "Redis 可达（127.0.0.1:6379）。",
-      "probe_target": "127.0.0.1:6379",
       "actions": {
-        "refresh": "探测 Redis"
+        "refresh": "探测 Redis",
+        "new_key": "新建 key",
+        "copy_key": "复制 key",
+        "copy_value": "复制 value",
+        "rename": "重命名 key",
+        "set_value": "设置 value",
+        "delete": "删除 key",
+        "close": "关闭"
       },
       "toast": {
         "connection_missing": "所选连接已不可用。",
-        "probe_failed": "Redis 探测失败。"
+        "probe_failed": "Redis 探测失败。",
+        "key_copied": "已复制 key：{{key}}",
+        "value_copied": "已复制 value：{{key}}",
+        "value_copy_failed": "复制 {{key}} 的 value 失败。",
+        "value_set": "已设置 value：{{key}}",
+        "key_deleted": "已删除 key：{{key}}",
+        "key_renamed": "已重命名为：{{key}}",
+        "key_created": "已创建 key：{{key}}",
+        "key_action_failed": "Redis 操作失败：{{message}}"
       }
     },
     "host_services": {
