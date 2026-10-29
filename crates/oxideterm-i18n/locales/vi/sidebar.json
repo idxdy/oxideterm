@@ -89,6 +89,8 @@
       "filesystems": "Ổ đĩa",
       "packages": "Gói",
       "redis": "Redis"
+    ,
+      "container": "Vùng chứa"
     },
     "tooltips": {
       "switch_to_light": "Chuyển sang giao diện sáng",
@@ -416,6 +418,171 @@
         "action_succeeded": "Hành động Podman hoàn tất cho {{name}}."
       }
     },
+    "host_container": {
+      "engines": {
+        "docker": "Docker",
+        "podman": "Podman",
+        "wslc": "wslc"
+      },
+      "transports": {
+        "socket": "Socket",
+        "tcp": "TCP",
+        "cli": "CLI"
+      },
+      "tabs": {
+        "containers": "Vùng chứa",
+        "images": "Ảnh",
+        "volumes": "Volume",
+        "networks": "Mạng",
+        "pods": "Pod",
+        "stats": "Tài nguyên"
+      },
+      "search_placeholder": "Tìm kiếm",
+      "loading": "Đang tải…",
+      "unavailable": "Không thể kết nối công cụ vùng chứa nào.",
+      "unavailable_detail": "Không thể kết nối công cụ vùng chứa nào. {{detail}}",
+      "error": "Lệnh vùng chứa thất bại. {{error}}",
+      "counts": {
+        "containers": "vùng chứa",
+        "images": "ảnh",
+        "volumes": "volume",
+        "networks": "mạng",
+        "pods": "pod"
+      },
+      "empty": {
+        "containers": "Không có vùng chứa",
+        "images": "Không có ảnh",
+        "volumes": "Không có volume",
+        "networks": "Không có mạng",
+        "pods": "Không có pod",
+        "no_engine": "Không phát hiện công cụ vùng chứa",
+        "stats": "Không có vùng chứa nào đang chạy."
+      },
+      "states": {
+        "running": "Đang chạy",
+        "exited": "Đã thoát",
+        "created": "Đã tạo",
+        "paused": "Tạm dừng",
+        "restarting": "Đang khởi động lại",
+        "removing": "Đang xóa",
+        "stopped": "Đã dừng",
+        "dead": "Hỏng",
+        "degraded": "Suy giảm",
+        "unknown": "Không rõ"
+      },
+      "actions": {
+        "start": "Bắt đầu",
+        "stop": "Dừng",
+        "restart": "Khởi động lại",
+        "pause": "Tạm dừng",
+        "unpause": "Tiếp tục",
+        "remove": "Xóa",
+        "prune": "Dọn dẹp",
+        "inspect": "Kiểm tra",
+        "logs": "Nhật ký",
+        "follow_logs": "Theo dõi nhật ký",
+        "exec": "Shell",
+        "refresh": "Làm mới",
+        "history": "Lịch sử",
+        "run": "Chạy",
+        "pull": "Kéo",
+        "push": "Push",
+        "build": "Build",
+        "search": "Tìm kiếm",
+        "login": "Đăng nhập",
+        "create": "Tạo",
+        "tag": "Gắn thẻ",
+        "save": "Lưu",
+        "usage": "Được dùng bởi",
+        "rename": "Đổi tên",
+        "attach": "Gắn vào",
+        "prune_unused": "Dọn dẹp không dùng",
+        "load": "Tải",
+        "import": "Nhập",
+        "export": "Xuất",
+        "copy": "Sao chép"
+      },
+      "confirm": {
+        "title": "Xác nhận thao tác",
+        "cancel": "Hủy"
+      },
+      "confirms": {
+        "start": "Bắt đầu {{name}}?",
+        "stop": "Dừng {{name}}?",
+        "restart": "Khởi động lại {{name}}?",
+        "pause": "Tạm dừng {{name}}?",
+        "unpause": "Tiếp tục {{name}}?",
+        "remove": "Xóa {{name}}? Không thể hoàn tác thao tác này.",
+        "remove_image": "Xóa ảnh {{name}}? Không thể hoàn tác thao tác này.",
+        "prune_images": "Xóa tất cả ảnh không được tham chiếu?",
+        "remove_volume": "Xóa volume {{name}}? Dữ liệu lưu trữ sẽ bị xóa.",
+        "prune_volumes": "Xóa tất cả volume không dùng?",
+        "remove_network": "Xóa mạng {{name}}?",
+        "prune_networks": "Xóa tất cả mạng không dùng?",
+        "pod_start": "Bắt đầu pod {{name}}?",
+        "pod_stop": "Dừng pod {{name}}?",
+        "pod_restart": "Khởi động lại pod {{name}}?",
+        "pod_remove": "Xóa pod {{name}}? Không thể hoàn tác thao tác này.",
+        "pod_pause": "Tạm dừng pod {{name}}?",
+        "pod_unpause": "Tiếp tục pod {{name}}?"
+      },
+      "captures": {
+        "loading": "Đang tải…",
+        "close": "Đóng",
+        "empty": "Không có nội dung để hiển thị."
+      },
+      "toast": {
+        "action_succeeded": "Đã hoàn tất {{name}}.",
+        "action_failed": "Thao tác vùng chứa thất bại.",
+        "action_already_running": "Một thao tác vùng chứa khác vẫn đang chạy.",
+        "connection_missing": "Kết nối không còn khả dụng.",
+        "capture_failed": "Lệnh vùng chứa thất bại.",
+        "terminal_opened": "Đã mở terminal.",
+        "terminal_missing": "Kết nối không còn khả dụng."
+      },
+      "columns": {
+        "name": "Tên",
+        "cpu": "CPU",
+        "memory": "Bộ nhớ",
+        "network": "Mạng",
+        "block": "Khối",
+        "pids": "PID"
+      },
+      "inputs": {
+        "run_title": "Chạy vùng chứa",
+        "run_placeholder": "ảnh [lệnh]",
+        "pull_title": "Kéo ảnh",
+        "pull_placeholder": "registry/image:tag",
+        "push_title": "Đẩy ảnh",
+        "push_placeholder": "registry/image:tag",
+        "build_title": "Build ảnh",
+        "build_placeholder": "-t name:tag .",
+        "tag_title": "Gắn thẻ ảnh",
+        "tag_placeholder": "registry/image:tag",
+        "save_title": "Lưu ảnh",
+        "save_placeholder": "/path/image.tar",
+        "load_title": "Tải ảnh",
+        "load_placeholder": "/path/image.tar",
+        "import_title": "Nhập ảnh",
+        "import_placeholder": "/path/rootfs.tar name:tag",
+        "export_title": "Xuất vùng chứa",
+        "export_placeholder": "/path/rootfs.tar",
+        "copy_title": "Sao chép tệp",
+        "copy_placeholder": "/src /dest",
+        "volume_title": "Tạo volume",
+        "volume_placeholder": "tên",
+        "network_title": "Tạo mạng",
+        "network_placeholder": "tên [driver]",
+        "pod_title": "Tạo pod",
+        "pod_placeholder": "tên",
+        "rename_title": "Đổi tên vùng chứa",
+        "rename_placeholder": "tên mới",
+        "search_title": "Tìm kiếm ảnh",
+        "search_placeholder": "từ khóa",
+        "login_title": "Đăng nhập registry",
+        "login_placeholder": "registry"
+      }
+    },
     "host_redis": {
       "loading": "Đang dò Redis…",
       "unavailable": "Máy chủ này không có redis-cli và không có container Redis nào đang chạy.",
@@ -501,6 +668,9 @@
         "description": "Xóa {{key}}? Không thể hoàn tác.",
         "confirm": "Xóa",
         "cancel": "Hủy"
+      ,
+        "prefix_description": "Xóa tất cả {{count}} khóa trong {{prefix}}?",
+        "more": "+{{count}} nữa"
       },
       "error": "Dò Redis thất bại: {{error}}",
       "actions": {
@@ -512,6 +682,8 @@
         "set_value": "Đặt value",
         "delete": "Xóa key",
         "close": "Đóng"
+      ,
+        "delete_prefix": "Xóa cây con"
       },
       "toast": {
         "connection_missing": "Kết nối đã chọn không còn khả dụng.",

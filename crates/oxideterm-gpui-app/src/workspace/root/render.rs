@@ -555,6 +555,9 @@ impl WorkspaceApp {
                 } else if this.handle_host_podman_search_key(event, cx) {
                     window.prevent_default();
                     cx.stop_propagation();
+                } else if this.handle_host_container_search_key(event, cx) {
+                    window.prevent_default();
+                    cx.stop_propagation();
                 } else if this.handle_host_service_search_key(event, cx) {
                     window.prevent_default();
                     cx.stop_propagation();
@@ -1356,6 +1359,18 @@ impl WorkspaceApp {
             })
             .when_some(
                 self.render_host_podman_confirm_dialog(cx),
+                |root, dialog| root.child(dialog),
+            )
+            .when_some(
+                self.render_host_container_confirm_dialog(cx),
+                |root, dialog| root.child(dialog),
+            )
+            .when_some(
+                self.render_host_container_text_dialog(cx),
+                |root, dialog| root.child(dialog),
+            )
+            .when_some(
+                self.render_host_container_input_dialog(cx),
                 |root, dialog| root.child(dialog),
             )
             .when_some(

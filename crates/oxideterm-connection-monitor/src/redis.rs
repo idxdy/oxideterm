@@ -421,6 +421,26 @@ const REDIS_ACTION_TAIL_DELETE: &str = concat!(
     "esac; fi; "
 );
 
+/// Deletes every key listed on stdin after the password and database, so a
+/// prefix deletion never puts key names on an argv or needs one exec per key.
+const REDIS_ACTION_TAIL_DELETE_MANY: &str = concat!(
+    "case \"$oxide_db\" in ''|*[!0-9]*) oxide_db=0;; esac; ",
+    "oxide_deleted=0; oxide_failed=''; oxide_any=0; ",
+    "while IFS= read -r oxide_key || [ -n \"$oxide_key\" ]; do ",
+    "if [ -z \"$oxide_key\" ]; then continue; fi; ",
+    "oxide_any=1; ",
+    "oxide_reply=$(oxide_cli -n \"$oxide_db\" DEL \"$oxide_key\" 2>&1 | head -n 1 | tr -d '\\r'); ",
+    "case \"$oxide_reply\" in ",
+    "'') oxide_failed='empty reply' ;; ",
+    "*[!0-9]*) oxide_failed=\"$(printf '%s' \"$oxide_reply\" | tr '\\t' ' ')\" ;; ",
+    "*) oxide_deleted=$((oxide_deleted + 1)) ;; ",
+    "esac; ",
+    "done; ",
+    "if [ \"$oxide_any\" = \"0\" ]; then printf 'status\\terror\\tmissing keys\\n'; ",
+    "elif [ -n \"$oxide_failed\" ]; then printf 'status\\terror\\t%s\\n' \"$oxide_failed\"; ",
+    "else printf 'status\\tok\\t%s\\n' \"$oxide_deleted\"; fi; "
+);
+
 const REDIS_ACTION_TAIL_RENAME: &str = concat!(
     "case \"$oxide_db\" in ''|*[!0-9]*) oxide_db=0;; esac; ",
     "if [ -z \"$oxide_key\" ] || [ -z \"$oxide_new\" ] || [ \"$oxide_new\" = \"$oxide_key\" ]; then ",
@@ -534,6 +554,23 @@ pub fn redis_key_mutation_command(
         ),
     };
     redis_script_for(endpoint, os_type, REDIS_ACTION_SECTION, &reads, tail)
+}
+
+/// Builds the delete command for a whole key list.
+///
+/// stdin carries the password, the database index, then one key per line; the
+/// script loops over them so a prefix deletion stays a single exec.
+pub fn redis_keys_delete_command(
+    endpoint: &ResourceRedisEndpoint,
+    os_type: &str,
+) -> Option<String> {
+    redis_script_for(
+        endpoint,
+        os_type,
+        REDIS_ACTION_SECTION,
+        &["oxide_pw", "oxide_db"],
+        REDIS_ACTION_TAIL_DELETE_MANY,
+    )
 }
 
 /// Builds the command that creates a string key without overwriting one.
@@ -1820,6 +1857,21 @@ mod tests {
         assert!(
             redis_replace_value_command(&endpoint, "Windows", RedisValueWriteKind::String)
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn multi_delete_counts_delted_keys_without_argv_interpolation() {
+        let endpoint =
+            ResourceRedisEndpoint::new(ResourceRedisEndpointKind::Host, REDIS_PROBE_TARGET);
+        let command = redis_keys_delete_command(&endpoint, "Linux").unwrap();
+        assert!(command.contains("while IFS= read -r oxide_key"));
+        assert!(command.contains("DEL \"$oxide_key\""));
+        assert!(!command.contains("oxide_key="));
+        assert!(redis_keys_delete_command(&endpoint, "Windows").is_none());
+        assert_eq!(
+            parse_redis_key_mutation("===REDISACTION===\nstatus\tok\t3\n===REDISACTION_END==="),
+            ResourceRedisStatus::Available
         );
     }
 

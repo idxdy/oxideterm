@@ -76,6 +76,7 @@ pub(super) enum ContextSidebarTool {
     Tmux,
     Docker,
     Podman,
+    Container,
     Ports,
     Schedules,
     Filesystems,

@@ -89,6 +89,8 @@
       "filesystems": "디스크",
       "packages": "패키지",
       "redis": "Redis"
+    ,
+      "container": "컨테이너"
     },
     "tooltips": {
       "switch_to_light": "밝은 테마로 전환",
@@ -416,6 +418,171 @@
         "action_succeeded": "Podman 작업 완료: {{name}}."
       }
     },
+    "host_container": {
+      "engines": {
+        "docker": "Docker",
+        "podman": "Podman",
+        "wslc": "wslc"
+      },
+      "transports": {
+        "socket": "소켓",
+        "tcp": "TCP",
+        "cli": "CLI"
+      },
+      "tabs": {
+        "containers": "컨테이너",
+        "images": "이미지",
+        "volumes": "볼륨",
+        "networks": "네트워크",
+        "pods": "Pod",
+        "stats": "리소스"
+      },
+      "search_placeholder": "검색",
+      "loading": "불러오는 중…",
+      "unavailable": "연결 가능한 컨테이너 엔진이 없습니다.",
+      "unavailable_detail": "연결 가능한 컨테이너 엔진이 없습니다. {{detail}}",
+      "error": "컨테이너 명령이 실패했습니다. {{error}}",
+      "counts": {
+        "containers": "컨테이너",
+        "images": "이미지",
+        "volumes": "볼륨",
+        "networks": "네트워크",
+        "pods": "Pod"
+      },
+      "empty": {
+        "containers": "컨테이너 없음",
+        "images": "이미지 없음",
+        "volumes": "볼륨 없음",
+        "networks": "네트워크 없음",
+        "pods": "Pod 없음",
+        "no_engine": "컨테이너 엔진을 찾을 수 없습니다",
+        "stats": "실행 중인 컨테이너가 없습니다."
+      },
+      "states": {
+        "running": "실행 중",
+        "exited": "종료됨",
+        "created": "생성됨",
+        "paused": "일시 중지됨",
+        "restarting": "다시 시작 중",
+        "removing": "제거 중",
+        "stopped": "중지됨",
+        "dead": "죽음",
+        "degraded": "성능 저하",
+        "unknown": "알 수 없음"
+      },
+      "actions": {
+        "start": "시작",
+        "stop": "중지",
+        "restart": "다시 시작",
+        "pause": "일시 중지",
+        "unpause": "재개",
+        "remove": "제거",
+        "prune": "정리",
+        "inspect": "검사",
+        "logs": "로그",
+        "follow_logs": "로그 따라가기",
+        "exec": "셸",
+        "refresh": "새로 고침",
+        "history": "기록",
+        "run": "실행",
+        "pull": "가져오기",
+        "push": "푸시",
+        "build": "빌드",
+        "search": "검색",
+        "login": "로그인",
+        "create": "생성",
+        "tag": "태그",
+        "save": "저장",
+        "usage": "사용 중",
+        "rename": "이름 변경",
+        "attach": "연결",
+        "prune_unused": "사용하지 않는 항목 정리",
+        "load": "불러오기",
+        "import": "가져오기",
+        "export": "내보내기",
+        "copy": "복사"
+      },
+      "confirm": {
+        "title": "작업 확인",
+        "cancel": "취소"
+      },
+      "confirms": {
+        "start": "{{name}}을(를) 시작할까요?",
+        "stop": "{{name}}을(를) 중지할까요?",
+        "restart": "{{name}}을(를) 다시 시작할까요?",
+        "pause": "{{name}}을(를) 일시 중지할까요?",
+        "unpause": "{{name}}을(를) 재개할까요?",
+        "remove": "{{name}}을(를) 제거할까요? 이 작업은 되돌릴 수 없습니다.",
+        "remove_image": "이미지 {{name}}을(를) 제거할까요? 이 작업은 되돌릴 수 없습니다.",
+        "prune_images": "참조되지 않은 모든 이미지를 제거할까요?",
+        "remove_volume": "볼륨 {{name}}을(를) 제거할까요? 저장된 데이터가 삭제됩니다.",
+        "prune_volumes": "사용하지 않는 모든 볼륨을 제거할까요?",
+        "remove_network": "네트워크 {{name}}을(를) 제거할까요?",
+        "prune_networks": "사용하지 않는 모든 네트워크를 제거할까요?",
+        "pod_start": "Pod {{name}}을(를) 시작할까요?",
+        "pod_stop": "Pod {{name}}을(를) 중지할까요?",
+        "pod_restart": "Pod {{name}}을(를) 다시 시작할까요?",
+        "pod_remove": "Pod {{name}}을(를) 제거할까요? 이 작업은 되돌릴 수 없습니다.",
+        "pod_pause": "Pod {{name}}을(를) 일시 중지할까요?",
+        "pod_unpause": "Pod {{name}}을(를) 재개할까요?"
+      },
+      "captures": {
+        "loading": "불러오는 중…",
+        "close": "닫기",
+        "empty": "표시할 내용이 없습니다."
+      },
+      "toast": {
+        "action_succeeded": "{{name}} 완료.",
+        "action_failed": "컨테이너 작업이 실패했습니다.",
+        "action_already_running": "다른 컨테이너 작업이 아직 실행 중입니다.",
+        "connection_missing": "연결을 더 이상 사용할 수 없습니다.",
+        "capture_failed": "컨테이너 명령이 실패했습니다.",
+        "terminal_opened": "터미널을 열었습니다.",
+        "terminal_missing": "연결을 더 이상 사용할 수 없습니다."
+      },
+      "columns": {
+        "name": "이름",
+        "cpu": "CPU",
+        "memory": "메모리",
+        "network": "네트워크",
+        "block": "블록",
+        "pids": "PID"
+      },
+      "inputs": {
+        "run_title": "컨테이너 실행",
+        "run_placeholder": "이미지 [명령]",
+        "pull_title": "이미지 가져오기",
+        "pull_placeholder": "registry/image:tag",
+        "push_title": "이미지 푸시",
+        "push_placeholder": "registry/image:tag",
+        "build_title": "이미지 빌드",
+        "build_placeholder": "-t name:tag .",
+        "tag_title": "이미지 태그",
+        "tag_placeholder": "registry/image:tag",
+        "save_title": "이미지 저장",
+        "save_placeholder": "/path/image.tar",
+        "load_title": "이미지 불러오기",
+        "load_placeholder": "/path/image.tar",
+        "import_title": "이미지 가져오기(파일)",
+        "import_placeholder": "/path/rootfs.tar name:tag",
+        "export_title": "컨테이너 내보내기",
+        "export_placeholder": "/path/rootfs.tar",
+        "copy_title": "파일 복사",
+        "copy_placeholder": "/src /dest",
+        "volume_title": "볼륨 생성",
+        "volume_placeholder": "이름",
+        "network_title": "네트워크 생성",
+        "network_placeholder": "이름 [드라이버]",
+        "pod_title": "Pod 생성",
+        "pod_placeholder": "이름",
+        "rename_title": "컨테이너 이름 변경",
+        "rename_placeholder": "새 이름",
+        "search_title": "이미지 검색",
+        "search_placeholder": "검색어",
+        "login_title": "레지스트리 로그인",
+        "login_placeholder": "레지스트리"
+      }
+    },
     "host_redis": {
       "loading": "Redis를 확인하는 중...",
       "unavailable": "이 호스트에는 redis-cli가 없고 실행 중인 Redis 컨테이너도 없습니다.",
@@ -501,6 +668,9 @@
         "description": "{{key}}을(를) 삭제할까요? 되돌릴 수 없습니다.",
         "confirm": "삭제",
         "cancel": "취소"
+      ,
+        "prefix_description": "{{prefix}} 아래의 키 {{count}}개를 삭제할까요?",
+        "more": "외 {{count}}개"
       },
       "error": "Redis 확인 실패: {{error}}",
       "actions": {
@@ -512,6 +682,8 @@
         "set_value": "값 설정",
         "delete": "키 삭제",
         "close": "닫기"
+      ,
+        "delete_prefix": "하위 트리 삭제"
       },
       "toast": {
         "connection_missing": "선택한 연결을 더 이상 사용할 수 없습니다.",

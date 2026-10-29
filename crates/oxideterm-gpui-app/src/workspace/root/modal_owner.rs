@@ -93,6 +93,11 @@ pub(in crate::workspace) enum ActiveWindowModalOwner {
     HostPodmanLogs,
     HostPodmanInput,
     HostPodmanCaptureText,
+    HostContainerConfirm {
+        phase: oxideterm_gpui_ui::motion::ExitPhase,
+    },
+    HostContainerText,
+    HostContainerInput,
     HostServiceConfirm {
         phase: oxideterm_gpui_ui::motion::ExitPhase,
     },
@@ -177,6 +182,9 @@ impl ActiveWindowModalOwner {
             Self::HostPodmanLogs => 23,
             Self::HostPodmanInput => 50,
             Self::HostPodmanCaptureText => 51,
+            Self::HostContainerConfirm { .. } => 52,
+            Self::HostContainerText => 53,
+            Self::HostContainerInput => 54,
             Self::HostServiceConfirm { .. } => 24,
             Self::HostServiceLogs => 25,
             Self::HostTmuxConfirm { .. } => 26,
@@ -225,6 +233,7 @@ impl ActiveWindowModalOwner {
             | Self::HostProcessConfirm { phase }
             | Self::HostDockerConfirm { phase }
             | Self::HostPodmanConfirm { phase }
+            | Self::HostContainerConfirm { phase }
             | Self::HostServiceConfirm { phase }
             | Self::HostTmuxConfirm { phase }
             | Self::HostScheduleConfirm { phase }
@@ -246,6 +255,8 @@ impl ActiveWindowModalOwner {
             | Self::HostDockerLogs
             | Self::HostPodmanLogs
             | Self::HostPodmanCaptureText
+            | Self::HostContainerText
+            | Self::HostContainerInput
             | Self::HostServiceLogs
             | Self::HostTmuxInput
             | Self::HostPodmanInput
@@ -480,6 +491,15 @@ impl ActiveWindowModalProjection {
             }
             connection_monitor::HostToolsWindowModalSnapshot::PodmanCaptureText => {
                 ActiveWindowModalOwner::HostPodmanCaptureText
+            }
+            connection_monitor::HostToolsWindowModalSnapshot::ContainerConfirm(phase) => {
+                ActiveWindowModalOwner::HostContainerConfirm { phase }
+            }
+            connection_monitor::HostToolsWindowModalSnapshot::ContainerText => {
+                ActiveWindowModalOwner::HostContainerText
+            }
+            connection_monitor::HostToolsWindowModalSnapshot::ContainerInput => {
+                ActiveWindowModalOwner::HostContainerInput
             }
             connection_monitor::HostToolsWindowModalSnapshot::ServiceConfirm(phase) => {
                 ActiveWindowModalOwner::HostServiceConfirm { phase }
@@ -1134,6 +1154,29 @@ impl WorkspaceApp {
             ActiveWindowModalOwner::HostPodmanCaptureText => {
                 let _ = self.handle_host_tools_window_modal_key(
                     connection_monitor::HostToolsWindowModalSnapshot::PodmanCaptureText,
+                    event,
+                    cx,
+                );
+            }
+            ActiveWindowModalOwner::HostContainerConfirm { phase: _ } => {
+                let _ = self.handle_host_tools_window_modal_key(
+                    connection_monitor::HostToolsWindowModalSnapshot::ContainerConfirm(
+                        oxideterm_gpui_ui::motion::ExitPhase::Visible,
+                    ),
+                    event,
+                    cx,
+                );
+            }
+            ActiveWindowModalOwner::HostContainerText => {
+                let _ = self.handle_host_tools_window_modal_key(
+                    connection_monitor::HostToolsWindowModalSnapshot::ContainerText,
+                    event,
+                    cx,
+                );
+            }
+            ActiveWindowModalOwner::HostContainerInput => {
+                let _ = self.handle_host_tools_window_modal_key(
+                    connection_monitor::HostToolsWindowModalSnapshot::ContainerInput,
                     event,
                     cx,
                 );

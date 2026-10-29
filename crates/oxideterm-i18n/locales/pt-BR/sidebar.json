@@ -89,6 +89,8 @@
       "filesystems": "Discos",
       "packages": "Pacotes",
       "redis": "Redis"
+    ,
+      "container": "Contêiner"
     },
     "tooltips": {
       "switch_to_light": "Mudar para o tema claro",
@@ -416,6 +418,171 @@
         "action_succeeded": "Ação do Podman concluída para {{name}}."
       }
     },
+    "host_container": {
+      "engines": {
+        "docker": "Docker",
+        "podman": "Podman",
+        "wslc": "wslc"
+      },
+      "transports": {
+        "socket": "Socket",
+        "tcp": "TCP",
+        "cli": "CLI"
+      },
+      "tabs": {
+        "containers": "Contêineres",
+        "images": "Imagens",
+        "volumes": "Volumes",
+        "networks": "Redes",
+        "pods": "Pods",
+        "stats": "Recursos"
+      },
+      "search_placeholder": "Pesquisar",
+      "loading": "Carregando…",
+      "unavailable": "Nenhum mecanismo de contêiner acessível.",
+      "unavailable_detail": "Nenhum mecanismo de contêiner acessível. {{detail}}",
+      "error": "O comando do contêiner falhou. {{error}}",
+      "counts": {
+        "containers": "contêineres",
+        "images": "imagens",
+        "volumes": "volumes",
+        "networks": "redes",
+        "pods": "pods"
+      },
+      "empty": {
+        "containers": "Nenhum contêiner",
+        "images": "Nenhuma imagem",
+        "volumes": "Nenhum volume",
+        "networks": "Nenhuma rede",
+        "pods": "Nenhum pod",
+        "no_engine": "Nenhum mecanismo de contêiner detectado",
+        "stats": "Nenhum contêiner em execução."
+      },
+      "states": {
+        "running": "Em execução",
+        "exited": "Encerrado",
+        "created": "Criado",
+        "paused": "Pausado",
+        "restarting": "Reiniciando",
+        "removing": "Removendo",
+        "stopped": "Parado",
+        "dead": "Morto",
+        "degraded": "Degradado",
+        "unknown": "Desconhecido"
+      },
+      "actions": {
+        "start": "Iniciar",
+        "stop": "Parar",
+        "restart": "Reiniciar",
+        "pause": "Pausar",
+        "unpause": "Retomar",
+        "remove": "Remover",
+        "prune": "Limpar",
+        "inspect": "Inspecionar",
+        "logs": "Logs",
+        "follow_logs": "Acompanhar logs",
+        "exec": "Shell",
+        "refresh": "Atualizar",
+        "history": "Histórico",
+        "run": "Executar",
+        "pull": "Pull",
+        "push": "Push",
+        "build": "Build",
+        "search": "Pesquisar",
+        "login": "Entrar",
+        "create": "Criar",
+        "tag": "Marcar",
+        "save": "Salvar",
+        "usage": "Usado por",
+        "rename": "Renomear",
+        "attach": "Anexar",
+        "prune_unused": "Limpar não usadas",
+        "load": "Carregar",
+        "import": "Importar",
+        "export": "Exportar",
+        "copy": "Copiar"
+      },
+      "confirm": {
+        "title": "Confirmar ação",
+        "cancel": "Cancelar"
+      },
+      "confirms": {
+        "start": "Iniciar {{name}}?",
+        "stop": "Parar {{name}}?",
+        "restart": "Reiniciar {{name}}?",
+        "pause": "Pausar {{name}}?",
+        "unpause": "Retomar {{name}}?",
+        "remove": "Remover {{name}}? Esta ação não pode ser desfeita.",
+        "remove_image": "Remover a imagem {{name}}? Esta ação não pode ser desfeita.",
+        "prune_images": "Remover todas as imagens sem referência?",
+        "remove_volume": "Remover o volume {{name}}? Os dados armazenados serão excluídos.",
+        "prune_volumes": "Remover todos os volumes não utilizados?",
+        "remove_network": "Remover a rede {{name}}?",
+        "prune_networks": "Remover todas as redes não utilizadas?",
+        "pod_start": "Iniciar o pod {{name}}?",
+        "pod_stop": "Parar o pod {{name}}?",
+        "pod_restart": "Reiniciar o pod {{name}}?",
+        "pod_remove": "Remover o pod {{name}}? Esta ação não pode ser desfeita.",
+        "pod_pause": "Pausar o pod {{name}}?",
+        "pod_unpause": "Retomar o pod {{name}}?"
+      },
+      "captures": {
+        "loading": "Carregando…",
+        "close": "Fechar",
+        "empty": "Nada para exibir."
+      },
+      "toast": {
+        "action_succeeded": "{{name}} concluído.",
+        "action_failed": "A ação do contêiner falhou.",
+        "action_already_running": "Outra ação de contêiner ainda está em execução.",
+        "connection_missing": "A conexão não está mais disponível.",
+        "capture_failed": "O comando do contêiner falhou.",
+        "terminal_opened": "Terminal aberto.",
+        "terminal_missing": "A conexão não está mais disponível."
+      },
+      "columns": {
+        "name": "Nome",
+        "cpu": "CPU",
+        "memory": "Memória",
+        "network": "Rede",
+        "block": "Bloco",
+        "pids": "PIDs"
+      },
+      "inputs": {
+        "run_title": "Executar contêiner",
+        "run_placeholder": "imagem [comando]",
+        "pull_title": "Baixar imagem",
+        "pull_placeholder": "registry/image:tag",
+        "push_title": "Enviar imagem",
+        "push_placeholder": "registry/image:tag",
+        "build_title": "Criar imagem",
+        "build_placeholder": "-t name:tag .",
+        "tag_title": "Marcar imagem",
+        "tag_placeholder": "registry/image:tag",
+        "save_title": "Salvar imagem",
+        "save_placeholder": "/path/image.tar",
+        "load_title": "Carregar imagem",
+        "load_placeholder": "/path/image.tar",
+        "import_title": "Importar imagem",
+        "import_placeholder": "/path/rootfs.tar name:tag",
+        "export_title": "Exportar contêiner",
+        "export_placeholder": "/path/rootfs.tar",
+        "copy_title": "Copiar arquivos",
+        "copy_placeholder": "/src /dest",
+        "volume_title": "Criar volume",
+        "volume_placeholder": "nome",
+        "network_title": "Criar rede",
+        "network_placeholder": "nome [driver]",
+        "pod_title": "Criar pod",
+        "pod_placeholder": "nome",
+        "rename_title": "Renomear contêiner",
+        "rename_placeholder": "novo nome",
+        "search_title": "Pesquisar imagens",
+        "search_placeholder": "termo",
+        "login_title": "Entrar no registro",
+        "login_placeholder": "registro"
+      }
+    },
     "host_redis": {
       "loading": "Verificando o Redis…",
       "unavailable": "redis-cli não foi encontrado neste host e nenhum contêiner Redis está em execução.",
@@ -501,6 +668,9 @@
         "description": "Excluir {{key}}? Isso não pode ser desfeito.",
         "confirm": "Excluir",
         "cancel": "Cancelar"
+      ,
+        "prefix_description": "Remover todas as {{count}} chaves em {{prefix}}?",
+        "more": "+{{count}} mais"
       },
       "error": "Falha ao verificar o Redis: {{error}}",
       "actions": {
@@ -512,6 +682,8 @@
         "set_value": "Definir valor",
         "delete": "Excluir chave",
         "close": "Fechar"
+      ,
+        "delete_prefix": "Remover subárvore"
       },
       "toast": {
         "connection_missing": "A conexão selecionada não está mais disponível.",

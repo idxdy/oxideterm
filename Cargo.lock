@@ -7141,6 +7141,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "oxideterm-container"
+version = "2.2.6"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "oxideterm-desktop-presence"
 version = "2.2.6"
 dependencies = [
@@ -7274,6 +7282,7 @@ dependencies = [
  "oxideterm-cloud-sync",
  "oxideterm-connection-monitor",
  "oxideterm-connections",
+ "oxideterm-container",
  "oxideterm-desktop-presence",
  "oxideterm-editor-core",
  "oxideterm-editor-syntax",

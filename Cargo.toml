@@ -39,6 +39,7 @@ members = [
   "crates/oxideterm-desktop-presence",
   "crates/oxideterm-quick-commands",
   "crates/oxideterm-connection-monitor",
+  "crates/oxideterm-container",
   "crates/oxideterm-notification-center",
   "crates/oxideterm-audit",
   "crates/oxideterm-network-proxy",

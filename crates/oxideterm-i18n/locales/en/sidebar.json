@@ -89,6 +89,8 @@
       "filesystems": "Disks",
       "packages": "Packages",
       "redis": "Redis"
+    ,
+      "container": "Container"
     },
     "tooltips": {
       "switch_to_light": "Switch to light theme",
@@ -416,6 +418,171 @@
         "action_succeeded": "Podman action completed for {{name}}."
       }
     },
+    "host_container": {
+      "engines": {
+        "docker": "Docker",
+        "podman": "Podman",
+        "wslc": "wslc"
+      },
+      "transports": {
+        "socket": "Socket",
+        "tcp": "TCP",
+        "cli": "CLI"
+      },
+      "tabs": {
+        "containers": "Containers",
+        "images": "Images",
+        "volumes": "Volumes",
+        "networks": "Networks",
+        "pods": "Pods",
+        "stats": "Stats"
+      },
+      "search_placeholder": "Search",
+      "loading": "Loading…",
+      "unavailable": "No container engine is reachable.",
+      "unavailable_detail": "No container engine is reachable. {{detail}}",
+      "error": "Container command failed. {{error}}",
+      "counts": {
+        "containers": "containers",
+        "images": "images",
+        "volumes": "volumes",
+        "networks": "networks",
+        "pods": "pods"
+      },
+      "empty": {
+        "containers": "No containers",
+        "images": "No images",
+        "volumes": "No volumes",
+        "networks": "No networks",
+        "pods": "No pods",
+        "no_engine": "No container engine detected",
+        "stats": "No running containers."
+      },
+      "states": {
+        "running": "Running",
+        "exited": "Exited",
+        "created": "Created",
+        "paused": "Paused",
+        "restarting": "Restarting",
+        "removing": "Removing",
+        "stopped": "Stopped",
+        "dead": "Dead",
+        "degraded": "Degraded",
+        "unknown": "Unknown"
+      },
+      "actions": {
+        "start": "Start",
+        "stop": "Stop",
+        "restart": "Restart",
+        "pause": "Pause",
+        "unpause": "Resume",
+        "remove": "Remove",
+        "prune": "Prune",
+        "inspect": "Inspect",
+        "logs": "Logs",
+        "follow_logs": "Follow logs",
+        "exec": "Shell",
+        "refresh": "Refresh",
+        "history": "History",
+        "run": "Run",
+        "pull": "Pull",
+        "push": "Push",
+        "build": "Build",
+        "search": "Search",
+        "login": "Log in",
+        "create": "Create",
+        "tag": "Tag",
+        "save": "Save",
+        "usage": "Used by",
+        "rename": "Rename",
+        "attach": "Attach",
+        "prune_unused": "Prune unused",
+        "load": "Load",
+        "import": "Import",
+        "export": "Export",
+        "copy": "Copy"
+      },
+      "confirm": {
+        "title": "Confirm action",
+        "cancel": "Cancel"
+      },
+      "confirms": {
+        "start": "Start {{name}}?",
+        "stop": "Stop {{name}}?",
+        "restart": "Restart {{name}}?",
+        "pause": "Pause {{name}}?",
+        "unpause": "Resume {{name}}?",
+        "remove": "Remove {{name}}? This cannot be undone.",
+        "remove_image": "Remove image {{name}}? This cannot be undone.",
+        "prune_images": "Remove all dangling images?",
+        "remove_volume": "Remove volume {{name}}? Stored data is deleted.",
+        "prune_volumes": "Remove all unused volumes?",
+        "remove_network": "Remove network {{name}}?",
+        "prune_networks": "Remove all unused networks?",
+        "pod_start": "Start pod {{name}}?",
+        "pod_stop": "Stop pod {{name}}?",
+        "pod_restart": "Restart pod {{name}}?",
+        "pod_remove": "Remove pod {{name}}? This cannot be undone.",
+        "pod_pause": "Pause pod {{name}}?",
+        "pod_unpause": "Resume pod {{name}}?"
+      },
+      "captures": {
+        "loading": "Loading…",
+        "close": "Close",
+        "empty": "Nothing to show."
+      },
+      "toast": {
+        "action_succeeded": "{{name}} succeeded.",
+        "action_failed": "Container action failed.",
+        "action_already_running": "Another container action is still running.",
+        "connection_missing": "The connection is no longer available.",
+        "capture_failed": "Container command failed.",
+        "terminal_opened": "Opened a terminal.",
+        "terminal_missing": "The connection is no longer available."
+      },
+      "columns": {
+        "name": "Name",
+        "cpu": "CPU",
+        "memory": "Memory",
+        "network": "Network",
+        "block": "Block",
+        "pids": "PIDs"
+      },
+      "inputs": {
+        "run_title": "Run container",
+        "run_placeholder": "image [command]",
+        "pull_title": "Pull image",
+        "pull_placeholder": "registry/image:tag",
+        "push_title": "Push image",
+        "push_placeholder": "registry/image:tag",
+        "build_title": "Build image",
+        "build_placeholder": "-t name:tag .",
+        "tag_title": "Tag image",
+        "tag_placeholder": "registry/image:tag",
+        "save_title": "Save image",
+        "save_placeholder": "/path/image.tar",
+        "load_title": "Load image",
+        "load_placeholder": "/path/image.tar",
+        "import_title": "Import image",
+        "import_placeholder": "/path/rootfs.tar name:tag",
+        "export_title": "Export container",
+        "export_placeholder": "/path/rootfs.tar",
+        "copy_title": "Copy files",
+        "copy_placeholder": "/src /dest",
+        "volume_title": "Create volume",
+        "volume_placeholder": "name",
+        "network_title": "Create network",
+        "network_placeholder": "name [driver]",
+        "pod_title": "Create pod",
+        "pod_placeholder": "name",
+        "rename_title": "Rename container",
+        "rename_placeholder": "new name",
+        "search_title": "Search images",
+        "search_placeholder": "term",
+        "login_title": "Log in to registry",
+        "login_placeholder": "registry"
+      }
+    },
     "host_redis": {
       "loading": "Probing Redis...",
       "unavailable": "redis-cli was not found on this host, and no Redis container is running.",
@@ -501,6 +668,9 @@
         "description": "Delete {{key}}? This cannot be undone.",
         "confirm": "Delete",
         "cancel": "Cancel"
+      ,
+        "prefix_description": "Delete all {{count}} keys under {{prefix}}?",
+        "more": "+{{count}} more"
       },
       "error": "Redis probe failed: {{error}}",
       "actions": {
@@ -512,6 +682,8 @@
         "set_value": "Set value",
         "delete": "Delete key",
         "close": "Close"
+      ,
+        "delete_prefix": "Delete subtree"
       },
       "toast": {
         "connection_missing": "The selected connection is no longer available.",

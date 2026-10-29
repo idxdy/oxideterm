@@ -5,12 +5,13 @@ use oxideterm_gpui_ui::select::{
     select_separator,
 };
 
-const TOOLS: [ContextSidebarTool; 13] = [
+const TOOLS: [ContextSidebarTool; 14] = [
     ContextSidebarTool::Monitor,
     ContextSidebarTool::Processes,
     ContextSidebarTool::Gpu,
     ContextSidebarTool::Docker,
     ContextSidebarTool::Podman,
+    ContextSidebarTool::Container,
     ContextSidebarTool::Services,
     ContextSidebarTool::Logs,
     ContextSidebarTool::Ports,
@@ -34,6 +35,7 @@ impl ContextSidebarTool {
             Self::Tmux => "sidebar.panels.tmux",
             Self::Docker => "sidebar.panels.docker",
             Self::Podman => "sidebar.panels.podman",
+            Self::Container => "sidebar.panels.container",
             Self::Ports => "sidebar.panels.ports",
             Self::Schedules => "sidebar.panels.schedules",
             Self::Filesystems => "sidebar.panels.filesystems",
@@ -52,6 +54,7 @@ impl ContextSidebarTool {
             Self::Tmux => LucideIcon::SplitSquareHorizontal,
             Self::Docker => LucideIcon::Docker,
             Self::Podman => LucideIcon::Container,
+            Self::Container => LucideIcon::Layers,
             Self::Ports => LucideIcon::Network,
             Self::Schedules => LucideIcon::CalendarClock,
             Self::Filesystems => LucideIcon::HardDrive,

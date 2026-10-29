@@ -270,6 +270,43 @@ impl WorkspaceApp {
                     )
                 }
             }
+            HostToolsNotice::ContainerActionFinished {
+                description,
+                succeeded,
+            } => {
+                if succeeded {
+                    (
+                        self.i18n_replace(
+                            "sidebar.host_container.toast.action_succeeded",
+                            &[("name", description)],
+                        ),
+                        TerminalNoticeVariant::Success,
+                    )
+                } else {
+                    (
+                        self.i18n.t("sidebar.host_container.toast.action_failed"),
+                        TerminalNoticeVariant::Error,
+                    )
+                }
+            }
+            HostToolsNotice::ContainerActionAlreadyRunning => (
+                self.i18n
+                    .t("sidebar.host_container.toast.action_already_running"),
+                TerminalNoticeVariant::Warning,
+            ),
+            HostToolsNotice::ContainerConnectionMissing => (
+                self.i18n
+                    .t("sidebar.host_container.toast.connection_missing"),
+                TerminalNoticeVariant::Error,
+            ),
+            HostToolsNotice::ContainerActionFailed => (
+                self.i18n.t("sidebar.host_container.toast.action_failed"),
+                TerminalNoticeVariant::Error,
+            ),
+            HostToolsNotice::ContainerCaptureFailed => (
+                self.i18n.t("sidebar.host_container.toast.capture_failed"),
+                TerminalNoticeVariant::Error,
+            ),
             HostToolsNotice::ServiceActionAlreadyRunning => (
                 self.i18n
                     .t("sidebar.host_services.toast.action_already_running"),

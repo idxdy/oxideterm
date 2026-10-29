@@ -542,6 +542,8 @@ pub(super) struct HostRedisValuePending {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum HostRedisMutationKind {
     Delete,
+    /// Deletes every key in `keys` in one exec (prefix deletion).
+    DeleteMany,
     Rename,
 }
 
@@ -552,6 +554,8 @@ pub(super) struct HostRedisMutationRequest {
     pub(super) database: u32,
     pub(super) kind: HostRedisMutationKind,
     pub(super) key: String,
+    /// Targets for `DeleteMany`; single mutations leave this empty.
+    pub(super) keys: Vec<String>,
     pub(super) new_key: Option<String>,
     pub(super) password: zeroize::Zeroizing<String>,
     pub(super) failure_fallback: String,
@@ -577,7 +581,10 @@ pub(super) struct HostRedisDeleteConfirm {
     pub(super) connection_id: String,
     pub(super) endpoint: oxideterm_connection_monitor::ResourceRedisEndpoint,
     pub(super) database: u32,
+    /// Display name: the key name, or the prefix for a subtree deletion.
     pub(super) key: String,
+    /// Every key the confirmation removes; a single key for leaf deletes.
+    pub(super) keys: Vec<String>,
     pub(super) presence: ExitPresence,
 }
 
@@ -940,6 +947,180 @@ impl HostPodmanResourcesState {
     }
 }
 
+/// Container tool inventory tabs. Pods only exist on Podman, so the panel
+/// hides that tab instead of rendering an always-empty page.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(super) enum HostContainerTab {
+    #[default]
+    Containers,
+    Images,
+    Volumes,
+    Networks,
+    Pods,
+    Stats,
+}
+
+pub(super) const HOST_CONTAINER_CAPTURE_DIALOG_DEFAULT_WIDTH: f32 = 760.0;
+pub(super) const HOST_CONTAINER_CAPTURE_DIALOG_DEFAULT_HEIGHT: f32 = 420.0;
+pub(super) const HOST_CONTAINER_CAPTURE_DIALOG_MIN_WIDTH: f32 = 420.0;
+pub(super) const HOST_CONTAINER_CAPTURE_DIALOG_MIN_HEIGHT: f32 = 260.0;
+pub(super) const HOST_CONTAINER_CAPTURE_DIALOG_MAX_WIDTH: f32 = 1100.0;
+pub(super) const HOST_CONTAINER_CAPTURE_DIALOG_MAX_HEIGHT: f32 = 720.0;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::workspace) enum HostContainerConfirmKind {
+    Container(oxideterm_container::ContainerAction),
+    Image(oxideterm_container::ImageAction),
+    Volume(oxideterm_container::VolumeAction),
+    Network(oxideterm_container::NetworkAction),
+    Pod(oxideterm_container::PodAction),
+    /// A command assembled from an input dialog; never shown as a confirm.
+    Raw,
+}
+
+/// A confirmed mutation stays here until its command delivery resolves.
+#[derive(Clone)]
+pub(in crate::workspace) struct HostContainerConfirmRequest {
+    pub(in crate::workspace) connection_id: String,
+    pub(in crate::workspace) instance: oxideterm_container::ContainerInstance,
+    pub(in crate::workspace) target_id: String,
+    pub(in crate::workspace) label: String,
+    pub(in crate::workspace) kind: HostContainerConfirmKind,
+}
+
+pub(in crate::workspace) struct HostContainerConfirmDelivery {
+    pub(in crate::workspace) request: HostContainerConfirmRequest,
+    pub(in crate::workspace) result: Result<SshCommandOutput, ()>,
+}
+
+/// Text-input dialogs for the container tool. Free-form arguments stay raw by
+/// design; identifiers are validated before they reach a command.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) enum HostContainerInputKind {
+    Run,
+    Pull,
+    Push,
+    Build,
+    Tag { image_id: String },
+    Save { image_id: String },
+    Load,
+    Import,
+    Export { container_id: String },
+    Copy { container_id: String },
+    CreateVolume,
+    CreateNetwork,
+    CreatePod,
+    Rename { container_id: String },
+    Search,
+    Login,
+}
+
+#[derive(Clone)]
+pub(super) struct HostContainerInputDialog {
+    pub(super) kind: HostContainerInputKind,
+    pub(super) value: String,
+}
+
+#[derive(Clone)]
+pub(in crate::workspace) enum HostContainerCaptureKind {
+    /// Engine detection; also refreshes the instance switcher.
+    Discovery,
+    Snapshot(oxideterm_container::ContainerInstance),
+    /// One-shot container resource usage.
+    Stats,
+    /// Read-only output rendered in the shared text dialog.
+    Text {
+        capture: oxideterm_container::ContainerCapture,
+        title: String,
+    },
+}
+
+#[derive(Clone)]
+pub(in crate::workspace) struct HostContainerCaptureRequest {
+    pub(in crate::workspace) connection_id: String,
+    pub(in crate::workspace) kind: HostContainerCaptureKind,
+    pub(in crate::workspace) failure_fallback: String,
+}
+
+pub(in crate::workspace) struct HostContainerCaptureDelivery {
+    pub(in crate::workspace) request: HostContainerCaptureRequest,
+    pub(in crate::workspace) result: Result<SshCommandOutput, ()>,
+}
+
+pub(super) struct HostContainerTextDialog {
+    pub(super) title: String,
+    pub(super) output: Option<Arc<zeroize::Zeroizing<String>>>,
+    pub(super) error: Option<String>,
+    pub(super) loading: bool,
+    pub(super) scroll_handle: gpui::ScrollHandle,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct HostContainerDialogResizeDrag {
+    pub(super) start_cursor: gpui::Point<gpui::Pixels>,
+    pub(super) start_width: f32,
+    pub(super) start_height: f32,
+}
+
+pub(super) struct HostContainerState {
+    pub(super) discovery: Option<oxideterm_container::ContainerDiscovery>,
+    pub(super) discovery_connection_id: Option<String>,
+    pub(super) discovery_running: bool,
+    /// Engine selection survives refreshes and is dropped only when the engine
+    /// disappears from discovery.
+    pub(super) selected_instance_id: Option<String>,
+    pub(super) snapshot_connection_id: Option<String>,
+    pub(super) snapshot: Option<oxideterm_container::ContainerSnapshot>,
+    pub(super) snapshot_running: bool,
+    pub(super) tab: HostContainerTab,
+    pub(super) confirm: Option<HostToolConfirmState<HostContainerConfirmRequest>>,
+    pub(super) action_running: bool,
+    pub(super) text_dialog: Option<HostContainerTextDialog>,
+    pub(super) text_dialog_running: Option<HostContainerCaptureRequest>,
+    /// User-chosen capture dialog size, kept across openings.
+    pub(super) text_dialog_size: (f32, f32),
+    pub(super) text_dialog_resize: Option<HostContainerDialogResizeDrag>,
+    pub(super) input_running: bool,
+    pub(super) stats: Option<Vec<oxideterm_container::ContainerStat>>,
+    pub(super) stats_running: bool,
+    /// One virtual list serves every inventory tab.
+    pub(super) list_state: ListState,
+    pub(super) list_cache: std::cell::RefCell<VirtualListSignatureCache>,
+}
+
+impl HostContainerState {
+    pub(super) fn new() -> Self {
+        Self {
+            discovery: None,
+            discovery_connection_id: None,
+            discovery_running: false,
+            selected_instance_id: None,
+            snapshot_connection_id: None,
+            snapshot: None,
+            snapshot_running: false,
+            tab: HostContainerTab::Containers,
+            confirm: None,
+            action_running: false,
+            text_dialog: None,
+            text_dialog_running: None,
+            text_dialog_size: (
+                HOST_CONTAINER_CAPTURE_DIALOG_DEFAULT_WIDTH,
+                HOST_CONTAINER_CAPTURE_DIALOG_DEFAULT_HEIGHT,
+            ),
+            text_dialog_resize: None,
+            input_running: false,
+            stats: None,
+            stats_running: false,
+            list_state: tauri_virtual_list_state(
+                0,
+                ListAlignment::Top,
+                TauriVirtualListSpec::new(px(64.0), 6),
+            ),
+            list_cache: std::cell::RefCell::new(VirtualListSignatureCache::default()),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::workspace) enum HostSnapshotFeedback {
     Silent,
@@ -956,6 +1137,9 @@ pub(in crate::workspace) enum HostToolsWindowModalSnapshot {
     PodmanLogs,
     PodmanInput,
     PodmanCaptureText,
+    ContainerConfirm(oxideterm_gpui_ui::motion::ExitPhase),
+    ContainerText,
+    ContainerInput,
     ServiceConfirm(oxideterm_gpui_ui::motion::ExitPhase),
     ServiceLogs,
     TmuxConfirm(oxideterm_gpui_ui::motion::ExitPhase),
@@ -1336,6 +1520,8 @@ pub(in crate::workspace) enum HostToolsTextInput {
     ScheduleSearch,
     FilesystemSearch,
     PackageSearch,
+    ContainerSearch,
+    ContainerDialog,
     RedisPassword,
     RedisRename,
     RedisSetValue,
@@ -1460,6 +1646,8 @@ pub(in crate::workspace) struct HostToolsMessages {
     pub(super) redis_create_key_empty_entries: String,
     pub(super) redis_create_key_invalid_field: String,
     pub(super) podman_capture_failed: String,
+    pub(super) container_terminal_opened: String,
+    pub(super) container_terminal_missing: String,
 }
 
 impl HostToolsMessages {
@@ -1487,6 +1675,8 @@ impl HostToolsMessages {
             redis_create_key_empty_entries: i18n.t("sidebar.host_redis.create_key.empty_entries"),
             redis_create_key_invalid_field: i18n.t("sidebar.host_redis.create_key.invalid_field"),
             podman_capture_failed: i18n.t("sidebar.host_podman.captures.failed"),
+            container_terminal_opened: i18n.t("sidebar.host_container.toast.terminal_opened"),
+            container_terminal_missing: i18n.t("sidebar.host_container.toast.terminal_missing"),
         }
     }
 }
@@ -1553,6 +1743,10 @@ impl<T> HostToolConfirmState<T> {
 /// Owns Host Tools input, selection, expansion, and virtual-list presentation state.
 pub(in crate::workspace) struct HostToolsUiState {
     pub(in crate::workspace) focused_input: Option<HostToolsTextInput>,
+    /// Container search text lives with the other Host Tools inputs so the
+    /// shared IME plumbing can read and replace it.
+    pub(super) host_container_search_query: String,
+    pub(super) host_container_input_dialog: Option<HostContainerInputDialog>,
     pub(in crate::workspace) host_process_search_query: String,
     pub(super) host_process_filter: ProcessFilter,
     pub(super) host_process_sort: ProcessSort,
@@ -1603,6 +1797,8 @@ impl HostToolsUiState {
     pub(in crate::workspace) fn new() -> Self {
         Self {
             focused_input: None,
+            host_container_search_query: String::new(),
+            host_container_input_dialog: None,
             host_process_search_query: String::new(),
             host_process_filter: ProcessFilter::All,
             host_process_sort: ProcessSort::Memory,
@@ -1714,6 +1910,9 @@ impl HostToolsUiState {
                 Some(HostToolsTextInput::PackageSearch),
                 ContextSidebarTool::Packages
             ) | (
+                Some(HostToolsTextInput::ContainerSearch | HostToolsTextInput::ContainerDialog),
+                ContextSidebarTool::Container
+            ) | (
                 Some(
                     HostToolsTextInput::RedisPassword
                         | HostToolsTextInput::RedisRename
@@ -1760,6 +1959,11 @@ impl HostToolsUiState {
             HostToolsTextInput::ScheduleSearch => Some(&self.host_schedule_search_query),
             HostToolsTextInput::FilesystemSearch => Some(&self.host_filesystem_search_query),
             HostToolsTextInput::PackageSearch => Some(&self.host_package_search_query),
+            HostToolsTextInput::ContainerSearch => Some(&self.host_container_search_query),
+            HostToolsTextInput::ContainerDialog => self
+                .host_container_input_dialog
+                .as_ref()
+                .map(|dialog| dialog.value.as_str()),
             HostToolsTextInput::RedisPassword => Some(&self.host_redis_password),
             HostToolsTextInput::RedisRename => self.host_redis_rename_value(),
             HostToolsTextInput::RedisSetValue => self.host_redis_set_value(),
@@ -1882,6 +2086,11 @@ impl HostToolsUiState {
             HostToolsTextInput::ScheduleSearch => Some(&mut self.host_schedule_search_query),
             HostToolsTextInput::FilesystemSearch => Some(&mut self.host_filesystem_search_query),
             HostToolsTextInput::PackageSearch => Some(&mut self.host_package_search_query),
+            HostToolsTextInput::ContainerSearch => Some(&mut self.host_container_search_query),
+            HostToolsTextInput::ContainerDialog => self
+                .host_container_input_dialog
+                .as_mut()
+                .map(|dialog| &mut dialog.value),
             HostToolsTextInput::RedisPassword => Some(&mut self.host_redis_password),
             HostToolsTextInput::RedisRename => self.host_redis_rename_value_mut(),
             HostToolsTextInput::RedisSetValue => self.host_redis_set_value_mut(),

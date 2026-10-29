@@ -35,6 +35,7 @@ oxideterm-atomic-file = { path = "../oxideterm-atomic-file" }
 oxideterm-app-lock = { path = "../oxideterm-app-lock" }
 oxideterm-cloud-sync = { path = "../oxideterm-cloud-sync" }
 oxideterm-connection-monitor = { path = "../oxideterm-connection-monitor" }
+oxideterm-container = { path = "../oxideterm-container" }
 oxideterm-connections = { path = "../oxideterm-connections" }
 oxideterm-desktop-presence = { path = "../oxideterm-desktop-presence" }
 oxideterm-editor-core = { path = "../oxideterm-editor-core" }

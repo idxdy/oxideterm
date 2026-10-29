@@ -154,6 +154,8 @@ pub(super) enum WorkspaceImeTarget {
     HostScheduleSearch,
     HostFilesystemSearch,
     HostPackageSearch,
+    HostContainerSearch,
+    HostContainerDialog,
     HostRedisPassword,
     HostRedisRename,
     HostRedisSetValue,
@@ -449,6 +451,8 @@ pub(super) fn workspace_ime_target_for_plain_host_tools_input(
         HostToolsTextInput::ScheduleSearch => Some(WorkspaceImeTarget::HostScheduleSearch),
         HostToolsTextInput::FilesystemSearch => Some(WorkspaceImeTarget::HostFilesystemSearch),
         HostToolsTextInput::PackageSearch => Some(WorkspaceImeTarget::HostPackageSearch),
+        HostToolsTextInput::ContainerSearch => Some(WorkspaceImeTarget::HostContainerSearch),
+        HostToolsTextInput::ContainerDialog => Some(WorkspaceImeTarget::HostContainerDialog),
         HostToolsTextInput::RedisPassword => Some(WorkspaceImeTarget::HostRedisPassword),
         HostToolsTextInput::RedisRename => Some(WorkspaceImeTarget::HostRedisRename),
         HostToolsTextInput::RedisSetValue => Some(WorkspaceImeTarget::HostRedisSetValue),
@@ -575,6 +579,8 @@ impl WorkspaceImeTarget {
             Self::HostScheduleSearch => 14,
             Self::HostFilesystemSearch => 15,
             Self::HostPackageSearch => 16,
+            Self::HostContainerSearch => 36,
+            Self::HostContainerDialog => 37,
             Self::HostRedisPassword => 28,
             Self::HostRedisRename => 29,
             Self::HostRedisSetValue => 30,
@@ -1327,6 +1333,8 @@ impl WorkspaceApp {
                 HostToolsTextInput::ScheduleSearch => WorkspaceImeTarget::HostScheduleSearch,
                 HostToolsTextInput::FilesystemSearch => WorkspaceImeTarget::HostFilesystemSearch,
                 HostToolsTextInput::PackageSearch => WorkspaceImeTarget::HostPackageSearch,
+                HostToolsTextInput::ContainerSearch => WorkspaceImeTarget::HostContainerSearch,
+                HostToolsTextInput::ContainerDialog => WorkspaceImeTarget::HostContainerDialog,
                 HostToolsTextInput::RedisPassword => WorkspaceImeTarget::HostRedisPassword,
                 HostToolsTextInput::RedisRename => WorkspaceImeTarget::HostRedisRename,
                 HostToolsTextInput::RedisSetValue => WorkspaceImeTarget::HostRedisSetValue,
@@ -2433,6 +2441,18 @@ impl WorkspaceApp {
                 .ui
                 .input_value(HostToolsTextInput::PackageSearch)
                 .map(str::to_string),
+            WorkspaceImeTarget::HostContainerSearch => self
+                .host_tools
+                .read(cx)
+                .ui
+                .input_value(HostToolsTextInput::ContainerSearch)
+                .map(str::to_string),
+            WorkspaceImeTarget::HostContainerDialog => self
+                .host_tools
+                .read(cx)
+                .ui
+                .input_value(HostToolsTextInput::ContainerDialog)
+                .map(str::to_string),
             WorkspaceImeTarget::HostRedisPassword => self
                 .host_tools
                 .read(cx)
@@ -3514,6 +3534,22 @@ impl WorkspaceApp {
             WorkspaceImeTarget::HostPackageSearch => {
                 self.replace_host_tools_text_input(
                     HostToolsTextInput::PackageSearch,
+                    replacement_range,
+                    text,
+                    cx,
+                );
+            }
+            WorkspaceImeTarget::HostContainerSearch => {
+                self.replace_host_tools_text_input(
+                    HostToolsTextInput::ContainerSearch,
+                    replacement_range,
+                    text,
+                    cx,
+                );
+            }
+            WorkspaceImeTarget::HostContainerDialog => {
+                self.replace_host_tools_text_input(
+                    HostToolsTextInput::ContainerDialog,
                     replacement_range,
                     text,
                     cx,

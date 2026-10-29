@@ -1372,6 +1372,7 @@ impl WorkspaceApp {
                     | ContextSidebarTool::Tmux
                     | ContextSidebarTool::Docker
                     | ContextSidebarTool::Podman
+                    | ContextSidebarTool::Container
                     | ContextSidebarTool::Ports
                     | ContextSidebarTool::Schedules
                     | ContextSidebarTool::Filesystems
@@ -1389,6 +1390,9 @@ impl WorkspaceApp {
             return;
         }
         if self.handle_host_podman_search_key(event, cx) {
+            return;
+        }
+        if self.handle_host_container_search_key(event, cx) {
             return;
         }
         if self.handle_host_redis_key(event, cx) {

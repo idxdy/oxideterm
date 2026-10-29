@@ -65,6 +65,7 @@ pub(in crate::workspace) struct HostToolsEntity {
     pub(super) host_docker_operations: HostDockerOperationsState,
     pub(super) host_podman_operations: HostPodmanOperationsState,
     pub(super) host_podman_resources: HostPodmanResourcesState,
+    pub(super) host_container: HostContainerState,
     pub(super) host_services: HostServicesState,
     pub(super) host_redis: HostRedisState,
     pub(super) host_tmux: HostTmuxState,
@@ -553,6 +554,14 @@ impl HostToolsEntity {
             Some(HostToolsWindowModalSnapshot::DockerConfirm(
                 confirm.presence.phase(),
             ))
+        } else if self.ui.host_container_input_dialog.is_some() {
+            Some(HostToolsWindowModalSnapshot::ContainerInput)
+        } else if self.host_container.text_dialog.is_some() {
+            Some(HostToolsWindowModalSnapshot::ContainerText)
+        } else if let Some(confirm) = self.host_container.confirm.as_ref() {
+            Some(HostToolsWindowModalSnapshot::ContainerConfirm(
+                confirm.presence.phase(),
+            ))
         } else if self.host_podman_resources.text_dialog.is_some() {
             Some(HostToolsWindowModalSnapshot::PodmanCaptureText)
         } else if self.ui.host_podman_input_dialog.is_some() {
@@ -609,6 +618,7 @@ impl HostToolsEntity {
             host_docker_operations: HostDockerOperationsState::new(),
             host_podman_operations: HostPodmanOperationsState::new(),
             host_podman_resources: HostPodmanResourcesState::new(),
+            host_container: HostContainerState::new(),
             host_services: HostServicesState::new(),
             host_redis: HostRedisState::new(),
             host_tmux: HostTmuxState::new(),
@@ -706,6 +716,8 @@ impl HostToolsEntity {
             HostToolsTextInput::ScheduleSearch => self.host_schedules.expanded_index = None,
             HostToolsTextInput::FilesystemSearch => self.host_filesystems.expanded_index = None,
             HostToolsTextInput::PackageSearch => self.host_packages.expanded_index = None,
+            // The container search and dialog inputs own no expansion state.
+            HostToolsTextInput::ContainerSearch | HostToolsTextInput::ContainerDialog => {}
             HostToolsTextInput::ProcessRenice
             | HostToolsTextInput::TmuxDialog
             | HostToolsTextInput::RedisPassword
@@ -1456,9 +1468,17 @@ impl HostToolsEntity {
             return false;
         };
         let database = request.database.to_string();
-        let values: Vec<&str> = match request.new_key.as_deref() {
-            Some(new_key) => vec![database.as_str(), request.key.as_str(), new_key],
-            None => vec![database.as_str(), request.key.as_str()],
+        let values: Vec<&str> = match request.kind {
+            HostRedisMutationKind::DeleteMany => {
+                let mut values = Vec::with_capacity(1 + request.keys.len());
+                values.push(database.as_str());
+                values.extend(request.keys.iter().map(String::as_str));
+                values
+            }
+            _ => match request.new_key.as_deref() {
+                Some(new_key) => vec![database.as_str(), request.key.as_str(), new_key],
+                None => vec![database.as_str(), request.key.as_str()],
+            },
         };
         let Some(payload) = redis_stdin_payload(&request.password, &values) else {
             return false;
@@ -1658,6 +1678,92 @@ impl HostToolsEntity {
                 .map_err(|_| ());
             let _ = delivery_tx.send(super::delivery::HostToolsReliableDelivery::PodmanCapture(
                 HostPodmanCaptureDelivery { request, result },
+            ));
+        });
+        true
+    }
+
+    pub(super) fn spawn_container_capture(
+        &self,
+        command: String,
+        request: HostContainerCaptureRequest,
+        timeout: Duration,
+        max_output_size: usize,
+        runtime: tokio::runtime::Handle,
+    ) -> bool {
+        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+            return false;
+        };
+        let delivery_tx = self.reliable_delivery_tx.clone();
+        // Capture output stays inside the Entity and is parsed before render.
+        runtime.spawn(async move {
+            let result = handle
+                .run_command_capture(&command, timeout, max_output_size)
+                .await
+                .map_err(|_| ());
+            let _ = delivery_tx.send(
+                super::delivery::HostToolsReliableDelivery::ContainerCapture(
+                    HostContainerCaptureDelivery { request, result },
+                ),
+            );
+        });
+        true
+    }
+
+    /// Audits the action class only; the composed command never reaches the record.
+    pub(super) fn spawn_container_action(
+        &self,
+        command: String,
+        request: HostContainerConfirmRequest,
+        timeout: Duration,
+        max_output_size: usize,
+        runtime: tokio::runtime::Handle,
+    ) -> bool {
+        let audit = self.host_tool_audit(
+            &request.connection_id,
+            "container_action",
+            Some(&format!("resource={:?}", request.kind)),
+        );
+        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+            audit.finish(
+                oxideterm_audit::AuditOutcome::Failed,
+                oxideterm_audit::AuditEvidence::Request,
+                None,
+                None,
+            );
+            return false;
+        };
+        let delivery_tx = self.reliable_delivery_tx.clone();
+        runtime.spawn(async move {
+            let mut audit_exit_code = None;
+            let result = handle
+                .run_command_capture(&command, timeout, max_output_size)
+                .await
+                .map(|mut output| {
+                    audit_exit_code = output.exit_code;
+                    zeroize::Zeroize::zeroize(&mut output.stdout);
+                    zeroize::Zeroize::zeroize(&mut output.stderr);
+                    output
+                })
+                .map_err(|_| ());
+            let audit_outcome = match (&result, audit_exit_code) {
+                (Err(_), _) => oxideterm_audit::AuditOutcome::Failed,
+                (_, Some(0)) => oxideterm_audit::AuditOutcome::Succeeded,
+                (_, Some(_)) => oxideterm_audit::AuditOutcome::Failed,
+                (_, None) => oxideterm_audit::AuditOutcome::Unknown,
+            };
+            audit.finish(
+                audit_outcome,
+                if audit_exit_code.is_some() {
+                    oxideterm_audit::AuditEvidence::ExitCode
+                } else {
+                    oxideterm_audit::AuditEvidence::Protocol
+                },
+                audit_exit_code,
+                None,
+            );
+            let _ = delivery_tx.send(super::delivery::HostToolsReliableDelivery::ContainerAction(
+                HostContainerConfirmDelivery { request, result },
             ));
         });
         true
@@ -2001,6 +2107,9 @@ impl HostToolsEntity {
             return false;
         }
         self.active_tool = tool;
+        if tool == ContextSidebarTool::Container && self.visibility.sidebar_is_visible() {
+            self.request_container_discovery_if_needed(cx);
+        }
         cx.notify();
         true
     }
@@ -2019,6 +2128,10 @@ impl HostToolsEntity {
         }
         if tool != ContextSidebarTool::Docker {
             self.dismiss_docker_confirm(cx);
+        }
+        if tool != ContextSidebarTool::Container {
+            self.dismiss_container_confirm(cx);
+            self.dismiss_container_text_dialog(cx);
         }
         if tool != ContextSidebarTool::Podman {
             self.dismiss_podman_confirm(cx);
@@ -2174,6 +2287,8 @@ impl HostToolsEntity {
         self.select_connection(connection_id, focus_origin, cx);
         self.dismiss_process_confirm(cx);
         self.dismiss_docker_confirm(cx);
+        self.dismiss_container_confirm(cx);
+        self.dismiss_container_text_dialog(cx);
         self.dismiss_podman_confirm(cx);
         self.dismiss_podman_logs_dialog(cx);
         self.dismiss_service_confirm(cx);
@@ -2232,6 +2347,7 @@ impl HostToolsEntity {
                     | ContextSidebarTool::Processes
                     | ContextSidebarTool::Docker
                     | ContextSidebarTool::Podman
+                    | ContextSidebarTool::Container
             )
         {
             // Tests record the command boundary without opening a real SSH channel.
@@ -2306,6 +2422,10 @@ impl HostToolsEntity {
                     messages.redis_probe_failed,
                     cx,
                 );
+                Vec::new()
+            }
+            ContextSidebarTool::Container => {
+                self.request_container_discovery(connection_id, feedback, cx);
                 Vec::new()
             }
             ContextSidebarTool::Monitor
@@ -2603,6 +2723,25 @@ impl WorkspaceApp {
             HostToolsWindowModalSnapshot::PodmanConfirm(_) => {
                 self.handle_host_podman_confirm_key(event, cx)
             }
+            HostToolsWindowModalSnapshot::ContainerConfirm(_) => {
+                self.handle_host_container_confirm_key(event, cx)
+            }
+            HostToolsWindowModalSnapshot::ContainerText => {
+                if event.keystroke.key.as_str() == "escape" {
+                    self.host_tools.update(cx, |host_tools, cx| {
+                        host_tools.dismiss_container_text_dialog(cx);
+                    });
+                }
+                true
+            }
+            HostToolsWindowModalSnapshot::ContainerInput => {
+                if event.keystroke.key.as_str() == "escape" {
+                    self.host_tools.update(cx, |host_tools, cx| {
+                        host_tools.dismiss_container_input_dialog(cx);
+                    });
+                }
+                true
+            }
             HostToolsWindowModalSnapshot::PodmanLogs => {
                 if self.handle_host_log_search_key(event, cx) {
                     return true;
@@ -2822,6 +2961,8 @@ mod tests {
                 redis_create_key_empty_entries: "Redis create key empty entries".to_string(),
                 redis_create_key_invalid_field: "Redis create key invalid field".to_string(),
                 podman_capture_failed: "Podman capture failed".to_string(),
+                container_terminal_opened: "Opened a terminal".to_string(),
+                container_terminal_missing: "Connection is no longer available".to_string(),
             });
             entity.select_connection(connection_id.clone(), None, cx);
             entity.active_tool = ContextSidebarTool::Gpu;
@@ -3008,6 +3149,8 @@ mod tests {
                 redis_create_key_empty_entries: "Redis create key empty entries".to_string(),
                 redis_create_key_invalid_field: "Redis create key invalid field".to_string(),
                 podman_capture_failed: "Podman capture failed".to_string(),
+                container_terminal_opened: "Opened a terminal".to_string(),
+                container_terminal_missing: "Connection is no longer available".to_string(),
             });
             entity.select_connection(connection_id.clone(), None, cx);
 
@@ -3334,6 +3477,8 @@ mod tests {
                 redis_create_key_empty_entries: "Redis create key empty entries".to_string(),
                 redis_create_key_invalid_field: "Redis create key invalid field".to_string(),
                 podman_capture_failed: "Podman capture failed".to_string(),
+                container_terminal_opened: "Opened a terminal".to_string(),
+                container_terminal_missing: "Connection is no longer available".to_string(),
             });
             entity.select_tool(ContextSidebarTool::Services, cx);
             assert!(

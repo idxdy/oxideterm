@@ -530,6 +530,8 @@ struct HostRedisTreeRow {
     is_key: bool,
     /// Full key name for rows that address one key.
     key: Option<String>,
+    /// Colon path of the tree node; deleting it also deletes its subtree.
+    prefix: Option<String>,
     /// Database the row belongs to; keys are only unique within one database.
     database: u32,
     /// Synthetic leaf standing for a prefix that is itself a key.
@@ -1304,6 +1306,32 @@ impl HostToolsEntity {
                         cx.stop_propagation();
                     }),
                 ));
+        }
+
+        if row.key_count > 1
+            && !row.is_database
+            && let Some(prefix) = row.prefix.clone()
+        {
+            let delete_prefix = prefix.clone();
+            element = element.child(host_tools_tooltip_icon_button(
+                tokens,
+                LucideIcon::Trash2,
+                12.0,
+                rgb(MONITOR_RED),
+                oxideterm_gpui_ui::button::IconButtonOptions {
+                    size: 20.0,
+                    has_background: false,
+                    idle_opacity: 1.0,
+                    ..oxideterm_gpui_ui::button::IconButtonOptions::compact(20.0)
+                },
+                i18n.t("sidebar.host_redis.actions.delete_prefix"),
+                "host-redis-delete-prefix",
+                true,
+                cx.listener(move |host_tools, _event, _window, cx| {
+                    host_tools.request_redis_delete_prefix(row_database, delete_prefix.clone(), cx);
+                    cx.stop_propagation();
+                }),
+            ));
         }
 
         // A key row opens the value viewer; prefix rows only expand.
@@ -2737,9 +2765,56 @@ impl HostToolsEntity {
     ) -> Option<AnyElement> {
         let confirm = self.host_redis.delete_confirm.as_ref()?;
         let key = confirm.key.clone();
-        let description = i18n
-            .t("sidebar.host_redis.delete.description")
-            .replace("{{key}}", &key);
+        let keys = confirm.keys.clone();
+        let description: AnyElement = if keys.len() > 1 {
+            let heading = i18n
+                .t("sidebar.host_redis.delete.prefix_description")
+                .replace("{{prefix}}", &key)
+                .replace("{{count}}", &keys.len().to_string());
+            let visible = keys.iter().take(200);
+            let mut list = div().flex().flex_col().gap(px(1.0));
+            for (index, name) in visible.enumerate() {
+                list = list.child(
+                    div()
+                        .id(("host-redis-delete-key", index))
+                        .flex_none()
+                        .truncate()
+                        .child(name.clone()),
+                );
+            }
+            if keys.len() > 200 {
+                list = list.child(
+                    div()
+                        .flex_none()
+                        .text_color(rgb(tokens.ui.text_muted))
+                        .child(
+                            i18n.t("sidebar.host_redis.delete.more")
+                                .replace("{{count}}", &(keys.len() - 200).to_string()),
+                        ),
+                );
+            }
+            div()
+                .flex()
+                .flex_col()
+                .gap_2()
+                .child(heading)
+                .child(
+                    div()
+                        .id("host-redis-delete-keys")
+                        .max_h(px(180.0))
+                        .overflow_y_scroll()
+                        .text_size(px(11.0))
+                        .child(list),
+                )
+                .into_any_element()
+        } else {
+            div()
+                .child(
+                    i18n.t("sidebar.host_redis.delete.description")
+                        .replace("{{key}}", &key),
+                )
+                .into_any_element()
+        };
         Some(
             oxideterm_gpui_ui::confirm::confirm_dialog_with_focus_motion(
                 tokens,
@@ -2750,7 +2825,7 @@ impl HostToolsEntity {
                     title: div()
                         .child(i18n.t("sidebar.host_redis.delete.title"))
                         .into_any_element(),
-                    description: Some(div().child(description).into_any_element()),
+                    description: Some(description),
                     cancel_label: div()
                         .child(i18n.t("sidebar.host_redis.delete.cancel"))
                         .into_any_element(),
@@ -2800,6 +2875,7 @@ fn host_redis_tree_rows(
             is_database: true,
             is_key: false,
             key: None,
+            prefix: None,
             database: database.index,
             is_current_key: false,
         });
@@ -3603,6 +3679,7 @@ impl HostToolsEntity {
             database,
             HostRedisMutationKind::Rename,
             key,
+            Vec::new(),
             Some(new_key),
             cx,
         );
@@ -3621,7 +3698,48 @@ impl HostToolsEntity {
             connection_id,
             endpoint,
             database,
+            keys: vec![key.clone()],
             key,
+            presence: oxideterm_gpui_ui::motion::ExitPresence::visible(),
+        });
+        cx.notify();
+    }
+
+    /// Opens the confirmation for a whole prefix, listing every key the
+    /// subtree holds. Redis has no folder object, so "delete a node" means
+    /// deleting each key whose name lives under that colon path.
+    pub(in crate::workspace::connection_monitor) fn request_redis_delete_prefix(
+        &mut self,
+        database: u32,
+        prefix: String,
+        cx: &mut Context<Self>,
+    ) {
+        if prefix.trim().is_empty() {
+            return;
+        }
+        let Some((connection_id, endpoint)) = self.redis_value_target() else {
+            return;
+        };
+        let Some(keys) = self.host_redis.keys.as_ref() else {
+            return;
+        };
+        let Some(database_keys) = keys
+            .databases
+            .iter()
+            .find(|candidate| candidate.index == database)
+            .map(|candidate| redis_prefix_keys(&candidate.keys, &prefix))
+        else {
+            return;
+        };
+        if database_keys.is_empty() {
+            return;
+        }
+        self.host_redis.delete_confirm = Some(HostRedisDeleteConfirm {
+            connection_id,
+            endpoint,
+            database,
+            keys: database_keys,
+            key: prefix,
             presence: oxideterm_gpui_ui::motion::ExitPresence::visible(),
         });
         cx.notify();
@@ -3644,11 +3762,17 @@ impl HostToolsEntity {
             return;
         };
         self.ui.clear_input_focus();
+        let kind = if confirm.keys.len() > 1 {
+            HostRedisMutationKind::DeleteMany
+        } else {
+            HostRedisMutationKind::Delete
+        };
         self.request_redis_mutation(
             confirm.connection_id,
             confirm.database,
-            HostRedisMutationKind::Delete,
+            kind,
             confirm.key,
+            confirm.keys,
             None,
             cx,
         );
@@ -3834,6 +3958,7 @@ impl HostToolsEntity {
         database: u32,
         kind: HostRedisMutationKind,
         key: String,
+        keys: Vec<String>,
         new_key: Option<String>,
         cx: &mut Context<Self>,
     ) {
@@ -3849,6 +3974,7 @@ impl HostToolsEntity {
             database,
             kind,
             key,
+            keys,
             new_key,
             password: self.ui.host_redis_password.clone(),
             failure_fallback: messages.redis_key_action_failed,
@@ -3863,6 +3989,9 @@ impl HostToolsEntity {
                 os_type,
                 match request.kind {
                     HostRedisMutationKind::Delete => RedisKeyMutation::Delete,
+                    HostRedisMutationKind::DeleteMany => {
+                        return redis_keys_delete_command(&request.endpoint, os_type);
+                    }
                     HostRedisMutationKind::Rename => RedisKeyMutation::Rename,
                 },
             )
@@ -3903,6 +4032,7 @@ impl HostToolsEntity {
                     && running.database == delivery.request.database
                     && running.kind == delivery.request.kind
                     && running.key == delivery.request.key
+                    && running.keys == delivery.request.keys
                     && running.new_key == delivery.request.new_key
             });
         if !is_current {
@@ -3950,9 +4080,11 @@ impl HostToolsEntity {
         }
         cx.emit(HostToolsEvent::ShowNotice(
             match (request.kind, succeeded) {
-                (HostRedisMutationKind::Delete, true) => HostToolsNotice::RedisKeyDeleted {
-                    key: request.key.clone(),
-                },
+                (HostRedisMutationKind::Delete | HostRedisMutationKind::DeleteMany, true) => {
+                    HostToolsNotice::RedisKeyDeleted {
+                        key: request.key.clone(),
+                    }
+                }
                 (HostRedisMutationKind::Rename, true) => HostToolsNotice::RedisKeyRenamed {
                     key: request.new_key.clone().unwrap_or_default(),
                 },
@@ -3985,6 +4117,7 @@ fn push_redis_tree_rows(
             is_database: false,
             is_key: node.is_key,
             key: node.is_key.then(|| node.path.clone()),
+            prefix: Some(node.path.clone()),
             database: database_index,
             is_current_key: false,
         });
@@ -4003,6 +4136,7 @@ fn push_redis_tree_rows(
                     is_database: false,
                     is_key: true,
                     key: Some(node.path.clone()),
+                    prefix: Some(node.path.clone()),
                     database: database_index,
                     is_current_key: true,
                 });
@@ -4188,5 +4322,41 @@ mod tests {
         assert!(rows[2].is_key && !rows[2].expandable);
         assert!(rows[2].is_current_key);
         assert!(!rows[1].is_current_key);
+    }
+}
+
+/// Keys that belong to a colon-separated prefix: the prefix itself when it is
+/// also a key, plus every key below it.
+fn redis_prefix_keys(keys: &[String], prefix: &str) -> Vec<String> {
+    let nested = format!("{prefix}:");
+    keys.iter()
+        .filter(|key| key.as_str() == prefix || key.starts_with(&nested))
+        .cloned()
+        .collect()
+}
+
+#[cfg(test)]
+mod subtree_tests {
+    use super::*;
+
+    #[test]
+    fn prefix_selection_includes_the_prefix_key_and_its_descendants() {
+        let keys: Vec<String> = ["app", "app:user:1", "app:user:2", "appdata", "other"]
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        assert_eq!(
+            redis_prefix_keys(&keys, "app"),
+            vec![
+                "app".to_string(),
+                "app:user:1".to_string(),
+                "app:user:2".to_string()
+            ]
+        );
+        assert!(redis_prefix_keys(&keys, "missing").is_empty());
+        assert_eq!(
+            redis_prefix_keys(&keys, "appdata"),
+            vec!["appdata".to_string()]
+        );
     }
 }
