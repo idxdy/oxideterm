@@ -64,12 +64,19 @@ impl WorkspaceApp {
         event: &KeyDownEvent,
         cx: &mut Context<Self>,
     ) -> bool {
-        if self.host_tools.read(cx).podman_confirm_view().is_none() {
+        let host_tools = self.host_tools.read(cx);
+        let container_confirm = host_tools.podman_confirm_view().is_some();
+        let pod_confirm = host_tools.podman_pod_confirm_view().is_some();
+        if !container_confirm && !pod_confirm {
             return false;
         }
         match self.handle_standard_confirm_key(event, cx) {
             Some(ConfirmKeyboardAction::Cancel) => {
-                self.begin_host_podman_confirm_exit(cx);
+                if container_confirm {
+                    self.begin_host_podman_confirm_exit(cx);
+                } else {
+                    self.begin_host_podman_pod_confirm_exit(cx);
+                }
                 true
             }
             Some(ConfirmKeyboardAction::Confirm) => {
@@ -79,13 +86,29 @@ impl WorkspaceApp {
                     oxideterm_gpui_ui::motion::MotionDuration::Control,
                 );
                 self.host_tools.update(cx, |host_tools, cx| {
-                    host_tools.confirm_podman_action_from_view(delay, cx);
+                    if container_confirm {
+                        host_tools.confirm_podman_action_from_view(delay, cx);
+                    } else {
+                        host_tools.confirm_podman_pod_action_from_view(delay, cx);
+                    }
                 });
                 true
             }
             Some(ConfirmKeyboardAction::Handled) => true,
             None => false,
         }
+    }
+
+    /// Keeps the pod request mounted until the current exit generation completes.
+    fn begin_host_podman_pod_confirm_exit(&mut self, cx: &mut Context<Self>) -> bool {
+        self.clear_standard_confirm_focus();
+        let delay = oxideterm_gpui_ui::motion::duration(
+            &self.tokens,
+            oxideterm_gpui_ui::motion::MotionDuration::Control,
+        );
+        self.host_tools.update(cx, |host_tools, cx| {
+            host_tools.begin_podman_pod_confirm_exit(delay, cx)
+        })
     }
 
     /// Keeps the request mounted until the current exit generation completes.
@@ -109,6 +132,18 @@ impl WorkspaceApp {
         let focused_action = self.standard_confirm_focus();
         self.host_tools.update(cx, |host_tools, cx| {
             host_tools.render_host_podman_confirm_dialog(&tokens, i18n, focused_action, cx)
+        })
+    }
+
+    pub(in crate::workspace) fn render_host_podman_pod_confirm_dialog(
+        &self,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let tokens = self.tokens;
+        let i18n = &self.i18n;
+        let focused_action = self.standard_confirm_focus();
+        self.host_tools.update(cx, |host_tools, cx| {
+            host_tools.render_host_podman_pod_confirm_dialog(&tokens, i18n, focused_action, cx)
         })
     }
 
@@ -147,6 +182,44 @@ struct HostPodmanPanelSnapshot {
     visible_count: usize,
     status: ResourcePodmanStatus,
     has_metrics: bool,
+}
+
+struct HostPodmanPodsPanelSnapshot {
+    selected_connection_id: String,
+    rows: Vec<ResourcePodmanPod>,
+    status: ResourcePodmanStatus,
+    has_metrics: bool,
+}
+
+impl HostToolsEntity {
+    fn podman_pods_panel_snapshot(&self) -> Option<HostPodmanPodsPanelSnapshot> {
+        let connections = self.monitor_connections();
+        let fallback_connection_id = connections.first()?.connection_id.clone();
+        let selected_connection_id = self
+            .selected_connection_id_owned()
+            .filter(|selected_id| {
+                connections
+                    .iter()
+                    .any(|connection| connection.connection_id == *selected_id)
+            })
+            .unwrap_or(fallback_connection_id);
+        let current = self.profiler_registry().current(&selected_connection_id);
+        let metrics = current.as_ref().and_then(|(metrics, _)| metrics.as_ref());
+        let rows = metrics
+            .map(|metrics| {
+                visible_podman_pods(&metrics.podman.pods, &self.ui.host_podman_search_query)
+            })
+            .unwrap_or_default();
+        let status = metrics
+            .map(|metrics| metrics.podman.status.clone())
+            .unwrap_or_default();
+        Some(HostPodmanPodsPanelSnapshot {
+            selected_connection_id,
+            rows,
+            status,
+            has_metrics: current.is_some(),
+        })
+    }
 }
 
 impl HostToolsEntity {
@@ -233,7 +306,13 @@ impl HostToolsEntity {
             HostPodmanTab::Containers => {
                 let mut snapshot = snapshot;
                 self.sync_host_podman_list_state(&snapshot.rows, &snapshot.selected_connection_id);
-                let search = self.render_host_podman_search(&search_ime, tokens, i18n, cx);
+                let search = self.render_host_podman_search(
+                    &search_ime,
+                    "sidebar.host_podman.search_placeholder",
+                    tokens,
+                    i18n,
+                    cx,
+                );
                 let list = self.render_host_podman_list(
                     std::mem::take(&mut snapshot.rows),
                     snapshot.has_metrics,
@@ -279,6 +358,14 @@ impl HostToolsEntity {
                     .child(list)
                     .into_any_element()
             }
+            HostPodmanTab::Pods => self.render_host_podman_pods_tab(
+                &search_ime,
+                tokens,
+                i18n,
+                mono_font_family.clone(),
+                selectable_text,
+                cx,
+            ),
             HostPodmanTab::Images | HostPodmanTab::Volumes | HostPodmanTab::Networks => self
                 .render_podman_resources_body(
                     tab,
@@ -307,6 +394,7 @@ impl HostToolsEntity {
     fn render_host_podman_search(
         &self,
         ime: &HostToolsPlainTextImeFrame,
+        placeholder_key: &'static str,
         tokens: &ThemeTokens,
         i18n: &I18n,
         cx: &mut Context<Self>,
@@ -319,7 +407,7 @@ impl HostToolsEntity {
                 tokens,
                 TextInputView {
                     value: &self.ui.host_podman_search_query,
-                    placeholder: i18n.t("sidebar.host_podman.search_placeholder"),
+                    placeholder: i18n.t(placeholder_key),
                     focused: self.ui.input_is_focused(input),
                     caret_visible: ime.caret_visible(),
                     secret: false,
@@ -587,6 +675,576 @@ impl HostToolsEntity {
                     )),
             )
             .into_any_element()
+    }
+
+    fn render_host_podman_pods_tab(
+        &self,
+        search_ime: &HostToolsPlainTextImeFrame,
+        tokens: &ThemeTokens,
+        i18n: &I18n,
+        mono_font_family: SharedString,
+        selectable_text: &SelectableTextRenderState,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let Some(snapshot) = self.podman_pods_panel_snapshot() else {
+            return host_tools_center_state(
+                LucideIcon::Layers,
+                tokens.ui.text_muted,
+                i18n.t("profiler.panel.no_connection"),
+                selectable_text,
+                cx,
+            );
+        };
+        let selected_connection_id = snapshot.selected_connection_id.clone();
+        self.sync_host_podman_pods_list_state(&snapshot.rows, &selected_connection_id);
+        let status_row = self.render_host_podman_pods_status_row(
+            snapshot.rows.len(),
+            selected_connection_id.clone(),
+            tokens,
+            i18n,
+            cx,
+        );
+        let list = self.render_host_podman_pods_list(
+            snapshot.rows,
+            snapshot.has_metrics,
+            snapshot.status,
+            selected_connection_id,
+            tokens,
+            i18n,
+            mono_font_family,
+            selectable_text,
+            cx,
+        );
+        div()
+            .w_full()
+            .min_w_0()
+            .flex_1()
+            .min_h_0()
+            .flex()
+            .flex_col()
+            .overflow_hidden()
+            .child(
+                div()
+                    .flex_none()
+                    .w_full()
+                    .min_w_0()
+                    .px_3()
+                    .pt_2()
+                    .pb_2()
+                    .flex()
+                    .flex_col()
+                    .gap_2()
+                    .child(self.render_host_podman_search(
+                        search_ime,
+                        "sidebar.host_podman.pods.search_placeholder",
+                        tokens,
+                        i18n,
+                        cx,
+                    ))
+                    .child(status_row),
+            )
+            .child(list)
+            .into_any_element()
+    }
+
+    fn render_host_podman_pods_status_row(
+        &self,
+        visible_count: usize,
+        selected_connection_id: String,
+        tokens: &ThemeTokens,
+        i18n: &I18n,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let theme = tokens.ui;
+        div()
+            .flex()
+            .items_center()
+            .justify_between()
+            .gap_2()
+            .min_w_0()
+            .text_size(px(11.0))
+            .text_color(rgb(theme.text_muted))
+            .child(div().flex_none().child(format!(
+                "{} {}",
+                visible_count,
+                i18n.t("sidebar.host_podman.pods.count_suffix")
+            )))
+            .child(host_tools_tooltip_icon_button(
+                tokens,
+                LucideIcon::RefreshCw,
+                13.0,
+                rgb(theme.text),
+                oxideterm_gpui_ui::button::IconButtonOptions {
+                    size: 24.0,
+                    has_background: true,
+                    background: Some(rgb(theme.bg_hover)),
+                    hover_background: Some(rgb(theme.bg_panel)),
+                    idle_opacity: 1.0,
+                    ..oxideterm_gpui_ui::button::IconButtonOptions::compact(24.0)
+                },
+                i18n.t("sidebar.host_podman.actions.refresh"),
+                "host-podman-pods-refresh",
+                true,
+                cx.listener(move |host_tools, _event, _window, cx| {
+                    host_tools.refresh_host_podman_snapshot(selected_connection_id.clone(), cx);
+                    cx.stop_propagation();
+                }),
+            ))
+            .into_any_element()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_host_podman_pods_list(
+        &self,
+        rows: Vec<ResourcePodmanPod>,
+        has_metrics: bool,
+        status: ResourcePodmanStatus,
+        selected_connection_id: String,
+        tokens: &ThemeTokens,
+        i18n: &I18n,
+        mono_font_family: SharedString,
+        selectable_text: &SelectableTextRenderState,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        if !has_metrics {
+            return host_tools_center_state(
+                LucideIcon::Layers,
+                tokens.ui.text_muted,
+                i18n.t("sidebar.host_podman.sampling"),
+                selectable_text,
+                cx,
+            );
+        }
+        match status {
+            ResourcePodmanStatus::Unavailable { detail: None } => {
+                return host_tools_center_state(
+                    LucideIcon::Layers,
+                    tokens.ui.text_muted,
+                    i18n.t("sidebar.host_podman.unavailable"),
+                    selectable_text,
+                    cx,
+                );
+            }
+            ResourcePodmanStatus::Unavailable {
+                detail: Some(detail),
+            } => {
+                return host_tools_center_state(
+                    LucideIcon::Layers,
+                    tokens.ui.text_muted,
+                    i18n.t("sidebar.host_podman.unavailable_detail")
+                        .replace("{{detail}}", &detail),
+                    selectable_text,
+                    cx,
+                );
+            }
+            ResourcePodmanStatus::Error { message } => {
+                return host_tools_center_state(
+                    LucideIcon::AlertTriangle,
+                    MONITOR_RED,
+                    i18n.t("sidebar.host_podman.error")
+                        .replace("{{error}}", &message),
+                    selectable_text,
+                    cx,
+                );
+            }
+            ResourcePodmanStatus::Unknown | ResourcePodmanStatus::Available => {}
+        }
+        if rows.is_empty() {
+            return host_tools_center_state(
+                LucideIcon::Layers,
+                tokens.ui.text_muted,
+                i18n.t("sidebar.host_podman.pods.empty"),
+                selectable_text,
+                cx,
+            );
+        }
+
+        let rows = Arc::new(rows);
+        let selected_connection_id = Arc::new(selected_connection_id);
+        let list_state = self.ui.host_podman_pod_list_state.clone();
+        let list_spec = TauriVirtualListSpec::new(px(HOST_PODMAN_LIST_ESTIMATED_ROW_HEIGHT), 8);
+        let host_tools = cx.entity();
+        let row_tokens = *tokens;
+        let row_i18n = i18n.clone();
+        let row_mono_font_family = mono_font_family;
+        div()
+            .w_full()
+            .min_w_0()
+            .flex_1()
+            .min_h_0()
+            .flex()
+            .flex_col()
+            .overflow_hidden()
+            .child(self.render_host_podman_pods_table_header(tokens, i18n))
+            .child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_hidden()
+                    .child(tauri_virtual_list(
+                        list_state,
+                        list_spec,
+                        move |index, _window, cx| {
+                            let rows = Arc::clone(&rows);
+                            let selected_connection_id = Arc::clone(&selected_connection_id);
+                            let mono_font_family = row_mono_font_family.clone();
+                            host_tools.update(cx, |host_tools, cx| {
+                                host_tools.render_host_podman_pod_row(
+                                    selected_connection_id.as_str(),
+                                    rows.get(index).cloned(),
+                                    &row_tokens,
+                                    &row_i18n,
+                                    mono_font_family,
+                                    cx,
+                                )
+                            })
+                        },
+                    )),
+            )
+            .into_any_element()
+    }
+
+    fn render_host_podman_pods_table_header(
+        &self,
+        tokens: &ThemeTokens,
+        i18n: &I18n,
+    ) -> AnyElement {
+        let theme = tokens.ui;
+        div()
+            .flex_none()
+            .w_full()
+            .min_w_0()
+            .h(px(HOST_PODMAN_TABLE_HEADER_HEIGHT))
+            .px_3()
+            .flex()
+            .items_center()
+            .gap_2()
+            .border_b_1()
+            .border_color(rgba((theme.border << 8) | MONITOR_BORDER_ALPHA))
+            .bg(rgb(theme.bg))
+            .text_size(px(HOST_PROCESS_TABLE_HEADER_TEXT_SIZE))
+            .text_color(rgb(theme.text_muted))
+            .child(
+                div()
+                    .min_w_0()
+                    .flex_1()
+                    .truncate()
+                    .child(i18n.t("sidebar.host_podman.pods.name")),
+            )
+            .child(
+                div()
+                    .flex_none()
+                    .w(px(HOST_PODMAN_STATE_COLUMN_WIDTH))
+                    .child(i18n.t("sidebar.host_podman.pods.containers")),
+            )
+            .child(
+                div()
+                    .min_w(px(HOST_PODMAN_PORTS_COLUMN_MIN_WIDTH))
+                    .flex_1()
+                    .truncate()
+                    .child(i18n.t("sidebar.host_podman.pods.created")),
+            )
+            .child(
+                div()
+                    .flex_none()
+                    .w(px(HOST_PODMAN_STATE_COLUMN_WIDTH))
+                    .child(i18n.t("sidebar.host_podman.columns.state")),
+            )
+            .into_any_element()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_host_podman_pod_row(
+        &self,
+        connection_id: &str,
+        pod: Option<ResourcePodmanPod>,
+        tokens: &ThemeTokens,
+        i18n: &I18n,
+        mono_font_family: SharedString,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let Some(pod) = pod else {
+            return div().into_any_element();
+        };
+        let expanded = self.ui.host_podman_pod_expanded_id.as_deref() == Some(pod.id.as_str());
+        let theme = tokens.ui;
+        let state_label = i18n.t(podman_pod_state_label_key(&pod.status));
+        let action_running = self.podman_pod_action_running_for(&pod.id);
+        div()
+            .id(host_tools_row_id(
+                "host-podman-pod-row",
+                connection_id,
+                pod.id.clone(),
+            ))
+            .w_full()
+            .min_w_0()
+            .border_b_1()
+            .border_color(rgba((theme.border << 8) | MONITOR_BORDER_ALPHA))
+            .cursor_pointer()
+            .hover(|row| row.bg(rgb(theme.bg_hover)))
+            .child(
+                div()
+                    .w_full()
+                    .min_w_0()
+                    .h(px(HOST_PODMAN_TABLE_MAIN_ROW_HEIGHT))
+                    .px_3()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        div()
+                            .min_w_0()
+                            .flex_1()
+                            .truncate()
+                            .text_size(px(HOST_PROCESS_TABLE_COMMAND_TEXT_SIZE))
+                            .text_color(rgb(theme.text))
+                            .font_family(mono_font_family.clone())
+                            .child(pod.name.clone()),
+                    )
+                    .child(
+                        div()
+                            .flex_none()
+                            .w(px(HOST_PODMAN_STATE_COLUMN_WIDTH))
+                            .truncate()
+                            .text_size(px(HOST_PROCESS_TABLE_VALUE_TEXT_SIZE))
+                            .text_color(rgb(theme.text_muted))
+                            .font_family(mono_font_family.clone())
+                            .child(pod.containers.to_string()),
+                    )
+                    .child(
+                        div()
+                            .min_w(px(HOST_PODMAN_PORTS_COLUMN_MIN_WIDTH))
+                            .flex_1()
+                            .truncate()
+                            .whitespace_nowrap()
+                            .text_size(px(HOST_PROCESS_TABLE_META_TEXT_SIZE))
+                            .text_color(rgb(theme.text_muted))
+                            .font_family(mono_font_family.clone())
+                            .child(pod.created.clone()),
+                    )
+                    .child(
+                        div()
+                            .flex_none()
+                            .w(px(HOST_PODMAN_STATE_COLUMN_WIDTH))
+                            .truncate()
+                            .text_size(px(HOST_PROCESS_TABLE_VALUE_TEXT_SIZE))
+                            .text_color(rgb(podman_state_color(&pod.status, theme.text_muted)))
+                            .font_family(mono_font_family.clone())
+                            .child(state_label.clone()),
+                    ),
+            )
+            .child(
+                div()
+                    .w_full()
+                    .min_w_0()
+                    .px_3()
+                    .pb_2()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        div()
+                            .min_w_0()
+                            .flex_1()
+                            .truncate()
+                            .text_size(px(HOST_PROCESS_TABLE_META_TEXT_SIZE))
+                            .text_color(rgb(theme.text_muted))
+                            .font_family(mono_font_family.clone())
+                            .child(pod.id.clone()),
+                    )
+                    .child(self.render_host_podman_pod_actions(
+                        connection_id,
+                        &pod,
+                        action_running,
+                        tokens,
+                        i18n,
+                        cx,
+                    )),
+            )
+            .when(expanded, |row| {
+                row.child(
+                    div()
+                        .px_3()
+                        .pb_3()
+                        .pt_2()
+                        .border_t_1()
+                        .border_color(rgba((theme.border << 8) | MONITOR_BORDER_ALPHA))
+                        .flex()
+                        .flex_col()
+                        .gap_1()
+                        .text_size(px(HOST_PROCESS_DETAIL_TEXT_SIZE))
+                        .text_color(rgb(theme.text_muted))
+                        .child(Self::render_host_podman_detail_line(
+                            i18n.t("sidebar.host_podman.pods.containers"),
+                            pod.containers.to_string(),
+                            mono_font_family.clone(),
+                        ))
+                        .child(Self::render_host_podman_detail_line(
+                            i18n.t("sidebar.host_podman.pods.created"),
+                            pod.created.clone(),
+                            mono_font_family.clone(),
+                        ))
+                        .child(
+                            div()
+                                .mt_1()
+                                .min_w_0()
+                                .font_family(mono_font_family.clone())
+                                .text_color(rgb(theme.text))
+                                .child(state_label.clone()),
+                        ),
+                )
+            })
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener({
+                    let pod_id = pod.id.clone();
+                    move |host_tools, _event, _window, cx| {
+                        let expanded_id = &mut host_tools.ui.host_podman_pod_expanded_id;
+                        if expanded_id.as_deref() == Some(pod_id.as_str()) {
+                            *expanded_id = None;
+                        } else {
+                            *expanded_id = Some(pod_id.clone());
+                        }
+                        cx.notify();
+                        cx.stop_propagation();
+                    }
+                }),
+            )
+            .into_any_element()
+    }
+
+    fn render_host_podman_pod_actions(
+        &self,
+        connection_id: &str,
+        pod: &ResourcePodmanPod,
+        action_running: bool,
+        tokens: &ThemeTokens,
+        i18n: &I18n,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let availability = podman_pod_action_availability(&pod.status);
+        let mut row = div()
+            .flex_none()
+            .flex()
+            .items_center()
+            .justify_end()
+            .gap(px(4.0));
+        {
+            let pod_id = pod.id.clone();
+            let title = format!(
+                "{} · {}",
+                i18n.t("sidebar.host_podman.actions.inspect"),
+                pod.name
+            );
+            row = row.child(host_tools_tooltip_icon_button(
+                tokens,
+                LucideIcon::Info,
+                13.0,
+                rgb(tokens.ui.text),
+                oxideterm_gpui_ui::button::IconButtonOptions {
+                    size: 22.0,
+                    has_background: true,
+                    background: Some(rgb(tokens.ui.bg_hover)),
+                    hover_background: Some(rgb(tokens.ui.bg_panel)),
+                    idle_opacity: 1.0,
+                    ..oxideterm_gpui_ui::button::IconButtonOptions::compact(22.0)
+                },
+                i18n.t("sidebar.host_podman.actions.inspect"),
+                "host-podman-pod-inspect",
+                true,
+                cx.listener(move |host_tools, _event, _window, cx| {
+                    host_tools.open_podman_text_capture(
+                        HostPodmanCaptureKind::PodInspect {
+                            pod_id: pod_id.clone(),
+                        },
+                        title.clone(),
+                        cx,
+                    );
+                    cx.stop_propagation();
+                }),
+            ));
+        }
+        for (action, icon, label_key, danger, enabled) in [
+            (
+                PodmanPodActionKind::Start,
+                LucideIcon::Play,
+                "sidebar.host_podman.actions.start",
+                false,
+                availability.can_start,
+            ),
+            (
+                PodmanPodActionKind::Stop,
+                LucideIcon::Square,
+                "sidebar.host_podman.actions.stop",
+                true,
+                availability.can_stop,
+            ),
+            (
+                PodmanPodActionKind::Restart,
+                LucideIcon::RefreshCw,
+                "sidebar.host_podman.actions.restart",
+                true,
+                availability.can_restart,
+            ),
+            (
+                PodmanPodActionKind::Pause,
+                LucideIcon::Pause,
+                "sidebar.host_podman.actions.pause",
+                false,
+                availability.can_pause,
+            ),
+            (
+                PodmanPodActionKind::Unpause,
+                LucideIcon::Play,
+                "sidebar.host_podman.actions.unpause",
+                false,
+                availability.can_unpause,
+            ),
+            (
+                PodmanPodActionKind::Remove,
+                LucideIcon::Trash2,
+                "sidebar.host_podman.actions.remove",
+                true,
+                availability.can_remove,
+            ),
+        ] {
+            let connection_id = connection_id.to_string();
+            let pod_id = pod.id.clone();
+            let pod_name = pod.name.clone();
+            row = row.child(host_tools_tooltip_icon_button(
+                tokens,
+                icon,
+                13.0,
+                rgb(if danger { MONITOR_RED } else { tokens.ui.text }),
+                oxideterm_gpui_ui::button::IconButtonOptions {
+                    size: 22.0,
+                    disabled: action_running || !enabled,
+                    has_background: true,
+                    background: Some(rgb(tokens.ui.bg_hover)),
+                    hover_background: Some(rgb(tokens.ui.bg_panel)),
+                    idle_opacity: 1.0,
+                    ..oxideterm_gpui_ui::button::IconButtonOptions::compact(22.0)
+                },
+                i18n.t(label_key),
+                "host-podman-pod-action",
+                true,
+                cx.listener(move |host_tools, _event, _window, cx| {
+                    if let Some(notice) = host_tools.open_podman_pod_action_confirm(
+                        HostPodmanPodActionRequest {
+                            connection_id: connection_id.clone(),
+                            pod_id: pod_id.clone(),
+                            pod_name: pod_name.clone(),
+                            action: action.clone(),
+                        },
+                        cx,
+                    ) {
+                        cx.emit(HostToolsEvent::ShowNotice(notice));
+                    }
+                    cx.stop_propagation();
+                }),
+            ));
+        }
+        row.into_any_element()
     }
 
     fn render_host_podman_table_header(&self, tokens: &ThemeTokens, i18n: &I18n) -> AnyElement {
@@ -1420,6 +2078,199 @@ impl HostToolsEntity {
             .into_any_element()
     }
 
+    fn sync_host_podman_pods_list_state(&self, rows: &[ResourcePodmanPod], selected_id: &str) {
+        let signatures = rows
+            .iter()
+            .map(podman_pod_row_signature)
+            .collect::<Vec<_>>();
+        let ui = &self.ui;
+        let identity = format!(
+            "host-podman-pods:{selected_id}:{}:{}",
+            ui.host_podman_search_query,
+            ui.host_podman_pod_expanded_id
+                .as_deref()
+                .unwrap_or_default()
+        );
+        sync_tauri_variable_list_state_by_signatures(
+            &ui.host_podman_pod_list_state,
+            &mut ui.host_podman_pod_list_cache.borrow_mut(),
+            &identity,
+            &signatures,
+            TauriVirtualListSpec::new(px(HOST_PODMAN_LIST_ESTIMATED_ROW_HEIGHT), 8),
+        );
+    }
+
+    fn podman_pod_action_running_for(&self, pod_id: &str) -> bool {
+        self.host_podman_operations
+            .pod_action_running
+            .as_ref()
+            .is_some_and(|running| running.pod_id == pod_id)
+    }
+
+    pub(in crate::workspace::connection_monitor) fn open_podman_pod_action_confirm(
+        &mut self,
+        request: HostPodmanPodActionRequest,
+        cx: &mut Context<Self>,
+    ) -> Option<HostToolsNotice> {
+        if self.host_podman_operations.pod_action_running.is_some() {
+            return Some(HostToolsNotice::PodmanActionAlreadyRunning);
+        }
+        HostToolConfirmState::open(
+            &mut self.host_podman_operations.pod_pending_confirm,
+            request,
+        );
+        cx.notify();
+        None
+    }
+
+    pub(in crate::workspace::connection_monitor) fn podman_pod_confirm_view(
+        &self,
+    ) -> Option<(
+        HostPodmanPodActionRequest,
+        oxideterm_gpui_ui::motion::ExitPhase,
+    )> {
+        self.host_podman_operations
+            .pod_pending_confirm
+            .as_ref()
+            .map(|state| (state.request.clone(), state.presence.phase()))
+    }
+
+    pub(in crate::workspace::connection_monitor) fn dismiss_podman_pod_confirm(
+        &mut self,
+        cx: &mut Context<Self>,
+    ) {
+        if self
+            .host_podman_operations
+            .pod_pending_confirm
+            .take()
+            .is_some()
+        {
+            cx.notify();
+        }
+    }
+
+    pub(super) fn begin_podman_pod_confirm_exit(
+        &mut self,
+        delay: Duration,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let Some(generation) = self
+            .host_podman_operations
+            .pod_pending_confirm
+            .as_mut()
+            .and_then(|state| state.presence.begin_exit())
+        else {
+            return false;
+        };
+        if delay.is_zero() {
+            self.host_podman_operations.pod_pending_confirm = None;
+            cx.notify();
+            return true;
+        }
+        cx.spawn(async move |weak, cx| {
+            Timer::after(delay).await;
+            let _ = weak.update(cx, |entity, cx| {
+                if entity
+                    .host_podman_operations
+                    .pod_pending_confirm
+                    .as_ref()
+                    .is_some_and(|state| state.presence.finish_exit(generation))
+                {
+                    entity.host_podman_operations.pod_pending_confirm = None;
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+        cx.notify();
+        true
+    }
+
+    pub(super) fn start_podman_pod_action(
+        &mut self,
+        request: HostPodmanPodActionRequest,
+        runtime: tokio::runtime::Handle,
+        cx: &mut Context<Self>,
+    ) -> Vec<HostToolsNotice> {
+        let Some(os_type) = self.connection_os_type(&request.connection_id) else {
+            return vec![HostToolsNotice::PodmanConnectionMissing];
+        };
+        let command = match build_podman_pod_action_command(
+            &os_type,
+            &request.pod_id,
+            request.action.clone(),
+        ) {
+            Ok(command) => command,
+            Err(_) => return vec![HostToolsNotice::PodmanActionFailed],
+        };
+        self.host_podman_operations.pod_action_running = Some(request.clone());
+        let spawned = self.spawn_podman_pod_action(
+            command.command,
+            request,
+            HOST_PODMAN_ACTION_TIMEOUT,
+            HOST_PODMAN_ACTION_MAX_OUTPUT_SIZE,
+            runtime,
+        );
+        if !spawned {
+            self.host_podman_operations.pod_action_running = None;
+            return vec![HostToolsNotice::PodmanActionFailed];
+        }
+        Vec::new()
+    }
+
+    pub(super) fn confirm_podman_pod_action(
+        &mut self,
+        delay: Duration,
+        runtime: tokio::runtime::Handle,
+        cx: &mut Context<Self>,
+    ) -> Vec<HostToolsNotice> {
+        let Some(request) = self
+            .host_podman_operations
+            .pod_pending_confirm
+            .as_ref()
+            .map(|state| state.request.clone())
+        else {
+            return Vec::new();
+        };
+        if !self.begin_podman_pod_confirm_exit(delay, cx) {
+            return Vec::new();
+        }
+        self.start_podman_pod_action(request, runtime, cx)
+    }
+
+    fn confirm_podman_pod_action_from_view(&mut self, delay: Duration, cx: &mut Context<Self>) {
+        let Some(runtime) = self.lifecycle_runtime.clone() else {
+            self.begin_podman_pod_confirm_exit(delay, cx);
+            cx.emit(HostToolsEvent::ShowNotice(
+                HostToolsNotice::PodmanConnectionMissing,
+            ));
+            return;
+        };
+        for notice in self.confirm_podman_pod_action(delay, runtime, cx) {
+            cx.emit(HostToolsEvent::ShowNotice(notice));
+        }
+    }
+
+    pub(in crate::workspace::connection_monitor) fn finish_host_podman_pod_action(
+        &mut self,
+        delivery: HostPodmanPodActionDelivery,
+        cx: &mut Context<Self>,
+    ) {
+        if self.host_podman_operations.pod_action_running.as_ref() != Some(&delivery.request) {
+            return;
+        }
+        self.host_podman_operations.pod_action_running = None;
+        cx.emit(HostToolsEvent::ShowNotice(
+            HostToolsNotice::PodmanPodActionFinished {
+                pod_name: delivery.request.pod_name,
+                succeeded: delivery.result.unwrap_or(false),
+            },
+        ));
+        // Sample the remote state transition without clearing the current list.
+        self.request_profiler_refresh(delivery.request.connection_id, cx);
+        cx.notify();
+    }
+
     fn sync_host_podman_list_state(&self, rows: &[ResourcePodmanContainer], selected_id: &str) {
         let signatures = rows.iter().map(podman_row_signature).collect::<Vec<_>>();
         let ui = &self.ui;
@@ -1949,6 +2800,57 @@ impl HostToolsEntity {
         )
     }
 
+    fn render_host_podman_pod_confirm_dialog(
+        &self,
+        tokens: &ThemeTokens,
+        i18n: &I18n,
+        focused_action: Option<ConfirmDialogAction>,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let (request, phase) = self.podman_pod_confirm_view()?;
+        let action_label = i18n.t(host_podman_pod_action_label_key(&request.action));
+        let description = i18n
+            .t("sidebar.host_podman.confirm.pod_desc")
+            .replace("{{action}}", &action_label)
+            .replace("{{name}}", &request.pod_name);
+        let exit_delay = oxideterm_gpui_ui::motion::duration(
+            tokens,
+            oxideterm_gpui_ui::motion::MotionDuration::Control,
+        );
+        let confirm_delay = exit_delay;
+
+        Some(
+            oxideterm_gpui_ui::confirm::confirm_dialog_with_focus_motion(
+                tokens,
+                "host-podman-pod-confirm-motion",
+                phase,
+                ConfirmDialogView {
+                    variant: if request.action == PodmanPodActionKind::Remove {
+                        ConfirmDialogVariant::Danger
+                    } else {
+                        ConfirmDialogVariant::Default
+                    },
+                    title: div()
+                        .child(i18n.t("sidebar.host_podman.confirm.title"))
+                        .into_any_element(),
+                    description: Some(div().child(description).into_any_element()),
+                    cancel_label: div()
+                        .child(i18n.t("sidebar.host_podman.confirm.cancel"))
+                        .into_any_element(),
+                    confirm_label: div().child(action_label).into_any_element(),
+                },
+                focused_action,
+                cx.listener(move |host_tools, _event, _window, cx| {
+                    host_tools.begin_podman_pod_confirm_exit(exit_delay, cx);
+                }),
+                cx.listener(move |host_tools, _event, _window, cx| {
+                    host_tools.confirm_podman_pod_action_from_view(confirm_delay, cx);
+                }),
+            )
+            .into_any_element(),
+        )
+    }
+
     fn render_host_podman_confirm_dialog(
         &self,
         tokens: &ThemeTokens,
@@ -2034,9 +2936,20 @@ fn host_podman_confirm_label_key(action: &PodmanActionKind) -> &'static str {
 fn podman_state_color(state: &str, muted_color: u32) -> u32 {
     match state.trim().to_lowercase().as_str() {
         "running" => MONITOR_EMERALD,
-        "created" | "configured" | "paused" | "restarting" => MONITOR_AMBER,
+        "created" | "configured" | "paused" | "restarting" | "degraded" => MONITOR_AMBER,
         "dead" | "removing" => MONITOR_RED,
         "exited" | "stopped" => muted_color,
         _ => muted_color,
+    }
+}
+
+pub(super) fn host_podman_pod_action_label_key(action: &PodmanPodActionKind) -> &'static str {
+    match action {
+        PodmanPodActionKind::Start => "sidebar.host_podman.actions.start",
+        PodmanPodActionKind::Stop => "sidebar.host_podman.actions.stop",
+        PodmanPodActionKind::Restart => "sidebar.host_podman.actions.restart",
+        PodmanPodActionKind::Pause => "sidebar.host_podman.actions.pause",
+        PodmanPodActionKind::Unpause => "sidebar.host_podman.actions.unpause",
+        PodmanPodActionKind::Remove => "sidebar.host_podman.actions.remove",
     }
 }

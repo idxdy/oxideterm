@@ -157,6 +157,7 @@ pub(super) enum WorkspaceImeTarget {
     HostRedisPassword,
     HostRedisRename,
     HostRedisSetValue,
+    HostRedisSetValueField,
     HostRedisCreateKeyName,
     HostRedisCreateKeyValue,
     HostRedisCreateKeyField,
@@ -451,6 +452,7 @@ pub(super) fn workspace_ime_target_for_plain_host_tools_input(
         HostToolsTextInput::RedisPassword => Some(WorkspaceImeTarget::HostRedisPassword),
         HostToolsTextInput::RedisRename => Some(WorkspaceImeTarget::HostRedisRename),
         HostToolsTextInput::RedisSetValue => Some(WorkspaceImeTarget::HostRedisSetValue),
+        HostToolsTextInput::RedisSetValueField => Some(WorkspaceImeTarget::HostRedisSetValueField),
         HostToolsTextInput::RedisCreateKeyName => Some(WorkspaceImeTarget::HostRedisCreateKeyName),
         HostToolsTextInput::RedisCreateKeyValue => {
             Some(WorkspaceImeTarget::HostRedisCreateKeyValue)
@@ -576,6 +578,7 @@ impl WorkspaceImeTarget {
             Self::HostRedisPassword => 28,
             Self::HostRedisRename => 29,
             Self::HostRedisSetValue => 30,
+            Self::HostRedisSetValueField => 35,
             Self::HostRedisCreateKeyName => 31,
             Self::HostRedisCreateKeyValue => 32,
             Self::HostRedisCreateKeyField => 33,
@@ -1327,6 +1330,9 @@ impl WorkspaceApp {
                 HostToolsTextInput::RedisPassword => WorkspaceImeTarget::HostRedisPassword,
                 HostToolsTextInput::RedisRename => WorkspaceImeTarget::HostRedisRename,
                 HostToolsTextInput::RedisSetValue => WorkspaceImeTarget::HostRedisSetValue,
+                HostToolsTextInput::RedisSetValueField => {
+                    WorkspaceImeTarget::HostRedisSetValueField
+                }
                 HostToolsTextInput::RedisCreateKeyName => {
                     WorkspaceImeTarget::HostRedisCreateKeyName
                 }
@@ -2445,6 +2451,12 @@ impl WorkspaceApp {
                 .ui
                 .input_value(HostToolsTextInput::RedisSetValue)
                 .map(|value| ime_text_snapshot(target, value)),
+            WorkspaceImeTarget::HostRedisSetValueField => self
+                .host_tools
+                .read(cx)
+                .ui
+                .input_value(HostToolsTextInput::RedisSetValueField)
+                .map(str::to_string),
             WorkspaceImeTarget::HostRedisCreateKeyName => self
                 .host_tools
                 .read(cx)
@@ -3526,6 +3538,14 @@ impl WorkspaceApp {
             WorkspaceImeTarget::HostRedisSetValue => {
                 self.replace_host_tools_text_input(
                     HostToolsTextInput::RedisSetValue,
+                    replacement_range,
+                    text,
+                    cx,
+                );
+            }
+            WorkspaceImeTarget::HostRedisSetValueField => {
+                self.replace_host_tools_text_input(
+                    HostToolsTextInput::RedisSetValueField,
                     replacement_range,
                     text,
                     cx,

@@ -246,9 +246,18 @@
     "host_podman": {
       "tabs": {
         "containers": "Conteneurs",
+        "pods": "Pods",
         "images": "Images",
         "volumes": "Volumes",
         "networks": "Réseaux"
+      },
+      "pods": {
+        "search_placeholder": "Rechercher des pods…",
+        "count_suffix": "pods",
+        "empty": "Aucun pod",
+        "name": "Pod",
+        "containers": "Conteneurs",
+        "created": "Créé"
       },
       "images": {
         "count_suffix": "images",
@@ -339,6 +348,7 @@
         "dead": "Mort",
         "restarting": "Redémarrage",
         "removing": "Suppression",
+        "degraded": "Dégradé",
         "unknown": "Inconnu"
       },
       "actions": {
@@ -381,7 +391,8 @@
         "pause_desc": "Suspendre le conteneur {{name}} ({{id}}) ?",
         "unpause_desc": "Reprendre le conteneur {{name}} ({{id}}) ?",
         "remove_desc": "Supprimer le conteneur {{name}} ({{id}}) ? Cette action est irréversible.",
-      "run": "Confirmer"
+      "run": "Confirmer",
+        "pod_desc": "{{action}} sur le pod {{name}} ?"
       },
       "logs": {
         "title": "Journaux : {{name}}",

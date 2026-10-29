@@ -1527,64 +1527,210 @@ impl WorkspaceApp {
         &self,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
-        let target = WorkspaceImeTarget::HostRedisSetValue;
-        let (key, database, json_only, submit_disabled, input_control) = {
+        let (key, database, kind, value, field, entries, error, loading) = {
             let host_tools = self.host_tools.read(cx);
-            let ui = &host_tools.ui;
-            let dialog = ui.host_redis_set_value_dialog.as_ref()?;
-            let input_control = self
-                .workspace_text_input(
-                    target,
-                    TextInputView {
-                        value: dialog.value.as_str(),
-                        placeholder: self.i18n.t("sidebar.host_redis.set_value.placeholder"),
-                        focused: ui.input_is_focused(HostToolsTextInput::RedisSetValue),
-                        caret_visible: self.input_caret.visible(),
-                        secret: false,
-                        selected_all: false,
-                        selected_range: self.ime_selected_range_for_target(target, cx),
-                        marked_text: self.marked_text_for_target(target, cx),
-                    },
-                )
-                .h(px(34.0))
-                .cursor(CursorStyle::IBeam);
+            let dialog = host_tools.ui.host_redis_set_value_dialog.as_ref()?;
             (
                 dialog.key.clone(),
                 dialog.database,
-                dialog.json_only,
+                dialog.kind,
+                dialog.value.to_string(),
+                dialog.field.to_string(),
+                dialog
+                    .entries
+                    .iter()
+                    .map(|entry| entry.to_string())
+                    .collect::<Vec<_>>(),
+                dialog.error.clone(),
                 dialog.loading,
-                input_control,
             )
         };
-        let workspace = cx.entity();
-        let input_control = text_input_anchor_probe(
-            target.anchor_id(),
-            input_control
-                .on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(move |this, event: &MouseDownEvent, window, cx| {
-                        this.host_tools.update(cx, |host_tools, _cx| {
-                            host_tools.ui.focus_input(HostToolsTextInput::RedisSetValue);
-                        });
-                        this.ime_marked_text = None;
-                        this.show_active_input_caret(cx);
-                        window.focus(&this.focus_handle, cx);
-                        this.begin_ime_selection_from_mouse_down(target, event, window, cx);
-                        cx.stop_propagation();
-                    }),
-                )
-                .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, window, cx| {
-                    this.update_ime_selection_drag_from_mouse_move(event, window, cx);
-                })),
-            move |anchor, _window, cx| {
-                let _ = workspace.update(cx, |this, cx| {
-                    this.update_text_input_anchor(anchor, cx);
-                });
-            },
-        )
-        .into_any_element();
+        let theme = self.tokens.ui;
+        let i18n = &self.i18n;
+        let mut body = div().p_4().flex().flex_col().gap_2().child(
+            div()
+                .text_size(px(11.0))
+                .text_color(rgb(theme.text_muted))
+                .child(
+                    i18n.t("sidebar.host_redis.set_value.key")
+                        .replace("{{db}}", &format!("db{database}"))
+                        .replace("{{key}}", &key),
+                ),
+        );
+
+        match kind {
+            RedisValueWriteKind::String | RedisValueWriteKind::Json => {
+                body = body.child(self.render_host_redis_create_input(
+                    WorkspaceImeTarget::HostRedisSetValue,
+                    HostToolsTextInput::RedisSetValue,
+                    value,
+                    i18n.t("sidebar.host_redis.set_value.placeholder"),
+                    HOST_REDIS_VALUE_INPUT_HEIGHT,
+                    cx,
+                ));
+                body = body.child(
+                    div()
+                        .text_size(px(10.0))
+                        .text_color(rgb(theme.text_muted))
+                        .child(if kind == RedisValueWriteKind::Json {
+                            i18n.t("sidebar.host_redis.set_value.json_hint")
+                        } else {
+                            i18n.t("sidebar.host_redis.set_value.text_hint")
+                        }),
+                );
+            }
+            RedisValueWriteKind::Hash
+            | RedisValueWriteKind::List
+            | RedisValueWriteKind::Set
+            | RedisValueWriteKind::SortedSet => {
+                let mut entry_row = div().flex().items_center().gap_2();
+                if kind == RedisValueWriteKind::Hash {
+                    entry_row = entry_row.child(div().flex_1().min_w_0().child(
+                        self.render_host_redis_create_input(
+                            WorkspaceImeTarget::HostRedisSetValueField,
+                            HostToolsTextInput::RedisSetValueField,
+                            field,
+                            i18n.t("sidebar.host_redis.create_key.field_placeholder"),
+                            32.0,
+                            cx,
+                        ),
+                    ));
+                }
+                entry_row = entry_row.child(div().flex_1().min_w_0().child(
+                    self.render_host_redis_create_input(
+                        WorkspaceImeTarget::HostRedisSetValue,
+                        HostToolsTextInput::RedisSetValue,
+                        value,
+                        i18n.t("sidebar.host_redis.create_key.element_placeholder"),
+                        32.0,
+                        cx,
+                    ),
+                ));
+                entry_row = entry_row.child(
+                    div()
+                        .id("host-redis-set-value-add")
+                        .h(px(32.0))
+                        .px_3()
+                        .flex()
+                        .items_center()
+                        .rounded(px(self.tokens.radii.md))
+                        .cursor_pointer()
+                        .text_size(px(11.0))
+                        .text_color(rgb(theme.text))
+                        .bg(rgb(theme.bg_hover))
+                        .hover(|button| button.bg(rgb(theme.bg_panel)))
+                        .child(i18n.t("sidebar.host_redis.create_key.add_entry"))
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(|this, _event, _window, cx| {
+                                this.host_tools.update(cx, |host_tools, cx| {
+                                    host_tools.add_redis_set_value_entry(cx);
+                                });
+                                cx.stop_propagation();
+                            }),
+                        ),
+                );
+                body = body.child(entry_row);
+                body = body.child(
+                    div()
+                        .text_size(px(10.0))
+                        .text_color(rgb(theme.text_muted))
+                        .child(match kind {
+                            RedisValueWriteKind::Hash => {
+                                i18n.t("sidebar.host_redis.create_key.hash_hint")
+                            }
+                            RedisValueWriteKind::List => {
+                                i18n.t("sidebar.host_redis.create_key.list_hint")
+                            }
+                            RedisValueWriteKind::Set => {
+                                i18n.t("sidebar.host_redis.create_key.set_hint")
+                            }
+                            _ => i18n.t("sidebar.host_redis.create_key.zset_hint"),
+                        }),
+                );
+                if entries.is_empty() {
+                    body = body.child(
+                        div()
+                            .text_size(px(10.0))
+                            .text_color(rgb(theme.text_muted))
+                            .child(i18n.t("sidebar.host_redis.create_key.entries_empty")),
+                    );
+                } else {
+                    let mut list = div()
+                        .id("host-redis-set-value-entries")
+                        .max_h(px(160.0))
+                        .overflow_y_scroll()
+                        .flex()
+                        .flex_col()
+                        .gap_1();
+                    for (index, entry) in entries.iter().enumerate() {
+                        let display = entry.replace(
+                            '\t',
+                            if kind == RedisValueWriteKind::Hash {
+                                " = "
+                            } else {
+                                " · "
+                            },
+                        );
+                        list = list.child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .px_2()
+                                .py_1()
+                                .rounded(px(self.tokens.radii.md))
+                                .bg(rgb(theme.bg_hover))
+                                .text_size(px(11.0))
+                                .text_color(rgb(theme.text))
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .min_w_0()
+                                        .truncate()
+                                        .font_family(settings_mono_font_family(
+                                            self.settings_store.settings(),
+                                        ))
+                                        .child(display),
+                                )
+                                .child(
+                                    div()
+                                        .id(("host-redis-set-value-remove", index))
+                                        .flex_none()
+                                        .cursor_pointer()
+                                        .text_size(px(10.0))
+                                        .text_color(rgb(theme.text_muted))
+                                        .hover(|button| button.text_color(rgb(MONITOR_RED)))
+                                        .child(i18n.t("sidebar.host_redis.create_key.remove_entry"))
+                                        .on_mouse_down(
+                                            MouseButton::Left,
+                                            cx.listener(move |this, _event, _window, cx| {
+                                                this.host_tools.update(cx, |host_tools, cx| {
+                                                    host_tools
+                                                        .remove_redis_set_value_entry(index, cx);
+                                                });
+                                                cx.stop_propagation();
+                                            }),
+                                        ),
+                                ),
+                        );
+                    }
+                    body = body.child(list);
+                }
+            }
+        }
+
+        body = body.when_some(error, |body, error| {
+            body.child(
+                div()
+                    .text_size(px(11.0))
+                    .text_color(rgb(MONITOR_RED))
+                    .child(error),
+            )
+        });
+
         let cancel_action = self.workspace_confirm_footer_action_button(
-            self.i18n.t("sidebar.host_redis.set_value.cancel"),
+            i18n.t("sidebar.host_redis.set_value.cancel"),
             ButtonVariant::Secondary,
             ConfirmDialogAction::Cancel,
             false,
@@ -1600,10 +1746,10 @@ impl WorkspaceApp {
             cx,
         );
         let submit_action = self.workspace_confirm_footer_action_button(
-            self.i18n.t("sidebar.host_redis.set_value.confirm"),
+            i18n.t("sidebar.host_redis.set_value.confirm"),
             ButtonVariant::Default,
             ConfirmDialogAction::Confirm,
-            submit_disabled,
+            loading,
             None,
             |this, _event, _window, cx| {
                 this.host_tools.update(cx, |host_tools, cx| {
@@ -1613,52 +1759,6 @@ impl WorkspaceApp {
             },
             cx,
         );
-        let error = {
-            let host_tools = self.host_tools.read(cx);
-            host_tools
-                .ui
-                .host_redis_set_value_dialog
-                .as_ref()?
-                .error
-                .clone()
-        };
-        let theme = self.tokens.ui;
-        let hint = if json_only {
-            self.i18n.t("sidebar.host_redis.set_value.json_hint")
-        } else {
-            self.i18n.t("sidebar.host_redis.set_value.text_hint")
-        };
-        let body = div()
-            .p_4()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .child(
-                div()
-                    .text_size(px(11.0))
-                    .text_color(rgb(theme.text_muted))
-                    .child(
-                        self.i18n
-                            .t("sidebar.host_redis.set_value.key")
-                            .replace("{{db}}", &format!("db{database}"))
-                            .replace("{{key}}", &key),
-                    ),
-            )
-            .child(input_control)
-            .child(
-                div()
-                    .text_size(px(10.0))
-                    .text_color(rgb(theme.text_muted))
-                    .child(hint),
-            )
-            .when_some(error, |body, error| {
-                body.child(
-                    div()
-                        .text_size(px(11.0))
-                        .text_color(rgb(MONITOR_RED))
-                        .child(error),
-                )
-            });
         Some(
             oxideterm_gpui_ui::modal::dismissible_dialog_backdrop()
                 .on_mouse_down(
@@ -1675,6 +1775,7 @@ impl WorkspaceApp {
                 .child(oxideterm_gpui_ui::modal::overlay_content_boundary(
                     oxideterm_gpui_ui::modal::dialog_content(&self.tokens)
                         .w(px(560.0))
+                        .max_h(px(620.0))
                         .child(
                             div()
                                 .px_4()
@@ -1684,7 +1785,7 @@ impl WorkspaceApp {
                                 .text_size(px(14.0))
                                 .font_weight(gpui::FontWeight::MEDIUM)
                                 .text_color(rgb(theme.text))
-                                .child(self.i18n.t("sidebar.host_redis.set_value.title")),
+                                .child(i18n.t("sidebar.host_redis.set_value.title")),
                         )
                         .child(body)
                         .child(
@@ -1703,16 +1804,14 @@ impl WorkspaceApp {
                 .into_any_element(),
         )
     }
-}
 
-impl WorkspaceApp {
-    /// Shared single-line input for the create-key form.
     fn render_host_redis_create_input(
         &self,
         target: WorkspaceImeTarget,
         input: HostToolsTextInput,
         value: String,
         placeholder: String,
+        height: f32,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let focused = self.host_tools.read(cx).ui.input_is_focused(input);
@@ -1731,7 +1830,7 @@ impl WorkspaceApp {
                     marked_text: self.marked_text_for_target(target, cx),
                 },
             )
-            .h(px(32.0))
+            .h(px(height))
             .cursor(CursorStyle::IBeam);
         text_input_anchor_probe(
             target.anchor_id(),
@@ -1803,6 +1902,7 @@ impl WorkspaceApp {
                 HostToolsTextInput::RedisCreateKeyName,
                 name,
                 i18n.t("sidebar.host_redis.create_key.name_placeholder"),
+                32.0,
                 cx,
             ))
             .child(
@@ -1913,6 +2013,7 @@ impl WorkspaceApp {
                     HostToolsTextInput::RedisCreateKeyTtl,
                     ttl,
                     i18n.t("sidebar.host_redis.create_key.ttl_placeholder"),
+                    32.0,
                     cx,
                 ),
             ));
@@ -1927,6 +2028,7 @@ impl WorkspaceApp {
                     HostToolsTextInput::RedisCreateKeyValue,
                     value,
                     i18n.t("sidebar.host_redis.create_key.value_placeholder"),
+                    HOST_REDIS_VALUE_INPUT_HEIGHT,
                     cx,
                 ));
                 body = body.child(
@@ -1952,6 +2054,7 @@ impl WorkspaceApp {
                             HostToolsTextInput::RedisCreateKeyField,
                             field,
                             i18n.t("sidebar.host_redis.create_key.field_placeholder"),
+                            32.0,
                             cx,
                         ),
                     ));
@@ -1962,6 +2065,7 @@ impl WorkspaceApp {
                         HostToolsTextInput::RedisCreateKeyValue,
                         value,
                         i18n.t("sidebar.host_redis.create_key.element_placeholder"),
+                        32.0,
                         cx,
                     ),
                 ));
@@ -2184,6 +2288,7 @@ impl HostToolsEntity {
         let metadata = dialog.value.as_ref().map(|value| {
             let kind_label = match value.kind {
                 ResourceRedisValueKind::String => "STRING",
+                ResourceRedisValueKind::Json => "JSON",
                 ResourceRedisValueKind::Hash => "HASH",
                 ResourceRedisValueKind::List => "LIST",
                 ResourceRedisValueKind::Set => "SET",
@@ -2225,18 +2330,72 @@ impl HostToolsEntity {
                 .child(error)
                 .into_any_element()
         } else if let Some(value) = dialog.value.as_ref() {
-            let structured = matches!(
+            let unsupported = matches!(
                 value.kind,
                 ResourceRedisValueKind::Stream | ResourceRedisValueKind::Other
             );
-            if structured {
+            if unsupported {
                 div()
                     .p_4()
                     .text_color(rgb(theme.text_muted))
-                    .child(
-                        i18n.t("sidebar.host_redis.value.unsupported")
-                            .replace("{{type}}", value.kind.label()),
-                    )
+                    .child(i18n.t("sidebar.host_redis.value.unsupported").replace(
+                        "{{type}}",
+                        value.raw_type.as_deref().unwrap_or(value.kind.label()),
+                    ))
+                    .into_any_element()
+            } else if !json_view && !redis_value_rows(value).is_empty() {
+                // Collections render as the same two-column rows the editor
+                // uses, so the value reads like the form that will write it.
+                let two_column = matches!(
+                    value.kind,
+                    ResourceRedisValueKind::Hash | ResourceRedisValueKind::SortedSet
+                );
+                let mut rows = div()
+                    .p_3()
+                    .flex()
+                    .flex_col()
+                    .gap(px(1.0))
+                    .font_family(mono_font_family.clone())
+                    .text_size(px(11.0))
+                    .text_color(rgb(theme.text));
+                for (index, (first, second)) in redis_value_rows(value)
+                    .into_iter()
+                    .take(HOST_REDIS_VALUE_MAX_LINES)
+                    .enumerate()
+                {
+                    let mut row = div()
+                        .id(("host-redis-value-row", index))
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .min_w_0()
+                        .child(
+                            div()
+                                .min_w_0()
+                                .flex_1()
+                                .truncate()
+                                .whitespace_nowrap()
+                                .child(first),
+                        );
+                    if two_column {
+                        row = row.child(
+                            div()
+                                .min_w_0()
+                                .flex_1()
+                                .truncate()
+                                .whitespace_nowrap()
+                                .text_color(rgb(theme.text_muted))
+                                .child(second.unwrap_or_default()),
+                        );
+                    }
+                    rows = rows.child(row);
+                }
+                div()
+                    .id("host-redis-value-scroll")
+                    .max_h(px(HOST_REDIS_VALUE_DIALOG_MAX_HEIGHT - 150.0))
+                    .overflow_y_scroll()
+                    .overflow_x_scrollbar()
+                    .child(rows)
                     .into_any_element()
             } else {
                 let text = if json_view {
@@ -2295,12 +2454,11 @@ impl HostToolsEntity {
         let rename_key = key.clone();
         let set_value_key = key.clone();
         let delete_key = key.clone();
-        // Only a string value can be replaced wholesale; collections need their
-        // own per-element commands.
+        // Every non-stream shape has a type-aware editor now.
         let set_value_available = dialog
             .value
             .as_ref()
-            .is_some_and(|value| value.kind == ResourceRedisValueKind::String);
+            .is_some_and(|value| RedisValueWriteKind::from_value_kind(value.kind).is_some());
         let refresh_disabled = loading;
         let json_available = dialog
             .value
@@ -2430,7 +2588,7 @@ impl HostToolsEntity {
                                                 ..oxideterm_gpui_ui::button::IconButtonOptions::compact(24.0)
                                             },
                                             if set_value_available {
-                                                i18n.t("sidebar.host_redis.actions.set_value")
+                                                    i18n.t("sidebar.host_redis.actions.set_value")
                                             } else {
                                                 i18n.t("sidebar.host_redis.set_value.string_only")
                                             },
@@ -2440,7 +2598,6 @@ impl HostToolsEntity {
                                                 host_tools.open_redis_set_value(
                                                     database,
                                                     set_value_key.clone(),
-                                                    json_view,
                                                     cx,
                                                 );
                                                 cx.stop_propagation();
@@ -3068,39 +3225,57 @@ impl HostToolsEntity {
         cx.notify();
     }
 
+    /// Opens the editor for the value currently shown, pre-filled with its
+    /// rows so an edit starts from the real content.
     pub(in crate::workspace::connection_monitor) fn open_redis_set_value(
         &mut self,
         database: u32,
         key: String,
-        json_only: bool,
         cx: &mut Context<Self>,
     ) {
         let Some((connection_id, endpoint)) = self.redis_value_target() else {
             return;
         };
-        // Prefill with what the user is looking at so an edit starts from the
-        // current value instead of an empty field.
-        let prefill = self
+        let Some(value) = self
             .host_redis
             .value_dialog
             .as_ref()
             .filter(|dialog| dialog.database == database && dialog.key == key)
-            .and_then(|dialog| dialog.value.as_ref())
-            .map(|value| {
-                if json_only {
-                    redis_value_json(value).unwrap_or_default()
-                } else {
-                    redis_value_text(value)
-                }
-            })
-            .unwrap_or_default();
+            .and_then(|dialog| dialog.value.clone())
+        else {
+            return;
+        };
+        let Some(kind) = RedisValueWriteKind::from_value_kind(value.kind) else {
+            return;
+        };
+        let (prefill, entries) = match kind {
+            RedisValueWriteKind::String => (value.body.clone(), Vec::new()),
+            RedisValueWriteKind::Json => (
+                redis_value_json(&value).unwrap_or_else(|| value.body.clone()),
+                Vec::new(),
+            ),
+            _ => (
+                String::new(),
+                redis_value_rows(&value)
+                    .into_iter()
+                    .map(|(first, second)| {
+                        zeroize::Zeroizing::new(match second {
+                            Some(second) => format!("{first}\t{second}"),
+                            None => first,
+                        })
+                    })
+                    .collect(),
+            ),
+        };
         self.ui.host_redis_set_value_dialog = Some(HostRedisSetValueDialog {
             connection_id,
             endpoint,
             database,
             key,
+            kind,
             value: zeroize::Zeroizing::new(prefill),
-            json_only,
+            field: zeroize::Zeroizing::new(String::new()),
+            entries,
             error: None,
             loading: false,
         });
@@ -3122,6 +3297,71 @@ impl HostToolsEntity {
         }
     }
 
+    /// Appends the pending row; hash pairs need a field, the others one value.
+    pub(in crate::workspace::connection_monitor) fn add_redis_set_value_entry(
+        &mut self,
+        cx: &mut Context<Self>,
+    ) {
+        let messages = self.messages.clone();
+        let Some(dialog) = self.ui.host_redis_set_value_dialog.as_mut() else {
+            return;
+        };
+        let entry = match dialog.kind {
+            RedisValueWriteKind::String | RedisValueWriteKind::Json => return,
+            RedisValueWriteKind::Hash => {
+                let field = dialog.field.trim().to_string();
+                if field.is_empty() || field.contains(['\t', '\n']) {
+                    dialog.error = messages
+                        .as_ref()
+                        .map(|messages| messages.redis_create_key_invalid_field.clone());
+                    cx.notify();
+                    return;
+                }
+                let value = dialog.value.trim_matches(['\n', '\r']).to_string();
+                dialog.field = zeroize::Zeroizing::new(String::new());
+                dialog.value = zeroize::Zeroizing::new(String::new());
+                format!("{field}\t{value}")
+            }
+            RedisValueWriteKind::List
+            | RedisValueWriteKind::Set
+            | RedisValueWriteKind::SortedSet => {
+                let value = dialog.value.trim().to_string();
+                if value.is_empty() {
+                    return;
+                }
+                dialog.value = zeroize::Zeroizing::new(String::new());
+                if dialog.kind == RedisValueWriteKind::SortedSet {
+                    // `member score`; a missing score defaults to 0.
+                    match value.split_once([' ', '\t']) {
+                        Some((member, score)) if score.trim().parse::<f64>().is_ok() => {
+                            format!("{}\t{}", member.trim(), score.trim())
+                        }
+                        Some((member, _)) => format!("{}\t0", member.trim()),
+                        None => format!("{value}\t0"),
+                    }
+                } else {
+                    value
+                }
+            }
+        };
+        dialog.entries.push(zeroize::Zeroizing::new(entry));
+        dialog.error = None;
+        cx.notify();
+    }
+
+    pub(in crate::workspace::connection_monitor) fn remove_redis_set_value_entry(
+        &mut self,
+        index: usize,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(dialog) = self.ui.host_redis_set_value_dialog.as_mut()
+            && index < dialog.entries.len()
+        {
+            dialog.entries.remove(index);
+            cx.notify();
+        }
+    }
+
     pub(in crate::workspace::connection_monitor) fn submit_redis_set_value(
         &mut self,
         cx: &mut Context<Self>,
@@ -3131,43 +3371,66 @@ impl HostToolsEntity {
             .as_ref()
             .map(|messages| messages.redis_value_set_invalid_json.clone())
             .unwrap_or_default();
+        let empty_entries_key = self
+            .messages
+            .as_ref()
+            .map(|messages| messages.redis_create_key_empty_entries.clone())
+            .unwrap_or_default();
         let Some(dialog) = self.ui.host_redis_set_value_dialog.as_mut() else {
             return;
         };
         if dialog.loading {
             return;
         }
-        // JSON view constrains the payload: an unparsable document would be
-        // stored verbatim and then fail to render as JSON.
-        if dialog.json_only
-            && let Err(error) = serde_json::from_str::<serde_json::Value>(&dialog.value)
+        // A JSON document must parse before it is written.
+        if dialog.kind == RedisValueWriteKind::Json
+            && let Err(error) = serde_json::from_str::<serde_json::Value>(dialog.value.trim())
         {
             dialog.error = Some(json_error_key.replace("{{error}}", &error.to_string()));
             cx.notify();
             return;
         }
+        let body = match dialog.kind {
+            RedisValueWriteKind::String => dialog.value.to_string(),
+            RedisValueWriteKind::Json => dialog.value.trim().to_string(),
+            _ => {
+                if dialog.entries.is_empty() {
+                    dialog.error = Some(empty_entries_key);
+                    cx.notify();
+                    return;
+                }
+                dialog
+                    .entries
+                    .iter()
+                    .map(|entry| entry.as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            }
+        };
         let request = HostRedisSetValueRequest {
             connection_id: dialog.connection_id.clone(),
             endpoint: dialog.endpoint.clone(),
             database: dialog.database,
             key: dialog.key.clone(),
             password: self.ui.host_redis_password.clone(),
-            value: dialog.value.clone(),
+            write_kind: dialog.kind,
+            value: zeroize::Zeroizing::new(body),
             failure_fallback: self
                 .messages
                 .as_ref()
                 .map(|messages| messages.redis_key_action_failed.clone())
                 .unwrap_or_default(),
         };
+        let write_kind = dialog.kind;
         dialog.loading = true;
         dialog.error = None;
         let Some(runtime) = self.lifecycle_runtime.clone() else {
             return;
         };
         let os_type = self.connection_os_type(&request.connection_id);
-        let command = os_type
-            .as_deref()
-            .and_then(|os_type| redis_set_value_command(&request.endpoint, os_type));
+        let command = os_type.as_deref().and_then(|os_type| {
+            redis_replace_value_command(&request.endpoint, os_type, write_kind)
+        });
         let Some(command) = command else {
             if let Some(dialog) = self.ui.host_redis_set_value_dialog.as_mut() {
                 dialog.loading = false;

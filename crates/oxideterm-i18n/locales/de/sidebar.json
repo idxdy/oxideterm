@@ -246,9 +246,18 @@
     "host_podman": {
       "tabs": {
         "containers": "Container",
+        "pods": "Pods",
         "images": "Images",
         "volumes": "Volumes",
         "networks": "Netzwerke"
+      },
+      "pods": {
+        "search_placeholder": "Pods durchsuchen...",
+        "count_suffix": "Pods",
+        "empty": "Keine Pods",
+        "name": "Pod",
+        "containers": "Container",
+        "created": "Erstellt"
       },
       "images": {
         "count_suffix": "Images",
@@ -339,6 +348,7 @@
         "dead": "Ungültig",
         "restarting": "Startet neu",
         "removing": "Wird entfernt",
+        "degraded": "Beeinträchtigt",
         "unknown": "Unbekannt"
       },
       "actions": {
@@ -381,7 +391,8 @@
         "pause_desc": "Container {{name}} ({{id}}) pausieren?",
         "unpause_desc": "Container {{name}} ({{id}}) fortsetzen?",
         "remove_desc": "Container {{name}} ({{id}}) entfernen? Dies kann nicht rückgängig gemacht werden.",
-      "run": "Bestätigen"
+      "run": "Bestätigen",
+        "pod_desc": "{{action}} für Pod {{name}} ausführen?"
       },
       "logs": {
         "title": "Logs: {{name}}",

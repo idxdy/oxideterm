@@ -12,6 +12,7 @@ pub(super) enum HostToolsReliableDelivery {
     DockerAction(HostDockerActionDelivery),
     DockerLogs(HostDockerLogsDelivery),
     PodmanAction(HostPodmanActionDelivery),
+    PodmanPodAction(HostPodmanPodActionDelivery),
     PodmanLogs(HostPodmanLogsDelivery),
     PodmanCapture(HostPodmanCaptureDelivery),
     PodmanResourceAction(HostPodmanResourceActionDelivery),
@@ -200,6 +201,9 @@ impl HostToolsEntity {
                 }
                 HostToolsReliableDelivery::PodmanAction(delivery) => {
                     self.finish_host_podman_action(delivery, cx);
+                }
+                HostToolsReliableDelivery::PodmanPodAction(delivery) => {
+                    self.finish_host_podman_pod_action(delivery, cx);
                 }
                 HostToolsReliableDelivery::PodmanLogs(delivery) => {
                     self.finish_host_podman_logs(delivery, cx);

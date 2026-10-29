@@ -185,6 +185,7 @@ impl WorkspaceApp {
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let dialog = self.host_tools.read(cx).podman_text_dialog()?.clone();
+        let (dialog_width, dialog_height) = self.host_tools.read(cx).podman_text_dialog_size();
         let theme = self.tokens.ui;
         let content = if dialog.loading {
             div()
@@ -247,10 +248,24 @@ impl WorkspaceApp {
                         cx.stop_propagation();
                     }),
                 )
+                .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _window, cx| {
+                    this.host_tools.update(cx, |host_tools, cx| {
+                        host_tools.update_podman_text_dialog_resize(event, cx);
+                    });
+                }))
+                .on_mouse_up(
+                    MouseButton::Left,
+                    cx.listener(|this, _event, _window, cx| {
+                        this.host_tools.update(cx, |host_tools, cx| {
+                            host_tools.finish_podman_text_dialog_resize(cx);
+                        });
+                    }),
+                )
                 .child(oxideterm_gpui_ui::modal::overlay_content_boundary(
                     oxideterm_gpui_ui::modal::dialog_content(&self.tokens)
-                        .w(px(760.0))
-                        .max_h(px(520.0))
+                        .relative()
+                        .w(px(dialog_width))
+                        .max_h(px(dialog_height + 96.0))
                         .child(
                             div()
                                 .flex_none()
@@ -300,12 +315,39 @@ impl WorkspaceApp {
                         .child(
                             div()
                                 .id("host-podman-capture-scroll")
-                                .h(px(420.0))
+                                .h(px(dialog_height))
                                 .overflow_y_scroll()
                                 .track_scroll(&dialog.scroll_handle)
                                 .vertical_scrollbar(&dialog.scroll_handle)
                                 .overflow_x_scroll()
                                 .child(content),
+                        )
+                        .child(
+                            // Invisible corner hotzone: drag resizes the dialog,
+                            // double click restores the default size.
+                            div()
+                                .id("host-podman-capture-resize")
+                                .absolute()
+                                .right(px(2.0))
+                                .bottom(px(2.0))
+                                .w(px(14.0))
+                                .h(px(14.0))
+                                // Corner ticks make the affordance visible without
+                                // adding another icon or label.
+                                .border_r_2()
+                                .border_b_2()
+                                .border_color(rgba((theme.text_muted << 8) | 0x66))
+                                .cursor(CursorStyle::ResizeUpLeftDownRight)
+                                .occlude()
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(|this, event: &MouseDownEvent, _window, cx| {
+                                        this.host_tools.update(cx, |host_tools, cx| {
+                                            host_tools.start_podman_text_dialog_resize(event, cx);
+                                        });
+                                        cx.stop_propagation();
+                                    }),
+                                ),
                         ),
                 ))
                 .into_any_element(),
@@ -339,6 +381,12 @@ impl HostToolsEntity {
             },
             HostPodmanCaptureKind::Inspect { reference } => {
                 match build_podman_inspect_command(&os_type, reference) {
+                    Ok(command) => command.command,
+                    Err(_) => return,
+                }
+            }
+            HostPodmanCaptureKind::PodInspect { pod_id } => {
+                match build_podman_pod_inspect_command(&os_type, pod_id) {
                     Ok(command) => command.command,
                     Err(_) => return,
                 }
@@ -536,6 +584,7 @@ impl HostToolsEntity {
                 }
             }
             HostPodmanCaptureKind::Inspect { .. }
+            | HostPodmanCaptureKind::PodInspect { .. }
             | HostPodmanCaptureKind::History { .. }
             | HostPodmanCaptureKind::Top { .. }
             | HostPodmanCaptureKind::Diff { .. }
@@ -602,6 +651,71 @@ impl HostToolsEntity {
             scroll_handle: gpui::ScrollHandle::new(),
         });
         self.request_podman_capture(connection_id, HostPodmanCaptureKind::Search { term }, cx);
+    }
+
+    // ---- capture dialog sizing ----
+
+    pub(super) fn podman_text_dialog_size(&self) -> (f32, f32) {
+        self.host_podman_resources.text_dialog_size
+    }
+
+    pub(in crate::workspace::connection_monitor) fn start_podman_text_dialog_resize(
+        &mut self,
+        event: &MouseDownEvent,
+        cx: &mut Context<Self>,
+    ) {
+        if event.click_count >= 2 {
+            // A double click restores the default size.
+            self.host_podman_resources.text_dialog_size = (
+                HOST_PODMAN_CAPTURE_DIALOG_DEFAULT_WIDTH,
+                HOST_PODMAN_CAPTURE_DIALOG_DEFAULT_HEIGHT,
+            );
+            self.host_podman_resources.text_dialog_resize = None;
+            cx.notify();
+            return;
+        }
+        let (width, height) = self.host_podman_resources.text_dialog_size;
+        self.host_podman_resources.text_dialog_resize = Some(HostPodmanDialogResizeDrag {
+            start_cursor: event.position,
+            start_width: width,
+            start_height: height,
+        });
+        cx.notify();
+    }
+
+    pub(in crate::workspace::connection_monitor) fn finish_podman_text_dialog_resize(
+        &mut self,
+        cx: &mut Context<Self>,
+    ) {
+        if self
+            .host_podman_resources
+            .text_dialog_resize
+            .take()
+            .is_some()
+        {
+            cx.notify();
+        }
+    }
+
+    pub(in crate::workspace::connection_monitor) fn update_podman_text_dialog_resize(
+        &mut self,
+        event: &MouseMoveEvent,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(drag) = self.host_podman_resources.text_dialog_resize else {
+            return;
+        };
+        let next = resized_podman_text_dialog_size(
+            (drag.start_width, drag.start_height),
+            (
+                f32::from(event.position.x - drag.start_cursor.x),
+                f32::from(event.position.y - drag.start_cursor.y),
+            ),
+        );
+        if self.host_podman_resources.text_dialog_size != next {
+            self.host_podman_resources.text_dialog_size = next;
+            cx.notify();
+        }
     }
 
     // ---- resource actions ----
@@ -1120,7 +1234,7 @@ impl HostToolsEntity {
                 selectable_text,
                 cx,
             ),
-            HostPodmanTab::Containers => div().into_any_element(),
+            HostPodmanTab::Containers | HostPodmanTab::Pods => div().into_any_element(),
         }
     }
 
@@ -2556,6 +2670,7 @@ impl HostToolsEntity {
                 HostPodmanTab::Containers,
                 "sidebar.host_podman.tabs.containers",
             ),
+            (HostPodmanTab::Pods, "sidebar.host_podman.tabs.pods"),
             (HostPodmanTab::Images, "sidebar.host_podman.tabs.images"),
             (HostPodmanTab::Volumes, "sidebar.host_podman.tabs.volumes"),
             (HostPodmanTab::Networks, "sidebar.host_podman.tabs.networks"),
@@ -2574,7 +2689,7 @@ impl HostToolsEntity {
             tokens,
             "host-podman-tab-switcher",
             oxideterm_gpui_ui::SegmentedControlOptions::new(active_index, active_index, tabs.len())
-                .compact(240.0),
+                .compact(320.0),
             items,
         )
         .into_any_element()
@@ -2611,5 +2726,52 @@ impl HostToolsEntity {
             }),
         )
         .into_any_element()
+    }
+}
+
+/// Clamps a corner drag to the capture dialog's usable range.
+pub(super) fn resized_podman_text_dialog_size(start: (f32, f32), delta: (f32, f32)) -> (f32, f32) {
+    (
+        (start.0 + delta.0).clamp(
+            HOST_PODMAN_CAPTURE_DIALOG_MIN_WIDTH,
+            HOST_PODMAN_CAPTURE_DIALOG_MAX_WIDTH,
+        ),
+        (start.1 + delta.1).clamp(
+            HOST_PODMAN_CAPTURE_DIALOG_MIN_HEIGHT,
+            HOST_PODMAN_CAPTURE_DIALOG_MAX_HEIGHT,
+        ),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn capture_dialog_drag_tracks_the_pointer_within_limits() {
+        let start = (
+            HOST_PODMAN_CAPTURE_DIALOG_DEFAULT_WIDTH,
+            HOST_PODMAN_CAPTURE_DIALOG_DEFAULT_HEIGHT,
+        );
+        // Growing follows the pointer one-to-one for both axes.
+        assert_eq!(
+            resized_podman_text_dialog_size(start, (120.0, 80.0)),
+            (start.0 + 120.0, start.1 + 80.0)
+        );
+        // Shrinking clamps at the minimum instead of collapsing the dialog.
+        assert_eq!(
+            resized_podman_text_dialog_size(start, (-5000.0, -5000.0)),
+            (
+                HOST_PODMAN_CAPTURE_DIALOG_MIN_WIDTH,
+                HOST_PODMAN_CAPTURE_DIALOG_MIN_HEIGHT
+            )
+        );
+        assert_eq!(
+            resized_podman_text_dialog_size(start, (5000.0, 5000.0)),
+            (
+                HOST_PODMAN_CAPTURE_DIALOG_MAX_WIDTH,
+                HOST_PODMAN_CAPTURE_DIALOG_MAX_HEIGHT
+            )
+        );
     }
 }

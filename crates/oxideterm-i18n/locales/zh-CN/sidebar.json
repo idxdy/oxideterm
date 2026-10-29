@@ -246,9 +246,18 @@
     "host_podman": {
       "tabs": {
         "containers": "容器",
+        "pods": "Pods",
         "images": "镜像",
         "volumes": "卷",
         "networks": "网络"
+      },
+      "pods": {
+        "search_placeholder": "搜索 pod...",
+        "count_suffix": "个 pod",
+        "empty": "没有 pod",
+        "name": "Pod",
+        "containers": "容器",
+        "created": "创建时间"
       },
       "images": {
         "count_suffix": "个镜像",
@@ -339,6 +348,7 @@
         "dead": "已僵死",
         "restarting": "重启中",
         "removing": "删除中",
+        "degraded": "降级",
         "unknown": "未知"
       },
       "actions": {
@@ -381,7 +391,8 @@
         "pause_desc": "暂停容器 {{name}}（{{id}}）？",
         "unpause_desc": "恢复容器 {{name}}（{{id}}）？",
         "remove_desc": "删除容器 {{name}}（{{id}}）？此操作无法撤销。",
-      "run": "确认"
+      "run": "确认",
+        "pod_desc": "对 pod {{name}} 执行{{action}}？"
       },
       "logs": {
         "title": "日志：{{name}}",

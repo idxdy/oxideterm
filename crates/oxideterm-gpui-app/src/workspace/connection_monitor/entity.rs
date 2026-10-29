@@ -711,6 +711,7 @@ impl HostToolsEntity {
             | HostToolsTextInput::RedisPassword
             | HostToolsTextInput::RedisRename
             | HostToolsTextInput::RedisSetValue
+            | HostToolsTextInput::RedisSetValueField
             | HostToolsTextInput::RedisCreateKeyName
             | HostToolsTextInput::RedisCreateKeyValue
             | HostToolsTextInput::RedisCreateKeyField
@@ -1533,6 +1534,68 @@ impl HostToolsEntity {
             );
             let _ = delivery_tx.send(super::delivery::HostToolsReliableDelivery::PodmanAction(
                 HostPodmanActionDelivery { request, result },
+            ));
+        });
+        true
+    }
+
+    pub(super) fn spawn_podman_pod_action(
+        &self,
+        command: String,
+        request: HostPodmanPodActionRequest,
+        timeout: Duration,
+        max_output_size: usize,
+        runtime: tokio::runtime::Handle,
+    ) -> bool {
+        let audit = self.host_tool_audit(
+            &request.connection_id,
+            "pod_action",
+            Some(&format!(
+                "pod={} action={:?}",
+                request.pod_id, request.action
+            )),
+        );
+        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+            audit.finish(
+                oxideterm_audit::AuditOutcome::Failed,
+                oxideterm_audit::AuditEvidence::Request,
+                None,
+                None,
+            );
+            return false;
+        };
+        let delivery_tx = self.reliable_delivery_tx.clone();
+        runtime.spawn(async move {
+            let mut audit_exit_code = None;
+            let result = handle
+                .run_command_capture(&command, timeout, max_output_size)
+                .await
+                .map(|mut output| {
+                    audit_exit_code = output.exit_code;
+                    let succeeded = output.exit_code.unwrap_or(0) == 0;
+                    zeroize::Zeroize::zeroize(&mut output.stdout);
+                    zeroize::Zeroize::zeroize(&mut output.stderr);
+                    succeeded
+                })
+                .map_err(|_| ());
+            let audit_outcome = match (&result, audit_exit_code) {
+                (Err(_), _) => oxideterm_audit::AuditOutcome::Failed,
+                (_, Some(0)) => oxideterm_audit::AuditOutcome::Succeeded,
+                (_, Some(_)) => oxideterm_audit::AuditOutcome::Failed,
+                (_, None) => oxideterm_audit::AuditOutcome::Unknown,
+            };
+            audit.finish(
+                audit_outcome,
+                if audit_exit_code.is_some() {
+                    oxideterm_audit::AuditEvidence::ExitCode
+                } else {
+                    oxideterm_audit::AuditEvidence::Protocol
+                },
+                audit_exit_code,
+                None,
+            );
+            let _ = delivery_tx.send(super::delivery::HostToolsReliableDelivery::PodmanPodAction(
+                HostPodmanPodActionDelivery { request, result },
             ));
         });
         true

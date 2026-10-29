@@ -246,9 +246,18 @@
     "host_podman": {
       "tabs": {
         "containers": "コンテナ",
+        "pods": "Pod",
         "images": "イメージ",
         "volumes": "ボリューム",
         "networks": "ネットワーク"
+      },
+      "pods": {
+        "search_placeholder": "Pod を検索...",
+        "count_suffix": "件の Pod",
+        "empty": "Pod がありません",
+        "name": "Pod",
+        "containers": "コンテナ",
+        "created": "作成"
       },
       "images": {
         "count_suffix": "個のイメージ",
@@ -339,6 +348,7 @@
         "dead": "停止不能",
         "restarting": "再起動中",
         "removing": "削除中",
+        "degraded": "デグレード",
         "unknown": "不明"
       },
       "actions": {
@@ -381,7 +391,8 @@
         "pause_desc": "コンテナ {{name}}（{{id}}）を一時停止しますか？",
         "unpause_desc": "コンテナ {{name}}（{{id}}）を再開しますか？",
         "remove_desc": "コンテナ {{name}}（{{id}}）を削除しますか？この操作は元に戻せません。",
-      "run": "確認"
+      "run": "確認",
+        "pod_desc": "Pod {{name}} に{{action}}を実行しますか？"
       },
       "logs": {
         "title": "ログ: {{name}}",

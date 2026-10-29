@@ -246,9 +246,18 @@
     "host_podman": {
       "tabs": {
         "containers": "컨테이너",
+        "pods": "Pod",
         "images": "이미지",
         "volumes": "볼륨",
         "networks": "네트워크"
+      },
+      "pods": {
+        "search_placeholder": "Pod 검색...",
+        "count_suffix": "개 Pod",
+        "empty": "Pod 없음",
+        "name": "Pod",
+        "containers": "컨테이너",
+        "created": "생성"
       },
       "images": {
         "count_suffix": "개 이미지",
@@ -339,6 +348,7 @@
         "dead": "비정상 종료",
         "restarting": "재시작 중",
         "removing": "삭제 중",
+        "degraded": "성능 저하",
         "unknown": "알 수 없음"
       },
       "actions": {
@@ -381,7 +391,8 @@
         "pause_desc": "컨테이너 {{name}}({{id}})을(를) 일시 중지할까요?",
         "unpause_desc": "컨테이너 {{name}}({{id}})을(를) 재개할까요?",
         "remove_desc": "컨테이너 {{name}}({{id}})을(를) 제거할까요? 되돌릴 수 없습니다.",
-      "run": "확인"
+      "run": "확인",
+        "pod_desc": "Pod {{name}}에 {{action}}을(를) 실행할까요?"
       },
       "logs": {
         "title": "로그: {{name}}",

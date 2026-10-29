@@ -128,6 +128,10 @@ pub(in crate::workspace) enum HostToolsNotice {
         container_name: String,
         succeeded: bool,
     },
+    PodmanPodActionFinished {
+        pod_name: String,
+        succeeded: bool,
+    },
     PodmanResourceActionFinished {
         description: String,
         succeeded: bool,

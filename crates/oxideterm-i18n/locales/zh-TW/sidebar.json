@@ -246,9 +246,18 @@
     "host_podman": {
       "tabs": {
         "containers": "容器",
+        "pods": "Pods",
         "images": "映像",
         "volumes": "儲存區",
         "networks": "網路"
+      },
+      "pods": {
+        "search_placeholder": "搜尋 pod...",
+        "count_suffix": "個 pod",
+        "empty": "沒有 pod",
+        "name": "Pod",
+        "containers": "容器",
+        "created": "建立時間"
       },
       "images": {
         "count_suffix": "個映像",
@@ -339,6 +348,7 @@
         "dead": "已失效",
         "restarting": "重新啟動中",
         "removing": "移除中",
+        "degraded": "降級",
         "unknown": "未知"
       },
       "actions": {
@@ -381,7 +391,8 @@
         "pause_desc": "暫停容器 {{name}}（{{id}}）？",
         "unpause_desc": "繼續容器 {{name}}（{{id}}）？",
         "remove_desc": "刪除容器 {{name}}（{{id}}）？此操作無法復原。",
-      "run": "確認"
+      "run": "確認",
+        "pod_desc": "對 pod {{name}} 執行{{action}}？"
       },
       "logs": {
         "title": "日誌：{{name}}",

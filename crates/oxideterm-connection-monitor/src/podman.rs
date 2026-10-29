@@ -15,6 +15,17 @@ pub struct ResourcePodmanContainer {
     pub ports: Option<String>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourcePodmanPod {
+    pub id: String,
+    pub name: String,
+    pub status: String,
+    /// Humanized age (`podman pod ps --format '{{.Created}}'`).
+    pub created: String,
+    pub containers: usize,
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ResourcePodmanStatus {
@@ -36,11 +47,14 @@ pub enum ResourcePodmanStatus {
 pub struct ResourcePodmanSnapshot {
     pub status: ResourcePodmanStatus,
     pub containers: Vec<ResourcePodmanContainer>,
+    #[serde(default)]
+    pub pods: Vec<ResourcePodmanPod>,
 }
 
 const PODMAN_UNAVAILABLE_MARKER: &str = "__OXIDE_PODMAN_UNAVAILABLE__";
 const PODMAN_ERROR_MARKER: &str = "__OXIDE_PODMAN_ERROR__";
 pub(crate) const PODMAN_ROW_PREFIX: &str = "PS\t";
+pub(crate) const PODMAN_POD_PREFIX: &str = "POD\t";
 
 // Unlike docker, a failing `podman ps` must never be retried with sudo:
 // `sudo podman ps` reads root's container store instead of the invoking
@@ -54,6 +68,9 @@ const PODMAN_SAMPLE_COMMAND_UNIX: &str = concat!(
     "oxide_podman_status=$?; ",
     "if [ \"$oxide_podman_status\" -eq 0 ]; then ",
     "printf '%s\\n' \"$oxide_podman_ps\" | sed 's/^/PS\\t/'; ",
+    "podman pod ps --format '",
+    "{{json .}}\t{{.Created}}",
+    "' 2>/dev/null | sed 's/^/POD\\t/'; ",
     "elif printf '%s' \"$oxide_podman_ps\" | grep -q 'Cannot connect'; then ",
     "printf '__OXIDE_PODMAN_UNAVAILABLE__\\t%s\\n' \"$(printf '%s' \"$oxide_podman_ps\" | head -n 1 | tr '\\t' ' ')\"; ",
     "else ",
@@ -72,7 +89,10 @@ const PODMAN_SAMPLE_COMMAND_WINDOWS: &str = concat!(
     "{{json .}}\t{{.Status}}",
     "' 2>&1;",
     "if($LASTEXITCODE -eq 0){",
-    "$oxidePodmanPs|ForEach-Object{Write-Output ('PS'+[char]9+$_)}",
+    "$oxidePodmanPs|ForEach-Object{Write-Output ('PS'+[char]9+$_)};",
+    "podman pod ps --format '",
+    "{{json .}}\t{{.Created}}",
+    "' 2>$null|ForEach-Object{Write-Output ('POD'+[char]9+$_)}",
     "}else{",
     "$oxidePodmanFirst=($oxidePodmanPs|Select-Object -First 1) -replace [char]9,' ';",
     "if(\"$oxidePodmanFirst\" -match 'Cannot connect'){",
@@ -98,6 +118,7 @@ pub fn parse_podman_snapshot(output: &str) -> ResourcePodmanSnapshot {
     };
 
     let mut containers = Vec::new();
+    let mut pods = Vec::new();
     let mut row_lines = 0usize;
     for line in section
         .lines()
@@ -110,6 +131,7 @@ pub fn parse_podman_snapshot(output: &str) -> ResourcePodmanSnapshot {
             return ResourcePodmanSnapshot {
                 status: ResourcePodmanStatus::Unavailable { detail: None },
                 containers: Vec::new(),
+                pods: Vec::new(),
             };
         }
         if let Some(detail) = line.strip_prefix(PODMAN_UNAVAILABLE_MARKER) {
@@ -118,6 +140,7 @@ pub fn parse_podman_snapshot(output: &str) -> ResourcePodmanSnapshot {
                     detail: clean_marker_detail(detail),
                 },
                 containers: Vec::new(),
+                pods: Vec::new(),
             };
         }
         if let Some(message) = line.strip_prefix(PODMAN_ERROR_MARKER) {
@@ -127,7 +150,12 @@ pub fn parse_podman_snapshot(output: &str) -> ResourcePodmanSnapshot {
                         .unwrap_or_else(|| "Podman command failed.".to_string()),
                 },
                 containers: Vec::new(),
+                pods: Vec::new(),
             };
+        }
+        if let Some(pod) = parse_podman_pod_line(line) {
+            pods.push(pod);
+            continue;
         }
         if let Some(container) = parse_podman_container_line(line) {
             containers.push(container);
@@ -146,7 +174,11 @@ pub fn parse_podman_snapshot(output: &str) -> ResourcePodmanSnapshot {
     } else {
         ResourcePodmanStatus::Available
     };
-    ResourcePodmanSnapshot { status, containers }
+    ResourcePodmanSnapshot {
+        status,
+        containers,
+        pods,
+    }
 }
 
 pub fn visible_podman_rows(
@@ -213,6 +245,74 @@ fn parse_podman_container_line(line: &str) -> Option<ResourcePodmanContainer> {
             .unwrap_or_else(|| "-".to_string()),
         ports: podman_ports_text(&value),
     })
+}
+
+/// Parses one `podman pod ps` row: JSON plus the humanized `{{.Created}}`
+/// column that podman only renders through a template field.
+fn parse_podman_pod_line(line: &str) -> Option<ResourcePodmanPod> {
+    let payload = line.strip_prefix(PODMAN_POD_PREFIX)?;
+    let (json_text, created_text) = match payload.split_once('\t') {
+        Some((json, created)) => (json, Some(created.trim())),
+        None => (payload, None),
+    };
+    let value = serde_json::from_str::<serde_json::Value>(json_text).ok()?;
+    let id = clean_json_container_field(&value, "Id")
+        .or_else(|| clean_json_container_field(&value, "ID"))?;
+    if id.is_empty() {
+        return None;
+    }
+    let containers = value
+        .get("Containers")
+        .and_then(serde_json::Value::as_array)
+        .map(Vec::len)
+        .unwrap_or(0);
+    Some(ResourcePodmanPod {
+        id: id.to_string(),
+        name: clean_json_container_field(&value, "Name").unwrap_or_else(|| id.to_string()),
+        status: clean_json_container_field(&value, "Status")
+            .unwrap_or_else(|| "unknown".to_string()),
+        created: created_text
+            .filter(|created| !created.is_empty())
+            .map(str::to_string)
+            .or_else(|| clean_json_container_field(&value, "Created"))
+            .unwrap_or_else(|| "-".to_string()),
+        containers,
+    })
+}
+
+pub fn visible_podman_pods(pods: &[ResourcePodmanPod], query: &str) -> Vec<ResourcePodmanPod> {
+    let query = query.trim().to_lowercase();
+    if query.is_empty() {
+        return pods.to_vec();
+    }
+    pods.iter()
+        .filter(|pod| {
+            pod.id.to_lowercase().contains(&query)
+                || pod.name.to_lowercase().contains(&query)
+                || pod.status.to_lowercase().contains(&query)
+        })
+        .cloned()
+        .collect()
+}
+
+pub fn podman_pod_row_signature(pod: &ResourcePodmanPod) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    pod.id.hash(&mut hasher);
+    hasher.finish()
+}
+
+/// Pods report capitalized states (`Running`, `Exited`, `Degraded`).
+pub fn podman_pod_state_label_key(state: &str) -> &'static str {
+    match state.trim().to_lowercase().as_str() {
+        "running" => "sidebar.host_podman.states.running",
+        "exited" => "sidebar.host_podman.states.exited",
+        "created" => "sidebar.host_podman.states.created",
+        "paused" => "sidebar.host_podman.states.paused",
+        "stopped" => "sidebar.host_podman.states.stopped",
+        "degraded" => "sidebar.host_podman.states.degraded",
+        "dead" => "sidebar.host_podman.states.dead",
+        _ => "sidebar.host_podman.states.unknown",
+    }
 }
 
 /// `podman ps --format '{{json .}}'` exposes `Names` as an array on podman 4/5
@@ -410,6 +510,69 @@ pub fn build_podman_action_command(
     Ok(PodmanActionCommand { command })
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum PodmanPodActionKind {
+    Start,
+    Stop,
+    Restart,
+    Pause,
+    Unpause,
+    Remove,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PodmanPodActionAvailability {
+    pub can_start: bool,
+    pub can_stop: bool,
+    pub can_restart: bool,
+    pub can_pause: bool,
+    pub can_unpause: bool,
+    /// `podman pod rm` needs a stopped pod.
+    pub can_remove: bool,
+}
+
+/// Degraded pods keep their workloads running but lose the infra container, so
+/// only start/stop-style actions are offered and removal waits for a stop.
+pub fn podman_pod_action_availability(status: &str) -> PodmanPodActionAvailability {
+    let status = status.trim().to_ascii_lowercase();
+    let running = matches!(status.as_str(), "running" | "degraded");
+    PodmanPodActionAvailability {
+        can_start: matches!(
+            status.as_str(),
+            "exited" | "stopped" | "created" | "degraded"
+        ),
+        can_stop: running,
+        can_restart: running,
+        can_pause: running && status == "running",
+        can_unpause: status == "paused",
+        can_remove: matches!(status.as_str(), "exited" | "stopped" | "created"),
+    }
+}
+
+pub fn build_podman_pod_action_command(
+    os_type: &str,
+    pod_id: &str,
+    action: PodmanPodActionKind,
+) -> Result<PodmanActionCommand, String> {
+    let pod_id = crate::docker::validated_container_id(pod_id)?;
+    let operation = match action {
+        PodmanPodActionKind::Start => "start",
+        PodmanPodActionKind::Stop => "stop",
+        PodmanPodActionKind::Restart => "restart",
+        PodmanPodActionKind::Pause => "pause",
+        PodmanPodActionKind::Unpause => "unpause",
+        PodmanPodActionKind::Remove => "rm",
+    };
+    // No sudo fallback: root's container store is a different dataset.
+    let command = match os_type {
+        "Windows" | "windows" => format!(
+            "powershell -NoProfile -ExecutionPolicy Bypass -Command \"podman pod {operation} {pod_id}\""
+        ),
+        _ => format!("podman pod {operation} {pod_id} 2>&1"),
+    };
+    Ok(PodmanActionCommand { command })
+}
+
 pub fn build_podman_logs_command(
     os_type: &str,
     container_id: &str,
@@ -483,6 +646,20 @@ pub fn build_podman_inspect_command(
             "powershell -NoProfile -ExecutionPolicy Bypass -Command \"podman inspect {reference}\""
         ),
         _ => format!("podman inspect {reference} 2>&1"),
+    };
+    Ok(PodmanCaptureCommand { command })
+}
+
+pub fn build_podman_pod_inspect_command(
+    os_type: &str,
+    pod_id: &str,
+) -> Result<PodmanCaptureCommand, String> {
+    let pod_id = crate::docker::validated_container_id(pod_id)?;
+    let command = match os_type {
+        "Windows" | "windows" => format!(
+            "powershell -NoProfile -ExecutionPolicy Bypass -Command \"podman pod inspect {pod_id}\""
+        ),
+        _ => format!("podman pod inspect {pod_id} 2>&1"),
     };
     Ok(PodmanCaptureCommand { command })
 }
@@ -696,6 +873,93 @@ mod tests {
             vec!["web"]
         );
         assert!(visible_podman_rows(&snapshot.containers, "nope").is_empty());
+    }
+
+    #[test]
+    fn podman_parser_reads_pods_with_created_and_container_count() {
+        // Captured shape from `podman 6.1.4 pod ps --format '{{json .}}\t{{.Created}}'`.
+        let output = concat!(
+            "===PODMAN===\n",
+            "POD\t{\"Id\":\"3cd7df7af038e334ea5eb404719eea184303544618b797d57887c41f6ddc9ed0\",",
+            "\"Name\":\"pod_ldap\",\"Status\":\"Exited\",\"Created\":\"2026-09-01T20:04:03+08:00\",",
+            "\"Containers\":[{\"Id\":\"552d85b062e9\",\"Names\":\"openldap\",\"Status\":\"exited\"}]}\t8 weeks ago\n",
+            "===PODMAN_END===",
+        );
+        let snapshot = parse_podman_snapshot(output);
+        assert_eq!(snapshot.status, ResourcePodmanStatus::Available);
+        assert!(snapshot.containers.is_empty());
+        let pod = &snapshot.pods[0];
+        assert_eq!(pod.name, "pod_ldap");
+        assert_eq!(pod.status, "Exited");
+        // The template column carries the humanized age; JSON only has RFC3339.
+        assert_eq!(pod.created, "8 weeks ago");
+        assert_eq!(pod.containers, 1);
+
+        // Pods are searchable by name/id/state like containers.
+        assert_eq!(
+            visible_podman_pods(&snapshot.pods, "ldap")
+                .iter()
+                .map(|pod| pod.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["pod_ldap"]
+        );
+        assert!(visible_podman_pods(&snapshot.pods, "missing").is_empty());
+    }
+
+    #[test]
+    fn podman_pod_inspect_command_validates_the_id() {
+        let id = "3cd7df7af038e334ea5eb404719eea184303544618b797d57887c41f6ddc9ed0";
+        assert_eq!(
+            build_podman_pod_inspect_command("Linux", id)
+                .unwrap()
+                .command,
+            format!("podman pod inspect {id} 2>&1")
+        );
+        assert!(build_podman_pod_inspect_command("Linux", "abc").is_err());
+    }
+
+    #[test]
+    fn podman_pod_actions_follow_the_pod_state() {
+        for (status, expected) in [
+            ("Running", (false, true, true, true, false, false)),
+            ("Degraded", (true, true, true, false, false, false)),
+            ("Exited", (true, false, false, false, false, true)),
+            ("Paused", (false, false, false, false, true, false)),
+            ("Created", (true, false, false, false, false, true)),
+        ] {
+            let availability = podman_pod_action_availability(status);
+            assert_eq!(
+                (
+                    availability.can_start,
+                    availability.can_stop,
+                    availability.can_restart,
+                    availability.can_pause,
+                    availability.can_unpause,
+                    availability.can_remove,
+                ),
+                expected,
+                "{status}"
+            );
+        }
+        // Same validation as containers: only full hex ids reach a command.
+        let id = "3cd7df7af038e334ea5eb404719eea184303544618b797d57887c41f6ddc9ed0";
+        assert_eq!(
+            build_podman_pod_action_command("Linux", id, PodmanPodActionKind::Restart)
+                .unwrap()
+                .command,
+            format!("podman pod restart {id} 2>&1")
+        );
+        assert_eq!(
+            build_podman_pod_action_command("Windows", id, PodmanPodActionKind::Remove)
+                .unwrap()
+                .command,
+            format!(
+                "powershell -NoProfile -ExecutionPolicy Bypass -Command \"podman pod rm {id}\""
+            )
+        );
+        assert!(
+            build_podman_pod_action_command("Linux", "abc", PodmanPodActionKind::Stop).is_err()
+        );
     }
 
     #[test]

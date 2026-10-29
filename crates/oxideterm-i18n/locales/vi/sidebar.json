@@ -246,9 +246,18 @@
     "host_podman": {
       "tabs": {
         "containers": "Container",
+        "pods": "Pod",
         "images": "Ảnh",
         "volumes": "Volume",
         "networks": "Mạng"
+      },
+      "pods": {
+        "search_placeholder": "Tìm pod...",
+        "count_suffix": "pod",
+        "empty": "Không có pod",
+        "name": "Pod",
+        "containers": "Container",
+        "created": "Tạo lúc"
       },
       "images": {
         "count_suffix": "ảnh",
@@ -339,6 +348,7 @@
         "dead": "Đã chết",
         "restarting": "Đang khởi động lại",
         "removing": "Đang xóa",
+        "degraded": "Suy giảm",
         "unknown": "Không rõ"
       },
       "actions": {
@@ -381,7 +391,8 @@
         "pause_desc": "Tạm dừng container {{name}} ({{id}})?",
         "unpause_desc": "Tiếp tục container {{name}} ({{id}})?",
         "remove_desc": "Xóa container {{name}} ({{id}})? Không thể hoàn tác.",
-      "run": "Xác nhận"
+      "run": "Xác nhận",
+        "pod_desc": "{{action}} pod {{name}}?"
       },
       "logs": {
         "title": "Log: {{name}}",

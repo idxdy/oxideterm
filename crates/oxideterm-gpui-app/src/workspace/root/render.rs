@@ -1358,6 +1358,10 @@ impl WorkspaceApp {
                 self.render_host_podman_confirm_dialog(cx),
                 |root, dialog| root.child(dialog),
             )
+            .when_some(
+                self.render_host_podman_pod_confirm_dialog(cx),
+                |root, dialog| root.child(dialog),
+            )
             .when_some(self.render_host_podman_logs_dialog(cx), |root, dialog| {
                 root.child(dialog)
             })

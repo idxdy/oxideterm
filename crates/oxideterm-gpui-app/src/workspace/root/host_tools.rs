@@ -232,6 +232,25 @@ impl WorkspaceApp {
                     )
                 }
             }
+            HostToolsNotice::PodmanPodActionFinished {
+                pod_name,
+                succeeded,
+            } => {
+                if succeeded {
+                    (
+                        self.i18n_replace(
+                            "sidebar.host_podman.toast.action_succeeded",
+                            &[("name", pod_name)],
+                        ),
+                        TerminalNoticeVariant::Success,
+                    )
+                } else {
+                    (
+                        self.i18n.t("sidebar.host_podman.toast.action_failed"),
+                        TerminalNoticeVariant::Error,
+                    )
+                }
+            }
             HostToolsNotice::PodmanResourceActionFinished {
                 description,
                 succeeded,

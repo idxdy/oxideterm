@@ -1340,4 +1340,26 @@ cpu  1 2 3 4 5 6 7 8
         assert_eq!(metrics.cpu_percent, Some(37.5));
         assert_eq!(metrics.source, MetricsSource::Partial);
     }
+    #[test]
+    fn podman_pods_survive_the_sampling_parse() {
+        // The Pods tab reads `metrics.podman.pods`; this locks the sampling
+        // payload → metrics path for pods (containers keep their own coverage).
+        let output = concat!(
+            "===PODMAN===\n",
+            "PS\t{\"Id\":\"a1b2c3d4e5f6\",\"Names\":[\"web\"],\"Image\":\"nginx:alpine\",",
+            "\"State\":\"running\",\"Status\":\"\",\"Ports\":null}\tUp 2 minutes\n",
+            "POD\t{\"Id\":\"3cd7df7af038e334ea5eb404719eea184303544618b797d57887c41f6ddc9ed0\",",
+            "\"Name\":\"pod_ldap\",\"Status\":\"Exited\",\"Containers\":[{\"Id\":\"552d85b062e9\"}]}\t8 weeks ago\n",
+            "===PODMAN_END===",
+        );
+        let metrics = parse_resource_metrics(output, None, 10_000);
+        assert_eq!(metrics.podman.containers.len(), 1);
+        assert_eq!(metrics.podman.containers[0].status, "Up 2 minutes");
+        assert_eq!(metrics.podman.pods.len(), 1);
+        let pod = &metrics.podman.pods[0];
+        assert_eq!(pod.name, "pod_ldap");
+        assert_eq!(pod.status, "Exited");
+        assert_eq!(pod.created, "8 weeks ago");
+        assert_eq!(pod.containers, 1);
+    }
 }

@@ -42,6 +42,14 @@ pub(super) const HOST_PODMAN_LOGS_TIMEOUT: Duration = Duration::from_secs(8);
 pub(super) const HOST_PODMAN_LOGS_MAX_OUTPUT_SIZE: usize = 128 * 1024;
 pub(super) const HOST_PODMAN_LOGS_DIALOG_WIDTH: f32 = 760.0;
 pub(super) const HOST_PODMAN_LOGS_DIALOG_MAX_HEIGHT: f32 = 520.0;
+// Inspect/search capture dialogs are user-resizable; the body height is the
+// dragged dimension and the width follows the corner grip.
+pub(super) const HOST_PODMAN_CAPTURE_DIALOG_DEFAULT_WIDTH: f32 = 760.0;
+pub(super) const HOST_PODMAN_CAPTURE_DIALOG_DEFAULT_HEIGHT: f32 = 420.0;
+pub(super) const HOST_PODMAN_CAPTURE_DIALOG_MIN_WIDTH: f32 = 420.0;
+pub(super) const HOST_PODMAN_CAPTURE_DIALOG_MIN_HEIGHT: f32 = 200.0;
+pub(super) const HOST_PODMAN_CAPTURE_DIALOG_MAX_WIDTH: f32 = 1200.0;
+pub(super) const HOST_PODMAN_CAPTURE_DIALOG_MAX_HEIGHT: f32 = 800.0;
 pub(super) const HOST_DOCKER_PORTS_COLUMN_MIN_WIDTH: f32 = 92.0;
 pub(super) const HOST_DOCKER_ACTION_TIMEOUT: Duration = Duration::from_secs(12);
 pub(super) const HOST_DOCKER_ACTION_MAX_OUTPUT_SIZE: usize = 4096;
@@ -79,6 +87,9 @@ pub(super) const HOST_REDIS_VALUE_MAX_OUTPUT_SIZE: usize = 512 * 1024;
 pub(super) const HOST_REDIS_ACTION_TIMEOUT: Duration = Duration::from_secs(12);
 pub(super) const HOST_REDIS_ACTION_MAX_OUTPUT_SIZE: usize = 4096;
 pub(super) const HOST_REDIS_VALUE_DIALOG_WIDTH: f32 = 720.0;
+// String/JSON values are longer than a key name; the editor gets room to show
+// the document instead of a single 32px line.
+pub(super) const HOST_REDIS_VALUE_INPUT_HEIGHT: f32 = 96.0;
 pub(super) const HOST_REDIS_VALUE_DIALOG_MAX_HEIGHT: f32 = 560.0;
 // The dialog is a viewer over a bounded capture; per-frame line output stops
 // here instead of building thousands of GPUI elements.
@@ -612,10 +623,14 @@ pub(in crate::workspace) struct HostRedisSetValueDialog {
     pub(super) endpoint: oxideterm_connection_monitor::ResourceRedisEndpoint,
     pub(super) database: u32,
     pub(super) key: String,
-    /// Replacement value, zeroized when the dialog closes.
+    /// Shape being edited, taken from the fetched value.
+    pub(super) kind: RedisValueWriteKind,
+    /// Replacement value for string/JSON, or the pending element.
     pub(super) value: zeroize::Zeroizing<String>,
-    /// JSON view was active, so the replacement must parse as JSON.
-    pub(super) json_only: bool,
+    /// Pending hash field while adding a pair.
+    pub(super) field: zeroize::Zeroizing<String>,
+    /// Committed rows: `field<TAB>value`, `member<TAB>score`, or elements.
+    pub(super) entries: Vec<zeroize::Zeroizing<String>>,
     pub(super) error: Option<String>,
     pub(super) loading: bool,
 }
@@ -627,6 +642,7 @@ pub(super) struct HostRedisSetValueRequest {
     pub(super) database: u32,
     pub(super) key: String,
     pub(super) password: zeroize::Zeroizing<String>,
+    pub(super) write_kind: RedisValueWriteKind,
     pub(super) value: zeroize::Zeroizing<String>,
     pub(super) failure_fallback: String,
 }
@@ -725,6 +741,19 @@ pub(super) struct HostPodmanActionDelivery {
 }
 
 #[derive(Clone, Eq, PartialEq)]
+pub(super) struct HostPodmanPodActionRequest {
+    pub(super) connection_id: String,
+    pub(super) pod_id: String,
+    pub(super) pod_name: String,
+    pub(super) action: PodmanPodActionKind,
+}
+
+pub(super) struct HostPodmanPodActionDelivery {
+    pub(super) request: HostPodmanPodActionRequest,
+    pub(super) result: Result<bool, ()>,
+}
+
+#[derive(Clone, Eq, PartialEq)]
 pub(super) struct HostPodmanLogsRequest {
     pub(super) connection_id: String,
     pub(super) container_id: String,
@@ -750,6 +779,8 @@ pub(super) struct HostPodmanLogsDialog {
 pub(super) struct HostPodmanOperationsState {
     pub(super) pending_confirm: Option<HostToolConfirmState<HostPodmanActionRequest>>,
     pub(super) action_running: Option<HostPodmanActionRequest>,
+    pub(super) pod_pending_confirm: Option<HostToolConfirmState<HostPodmanPodActionRequest>>,
+    pub(super) pod_action_running: Option<HostPodmanPodActionRequest>,
     pub(super) logs_dialog: Option<HostPodmanLogsDialog>,
 }
 
@@ -758,6 +789,8 @@ impl HostPodmanOperationsState {
         Self {
             pending_confirm: None,
             action_running: None,
+            pod_pending_confirm: None,
+            pod_action_running: None,
             logs_dialog: None,
         }
     }
@@ -768,6 +801,7 @@ impl HostPodmanOperationsState {
 pub(in crate::workspace) enum HostPodmanTab {
     #[default]
     Containers,
+    Pods,
     Images,
     Volumes,
     Networks,
@@ -812,12 +846,21 @@ pub(in crate::workspace) struct HostPodmanTextDialog {
     pub(in crate::workspace) scroll_handle: gpui::ScrollHandle,
 }
 
+/// Pointer anchor for the capture dialog's corner resize grip.
+#[derive(Clone, Copy)]
+pub(in crate::workspace) struct HostPodmanDialogResizeDrag {
+    pub(super) start_cursor: gpui::Point<gpui::Pixels>,
+    pub(super) start_width: f32,
+    pub(super) start_height: f32,
+}
+
 #[derive(Clone, Eq, PartialEq)]
 pub(in crate::workspace) enum HostPodmanCaptureKind {
     Resources,
     Stats,
     Search { term: String },
     Inspect { reference: String },
+    PodInspect { pod_id: String },
     History { image_id: String },
     Top { container_id: String },
     Diff { container_id: String },
@@ -864,6 +907,9 @@ pub(super) struct HostPodmanResourcesState {
     pub(super) search_in_flight: bool,
     pub(super) text_dialog: Option<HostPodmanTextDialog>,
     pub(super) text_dialog_running: Option<HostPodmanCaptureRequest>,
+    /// User-chosen capture dialog size, kept across openings.
+    pub(super) text_dialog_size: (f32, f32),
+    pub(super) text_dialog_resize: Option<HostPodmanDialogResizeDrag>,
     pub(super) resource_confirm: Option<HostToolConfirmState<HostPodmanResourceActionRequest>>,
     pub(super) resource_action_running: bool,
 }
@@ -883,6 +929,11 @@ impl HostPodmanResourcesState {
             search_in_flight: false,
             text_dialog: None,
             text_dialog_running: None,
+            text_dialog_size: (
+                HOST_PODMAN_CAPTURE_DIALOG_DEFAULT_WIDTH,
+                HOST_PODMAN_CAPTURE_DIALOG_DEFAULT_HEIGHT,
+            ),
+            text_dialog_resize: None,
             resource_confirm: None,
             resource_action_running: false,
         }
@@ -1288,6 +1339,7 @@ pub(in crate::workspace) enum HostToolsTextInput {
     RedisPassword,
     RedisRename,
     RedisSetValue,
+    RedisSetValueField,
     RedisCreateKeyName,
     RedisCreateKeyValue,
     RedisCreateKeyField,
@@ -1515,6 +1567,9 @@ pub(in crate::workspace) struct HostToolsUiState {
     pub(super) host_docker_list_cache: RefCell<VirtualListSignatureCache>,
     pub(in crate::workspace) host_podman_search_query: String,
     pub(in crate::workspace) host_podman_expanded_id: Option<String>,
+    pub(in crate::workspace) host_podman_pod_expanded_id: Option<String>,
+    pub(super) host_podman_pod_list_state: ListState,
+    pub(super) host_podman_pod_list_cache: RefCell<VirtualListSignatureCache>,
     pub(in crate::workspace) host_podman_tab: HostPodmanTab,
     pub(in crate::workspace) host_podman_stats_visible: bool,
     pub(super) host_podman_list_state: ListState,
@@ -1570,6 +1625,13 @@ impl HostToolsUiState {
             host_docker_list_cache: RefCell::new(VirtualListSignatureCache::default()),
             host_podman_search_query: String::new(),
             host_podman_expanded_id: None,
+            host_podman_pod_expanded_id: None,
+            host_podman_pod_list_state: tauri_virtual_list_state(
+                0,
+                ListAlignment::Top,
+                TauriVirtualListSpec::new(px(HOST_PODMAN_LIST_ESTIMATED_ROW_HEIGHT), 8),
+            ),
+            host_podman_pod_list_cache: RefCell::new(VirtualListSignatureCache::default()),
             host_podman_tab: HostPodmanTab::Containers,
             host_podman_stats_visible: false,
             host_podman_list_state: tauri_virtual_list_state(
@@ -1656,6 +1718,7 @@ impl HostToolsUiState {
                     HostToolsTextInput::RedisPassword
                         | HostToolsTextInput::RedisRename
                         | HostToolsTextInput::RedisSetValue
+                        | HostToolsTextInput::RedisSetValueField
                         | HostToolsTextInput::RedisCreateKeyName
                         | HostToolsTextInput::RedisCreateKeyValue
                         | HostToolsTextInput::RedisCreateKeyField
@@ -1700,6 +1763,7 @@ impl HostToolsUiState {
             HostToolsTextInput::RedisPassword => Some(&self.host_redis_password),
             HostToolsTextInput::RedisRename => self.host_redis_rename_value(),
             HostToolsTextInput::RedisSetValue => self.host_redis_set_value(),
+            HostToolsTextInput::RedisSetValueField => self.host_redis_set_value_field(),
             HostToolsTextInput::RedisCreateKeyName => self.host_redis_create_key_name(),
             HostToolsTextInput::RedisCreateKeyValue => self.host_redis_create_key_value(),
             HostToolsTextInput::RedisCreateKeyField => self.host_redis_create_key_field(),
@@ -1753,6 +1817,18 @@ impl HostToolsUiState {
         self.host_redis_create_key_dialog
             .as_mut()
             .map(|dialog| &mut *dialog.value)
+    }
+
+    fn host_redis_set_value_field(&self) -> Option<&str> {
+        self.host_redis_set_value_dialog
+            .as_ref()
+            .map(|dialog| dialog.field.as_str())
+    }
+
+    fn host_redis_set_value_field_mut(&mut self) -> Option<&mut String> {
+        self.host_redis_set_value_dialog
+            .as_mut()
+            .map(|dialog| &mut *dialog.field)
     }
 
     fn host_redis_set_value(&self) -> Option<&str> {
@@ -1809,6 +1885,7 @@ impl HostToolsUiState {
             HostToolsTextInput::RedisPassword => Some(&mut self.host_redis_password),
             HostToolsTextInput::RedisRename => self.host_redis_rename_value_mut(),
             HostToolsTextInput::RedisSetValue => self.host_redis_set_value_mut(),
+            HostToolsTextInput::RedisSetValueField => self.host_redis_set_value_field_mut(),
             HostToolsTextInput::RedisCreateKeyName => self.host_redis_create_key_name_mut(),
             HostToolsTextInput::RedisCreateKeyValue => self.host_redis_create_key_value_mut(),
             HostToolsTextInput::RedisCreateKeyField => self.host_redis_create_key_field_mut(),

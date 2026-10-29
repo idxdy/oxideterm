@@ -115,6 +115,8 @@ pub enum ResourceRedisValueKind {
     #[default]
     Other,
     String,
+    /// RedisJSON keys report `ReJSON-RL`/`json`; the body is the JSON document.
+    Json,
     Hash,
     List,
     Set,
@@ -131,6 +133,7 @@ impl ResourceRedisValueKind {
             "set" => Self::Set,
             "zset" => Self::SortedSet,
             "stream" => Self::Stream,
+            "json" => Self::Json,
             _ => Self::Other,
         }
     }
@@ -153,6 +156,7 @@ impl ResourceRedisValueKind {
     pub fn label(self) -> &'static str {
         match self {
             Self::String => "string",
+            Self::Json => "json",
             Self::Hash => "hash",
             Self::List => "list",
             Self::Set => "set",
@@ -169,6 +173,9 @@ impl ResourceRedisValueKind {
 pub struct ResourceRedisValue {
     pub status: ResourceRedisStatus,
     pub kind: ResourceRedisValueKind,
+    /// Raw `TYPE` reply for module types (`Timeseries`, `ReJSON-RL`, …).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_type: Option<String>,
     pub ttl: ResourceRedisTtl,
     /// `MEMORY USAGE` bytes when the server supports it.
     pub memory_usage: Option<u64>,
@@ -306,20 +313,22 @@ const REDIS_VALUE_TAIL: &str = concat!(
     "esac; ",
     "printf '===REDIS_BODY===\\n%s\\n' \"$oxide_body\"; ",
     ";; ",
+    "ReJSON-RL|json) ",
+    "printf 'status\\tready\\n'; ",
+    "printf 'type\\tjson\\n'; ",
+    "printf 'ttl\\t%s\\n' \"$(oxide_cli -n \"$oxide_db\" TTL \"$oxide_key\" 2>/dev/null | head -n 1 | tr -d '\\r')\"; ",
+    "printf 'usage\\t%s\\n' \"$(oxide_cli -n \"$oxide_db\" MEMORY USAGE \"$oxide_key\" 2>/dev/null | head -n 1 | tr -d '\\r')\"; ",
+    "printf '===REDIS_BODY===\\n%s\\n' \"$(oxide_cli -n \"$oxide_db\" JSON.GET \"$oxide_key\" 2>/dev/null)\"; ",
+    ";; ",
+    "*) ",
+    "printf 'status\\tready\\n'; ",
+    "printf 'type\\tother\\n'; ",
+    "printf 'rawtype\\t%s\\n' \"$(printf '%s' \"$oxide_type\" | tr '\\t' ' ')\" ;; ",
+    "printf '===REDIS_BODY===\\n%s\\n' \"$oxide_body\"; ",
+    ";; ",
     "*NOAUTH*|*WRONGPASS*|*'invalid password'*|*'no password is set'*|*'AUTH failed'*) ",
     "printf 'status\\tauth\\n' ;; ",
     "*) printf 'status\\terror\\t%s\\n' \"$(printf '%s' \"$oxide_type\" | tr '\\t' ' ')\" ;; ",
-    "esac; fi; "
-);
-
-const REDIS_SET_VALUE_TAIL: &str = concat!(
-    "case \"$oxide_db\" in ''|*[!0-9]*) oxide_db=0;; esac; ",
-    "oxide_value=$(cat); ",
-    "if [ -z \"$oxide_key\" ]; then printf 'status\\terror\\tmissing key\\n'; else ",
-    "oxide_reply=$(printf '%s' \"$oxide_value\" | oxide_cli_stdin -n \"$oxide_db\" -x SET \"$oxide_key\" 2>&1 | head -n 1 | tr -d '\\r'); ",
-    "case \"$oxide_reply\" in ",
-    "OK) printf 'status\\tok\\n' ;; ",
-    "*) printf 'status\\terror\\t%s\\n' \"$(printf '%s' \"$oxide_reply\" | tr '\\t' ' ')\" ;; ",
     "esac; fi; "
 );
 
@@ -527,21 +536,6 @@ pub fn redis_key_mutation_command(
     redis_script_for(endpoint, os_type, REDIS_ACTION_SECTION, &reads, tail)
 }
 
-/// Builds the command that replaces a string value.
-///
-/// stdin carries the password, database index and key as lines, then the new
-/// value verbatim; the script hands it to `redis-cli -x` so the value never
-/// becomes a command-line argument.
-pub fn redis_set_value_command(endpoint: &ResourceRedisEndpoint, os_type: &str) -> Option<String> {
-    redis_script_for(
-        endpoint,
-        os_type,
-        REDIS_ACTION_SECTION,
-        &["oxide_pw", "oxide_db", "oxide_key"],
-        REDIS_SET_VALUE_TAIL,
-    )
-}
-
 /// Builds the command that creates a string key without overwriting one.
 ///
 /// stdin carries the password, database index and key as lines, then the value
@@ -559,6 +553,127 @@ pub fn redis_create_key_command(
     let tail = REDIS_CREATE_KEY_TEMPLATE
         .replace("{WRITE}", kind.write_script())
         .replace("{TTL}", &ttl_seconds.unwrap_or(0).to_string());
+    Some(redis_script(
+        REDIS_ACTION_SECTION,
+        &["oxide_pw", "oxide_db", "oxide_key"],
+        &cli,
+        &tail,
+    ))
+}
+
+/// Value shapes the set-value editor can write.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RedisValueWriteKind {
+    String,
+    Json,
+    Hash,
+    List,
+    Set,
+    SortedSet,
+}
+
+impl RedisValueWriteKind {
+    /// Maps a fetched value kind onto the write shape.
+    pub fn from_value_kind(kind: ResourceRedisValueKind) -> Option<Self> {
+        match kind {
+            ResourceRedisValueKind::String => Some(Self::String),
+            ResourceRedisValueKind::Json => Some(Self::Json),
+            ResourceRedisValueKind::Hash => Some(Self::Hash),
+            ResourceRedisValueKind::List => Some(Self::List),
+            ResourceRedisValueKind::Set => Some(Self::Set),
+            ResourceRedisValueKind::SortedSet => Some(Self::SortedSet),
+            ResourceRedisValueKind::Stream | ResourceRedisValueKind::Other => None,
+        }
+    }
+
+    fn replace_script(self) -> &'static str {
+        match self {
+            Self::String => concat!(
+                "oxide_out=$(printf '%s' \"$oxide_body\" | oxide_cli_stdin -n \"$oxide_db\" -x SET \"$oxide_key\" 2>&1); ",
+                "oxide_restore_ttl=0; ",
+            ),
+            Self::Json => concat!(
+                "oxide_out=$(printf '%s' \"$oxide_body\" | oxide_cli_stdin -n \"$oxide_db\" -x JSON.SET \"$oxide_key\" '$' 2>&1); ",
+                "oxide_restore_ttl=0; ",
+            ),
+            Self::Hash => concat!(
+                "oxide_out=$(printf '%s\\n' \"$oxide_body\" | ",
+                "while IFS='<TAB>' read -r oxide_field oxide_field_value; do ",
+                "if [ -z \"$oxide_field\" ]; then continue; fi; ",
+                "printf '%s' \"$oxide_field_value\" | oxide_cli_stdin -n \"$oxide_db\" -x HSET \"$oxide_key\" \"$oxide_field\"; echo; ",
+                "done); ",
+            ),
+            Self::List => concat!(
+                "oxide_out=$(printf '%s\\n' \"$oxide_body\" | ",
+                "while IFS= read -r oxide_item; do ",
+                "if [ -z \"$oxide_item\" ]; then continue; fi; ",
+                "printf '%s' \"$oxide_item\" | oxide_cli_stdin -n \"$oxide_db\" -x RPUSH \"$oxide_key\"; echo; ",
+                "done); ",
+            ),
+            Self::Set => concat!(
+                "oxide_out=$(printf '%s\\n' \"$oxide_body\" | ",
+                "while IFS= read -r oxide_item; do ",
+                "if [ -z \"$oxide_item\" ]; then continue; fi; ",
+                "printf '%s' \"$oxide_item\" | oxide_cli_stdin -n \"$oxide_db\" -x SADD \"$oxide_key\"; echo; ",
+                "done); ",
+            ),
+            Self::SortedSet => concat!(
+                "oxide_out=$(printf '%s\\n' \"$oxide_body\" | ",
+                "while IFS='<TAB>' read -r oxide_member oxide_score; do ",
+                "if [ -z \"$oxide_member\" ]; then continue; fi; ",
+                "printf '%s' \"$oxide_member\" | oxide_cli_stdin -n \"$oxide_db\" -x ZADD \"$oxide_key\" \"$oxide_score\"; echo; ",
+                "done); ",
+            ),
+        }
+    }
+}
+
+/// Replacement writes keep the key's expiry: collection kinds rebuild the key
+/// (`DEL` + inserts), so the remaining PTTL is re-applied afterwards.
+const REDIS_REPLACE_VALUE_TEMPLATE: &str = concat!(
+    "case \"$oxide_db\" in ''|*[!0-9]*) oxide_db=0;; esac; ",
+    "oxide_body=$(cat); ",
+    "if [ -z \"$oxide_key\" ]; then printf 'status\\terror\\tmissing key\\n'; else ",
+    "oxide_kind=$(oxide_cli -n \"$oxide_db\" TYPE \"$oxide_key\" 2>/dev/null | head -n 1 | tr -d '\\r'); ",
+    "if [ \"$oxide_kind\" = \"none\" ]; then printf 'status\\terror\\tmissing key\\n'; else ",
+    "oxide_pttl=$(oxide_cli -n \"$oxide_db\" PTTL \"$oxide_key\" 2>/dev/null | head -n 1 | tr -d '\\r'); ",
+    "case \"$oxide_pttl\" in ''|*[!0-9-]*) oxide_pttl=-1;; esac; ",
+    "{RESET}",
+    "{WRITE}",
+    "case \"$oxide_out\" in ",
+    "*ERR*|*WRONGTYPE*|*NOAUTH*|*WRONGPASS*|*'not an integer'*) ",
+    "printf 'status\\terror\\t%s\\n' \"$(printf '%s' \"$oxide_out\" | grep -E 'ERR|WRONGTYPE|NOAUTH|WRONGPASS|not an integer' | head -n 1 | tr '\\t' ' ' | tr -d '\\r')\" ;; ",
+    "*) ",
+    "if [ \"{RESTORE_TTL}\" = \"1\" ] && [ \"$oxide_pttl\" -gt 0 ]; then ",
+    "oxide_cli -n \"$oxide_db\" PEXPIRE \"$oxide_key\" \"$oxide_pttl\" >/dev/null 2>&1; fi; ",
+    "printf 'status\\tok\\n' ;; ",
+    "esac; fi; fi; "
+);
+
+/// Builds the command that replaces a value with type-appropriate writes.
+///
+/// stdin carries the password, database and key as lines, then the body
+/// (`field<TAB>value`, `member<TAB>score`, or plain elements). String and JSON
+/// values are written in place; collections are rebuilt and keep their expiry.
+pub fn redis_replace_value_command(
+    endpoint: &ResourceRedisEndpoint,
+    os_type: &str,
+    kind: RedisValueWriteKind,
+) -> Option<String> {
+    if matches!(os_type, "Windows" | "windows") {
+        return None;
+    }
+    let cli = redis_cli_function(endpoint)?;
+    let reset = match kind {
+        RedisValueWriteKind::String | RedisValueWriteKind::Json => "",
+        _ => "oxide_cli -n \"$oxide_db\" DEL \"$oxide_key\" >/dev/null 2>&1; ",
+    };
+    let write = kind.replace_script().replace("<TAB>", "\t");
+    let tail = REDIS_REPLACE_VALUE_TEMPLATE
+        .replace("{RESET}", reset)
+        .replace("{WRITE}", &write)
+        .replace("{RESTORE_TTL}", "1");
     Some(redis_script(
         REDIS_ACTION_SECTION,
         &["oxide_pw", "oxide_db", "oxide_key"],
@@ -832,6 +947,7 @@ pub fn parse_redis_value(output: &str) -> ResourceRedisValue {
                 };
             }
             "type" => value.kind = ResourceRedisValueKind::from_type_reply(item),
+            "rawtype" => value.raw_type = clean_server_reply(item),
             "ttl" => {
                 value.ttl = match item.parse::<i64>() {
                     Ok(-1) => ResourceRedisTtl::Never,
@@ -870,6 +986,28 @@ pub fn parse_redis_key_mutation(output: &str) -> ResourceRedisStatus {
     ResourceRedisStatus::Unknown
 }
 
+/// Structured rows for the value viewer and the set-value editor.
+///
+/// Hash and sorted-set rows carry their second column (value/score); list and
+/// set rows are single-column. String/JSON documents have no rows.
+pub fn redis_value_rows(value: &ResourceRedisValue) -> Vec<(String, Option<String>)> {
+    match value.kind {
+        ResourceRedisValueKind::Hash | ResourceRedisValueKind::SortedSet => {
+            redis_value_pairs(value)
+        }
+        ResourceRedisValueKind::List | ResourceRedisValueKind::Set => value
+            .body
+            .lines()
+            .filter(|line| !line.is_empty())
+            .map(|line| (line.to_string(), None))
+            .collect(),
+        ResourceRedisValueKind::String
+        | ResourceRedisValueKind::Json
+        | ResourceRedisValueKind::Stream
+        | ResourceRedisValueKind::Other => Vec::new(),
+    }
+}
+
 /// Pairs the alternating lines `redis-cli` prints for two-element replies.
 ///
 /// A non-interactive `redis-cli` prints array replies one element per line, so
@@ -902,6 +1040,8 @@ fn redis_value_pairs(value: &ResourceRedisValue) -> Vec<(String, Option<String>)
 /// its value stay on one row, and other types keep redis-cli's raw reply.
 pub fn redis_value_text(value: &ResourceRedisValue) -> String {
     match value.kind {
+        // A JSON document is already the most readable form.
+        ResourceRedisValueKind::Json => value.body.clone(),
         ResourceRedisValueKind::Hash | ResourceRedisValueKind::SortedSet => {
             redis_value_pairs(value)
                 .into_iter()
@@ -973,6 +1113,12 @@ pub fn redis_value_json(value: &ResourceRedisValue) -> Option<String> {
                 })
                 .collect::<Vec<_>>();
             serde_json::to_string_pretty(&serde_json::Value::Array(members)).ok()?
+        }
+        ResourceRedisValueKind::Json => {
+            match serde_json::from_str::<serde_json::Value>(&value.body) {
+                Ok(parsed) => serde_json::to_string_pretty(&parsed).ok()?,
+                Err(_) => serde_json::to_string(&value.body).ok()?,
+            }
         }
         ResourceRedisValueKind::Stream | ResourceRedisValueKind::Other => return None,
     };
@@ -1522,20 +1668,6 @@ mod tests {
     }
 
     #[test]
-    fn set_value_command_writes_through_stdin_x_and_scopes_the_database() {
-        let endpoint =
-            ResourceRedisEndpoint::new(ResourceRedisEndpointKind::Host, REDIS_PROBE_TARGET);
-        let command = redis_set_value_command(&endpoint, "Linux").unwrap();
-        assert!(command.contains("IFS= read -r oxide_db"));
-        assert!(command.contains("IFS= read -r oxide_key"));
-        assert!(command.contains("oxide_value=$(cat)"));
-        // `-x` reads the value from the pipe: it must never be an argument.
-        assert!(command.contains("oxide_cli_stdin -n \"$oxide_db\" -x SET \"$oxide_key\""));
-        assert!(!command.contains("-a "));
-        assert!(redis_set_value_command(&endpoint, "Windows").is_none());
-    }
-
-    #[test]
     fn create_key_command_guards_existing_keys_and_scopes_the_database() {
         let endpoint =
             ResourceRedisEndpoint::new(ResourceRedisEndpointKind::Host, REDIS_PROBE_TARGET);
@@ -1595,6 +1727,100 @@ mod tests {
         );
         // Line values stay single-line even when a body is present.
         assert!(redis_stdin_payload_with_body("pw", &["a\nb"], "body").is_none());
+    }
+
+    #[test]
+    fn value_parser_reads_redisjson_and_keeps_unknown_module_types_readable() {
+        let json = parse_redis_value(concat!(
+            "===REDISVALUE===\n",
+            "status\tready\ntype\tjson\nttl\t-1\nusage\t120\n",
+            "===REDIS_BODY===\n",
+            "{\"a\":1}\n",
+            "===REDISVALUE_END===",
+        ));
+        assert_eq!(json.kind, ResourceRedisValueKind::Json);
+        assert_eq!(json.body, "{\"a\":1}");
+        assert_eq!(redis_value_json(&json).unwrap(), "{\n  \"a\": 1\n}");
+
+        // A module type we cannot read still reports its name instead of an
+        // error banner in the dialog.
+        let timeseries = parse_redis_value(concat!(
+            "===REDISVALUE===\n",
+            "status\tready\ntype\tother\nrawtype\tTimeseries\n",
+            "===REDIS_BODY===\n",
+            "===REDISVALUE_END===",
+        ));
+        assert_eq!(timeseries.status, ResourceRedisStatus::Available);
+        assert_eq!(timeseries.kind, ResourceRedisValueKind::Other);
+        assert_eq!(timeseries.raw_type.as_deref(), Some("Timeseries"));
+        assert!(redis_value_rows(&timeseries).is_empty());
+    }
+
+    #[test]
+    fn value_rows_feed_the_viewer_and_the_editor() {
+        let hash = ResourceRedisValue {
+            kind: ResourceRedisValueKind::Hash,
+            body: "name\njaime\nscope\nadmin".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(
+            redis_value_rows(&hash),
+            vec![
+                ("name".to_string(), Some("jaime".to_string())),
+                ("scope".to_string(), Some("admin".to_string())),
+            ]
+        );
+        let zset = ResourceRedisValue {
+            kind: ResourceRedisValueKind::SortedSet,
+            body: "alpha\n1.5\nbeta\n2".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(
+            redis_value_rows(&zset),
+            vec![
+                ("alpha".to_string(), Some("1.5".to_string())),
+                ("beta".to_string(), Some("2".to_string())),
+            ]
+        );
+        let list = ResourceRedisValue {
+            kind: ResourceRedisValueKind::List,
+            body: "one\ntwo".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(
+            redis_value_rows(&list),
+            vec![("one".to_string(), None), ("two".to_string(), None),]
+        );
+    }
+
+    #[test]
+    fn replace_value_command_writes_each_shape_and_keeps_the_ttl() {
+        let endpoint =
+            ResourceRedisEndpoint::new(ResourceRedisEndpointKind::Host, REDIS_PROBE_TARGET);
+        let hash =
+            redis_replace_value_command(&endpoint, "Linux", RedisValueWriteKind::Hash).unwrap();
+        assert!(hash.contains("DEL \"$oxide_key\""));
+        assert!(hash.contains("oxide_cli_stdin -n \"$oxide_db\" -x HSET"));
+        assert!(hash.contains("PEXPIRE \"$oxide_key\" \"$oxide_pttl\""));
+
+        let json =
+            redis_replace_value_command(&endpoint, "Linux", RedisValueWriteKind::Json).unwrap();
+        assert!(!json.contains("DEL \"$oxide_key\""));
+        assert!(json.contains("oxide_cli_stdin -n \"$oxide_db\" -x JSON.SET \"$oxide_key\" '$'"));
+
+        for (kind, needle) in [
+            (RedisValueWriteKind::String, "-x SET"),
+            (RedisValueWriteKind::List, "-x RPUSH"),
+            (RedisValueWriteKind::Set, "-x SADD"),
+            (RedisValueWriteKind::SortedSet, "-x ZADD"),
+        ] {
+            let command = redis_replace_value_command(&endpoint, "Linux", kind).unwrap();
+            assert!(command.contains(needle), "{kind:?}");
+        }
+        assert!(
+            redis_replace_value_command(&endpoint, "Windows", RedisValueWriteKind::String)
+                .is_none()
+        );
     }
 
     #[test]
