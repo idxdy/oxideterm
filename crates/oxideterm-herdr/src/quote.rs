@@ -17,6 +17,21 @@ pub(crate) fn powershell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "''"))
 }
 
+/// Run a generated script on a Windows target.
+///
+/// Windows sshd parses the exec line with `cmd.exe` or with `powershell.exe`,
+/// depending on `DefaultShell`, and both rewrite `$` and the surrounding
+/// quotes before PowerShell sees the script: `2>$null` arrives as `2>` under a
+/// PowerShell default shell, and an unescaped `"..."` payload is echoed
+/// instead of executed under `cmd.exe`. The script therefore travels as
+/// base64 UTF-16LE, which neither shell rewrites.
+pub(crate) fn windows_command(script: &str) -> String {
+    use base64::Engine as _;
+    let bytes: Vec<u8> = script.encode_utf16().flat_map(u16::to_le_bytes).collect();
+    let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+    format!("powershell -NoProfile -NonInteractive -EncodedCommand {encoded}\r\n")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

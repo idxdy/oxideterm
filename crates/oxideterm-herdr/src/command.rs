@@ -7,7 +7,7 @@
 
 use crate::HERDR_READ_LINES;
 use crate::ids::{validated_id, validated_name};
-use crate::quote::{posix_shell_command, powershell_quote, shell_quote};
+use crate::quote::{posix_shell_command, powershell_quote, shell_quote, windows_command};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct HerdrCaptureCommand {
@@ -74,7 +74,7 @@ fn build_windows_herdr_snapshot_command() -> String {
         "}else{Write-Output '__OXIDE_HERDR_UNAVAILABLE__'};",
         "Write-Output '===HERDR_END===';"
     );
-    format!("powershell -NoProfile -ExecutionPolicy Bypass -Command \"{script}\"\r\n")
+    windows_command(&script)
 }
 
 pub fn build_herdr_snapshot_command(os_type: &str) -> HerdrCaptureCommand {
@@ -116,9 +116,7 @@ pub fn build_herdr_session_detail_command(
             session = session
         );
         Ok(HerdrCaptureCommand {
-            command: format!(
-                "powershell -NoProfile -ExecutionPolicy Bypass -Command \"{script}\"\r\n"
-            ),
+            command: windows_command(&script),
         })
     } else {
         let session = shell_quote(&session);
@@ -160,7 +158,7 @@ pub fn build_herdr_read_command(
         quote(&session)
     );
     let command = if windows {
-        format!("powershell -NoProfile -ExecutionPolicy Bypass -Command \"{read}\"")
+        windows_command(&read)
     } else {
         read
     };
@@ -313,7 +311,7 @@ pub fn build_herdr_action_command(
         }
     };
     let command = if windows {
-        format!("powershell -NoProfile -ExecutionPolicy Bypass -Command \"{payload}\"")
+        windows_command(&payload)
     } else {
         format!("{payload} 2>&1")
     };
@@ -328,6 +326,25 @@ mod tests {
         build_herdr_action_command("Linux", session, &kind)
             .unwrap()
             .command
+    }
+
+    /// Windows lines carry the script as base64 UTF-16LE, so assertions read
+    /// the decoded script instead of the transport encoding.
+    fn windows_script(command: &str) -> String {
+        use base64::Engine as _;
+        let encoded = command
+            .trim_end()
+            .rsplit(' ')
+            .next()
+            .expect("encoded payload");
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(encoded)
+            .expect("base64 payload");
+        let units: Vec<u16> = bytes
+            .chunks_exact(2)
+            .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+            .collect();
+        String::from_utf16(&units).expect("utf-16 payload")
     }
 
     #[test]
@@ -544,10 +561,17 @@ mod tests {
         )
         .unwrap();
         assert!(rename.command.starts_with("powershell -NoProfile"));
-        assert!(rename.command.contains("--session 'default'"));
-        assert!(rename.command.contains("'it''s mine'"));
-        // POSIX escaping must never reach the PowerShell command line.
-        assert!(!rename.command.contains("'\"'\"'"));
+        // `cmd.exe` expands `$` and `powershell.exe` expands the surrounding
+        // quotes before PowerShell parses the script, so a Windows line may
+        // not carry shell-visible text at all.
+        assert!(rename.command.contains("-EncodedCommand "));
+        assert!(!rename.command.contains('$'));
+        assert!(!rename.command.contains('"'));
+        let script = windows_script(&rename.command);
+        assert!(script.contains("--session 'default'"));
+        assert!(script.contains("'it''s mine'"));
+        // POSIX escaping must never reach the PowerShell script.
+        assert!(!script.contains("'\"'\"'"));
 
         let stop = build_herdr_action_command(
             "Windows",
@@ -557,14 +581,24 @@ mod tests {
             },
         )
         .unwrap();
-        assert!(stop.command.contains("herdr session stop 'it''s work'"));
+        assert!(windows_script(&stop.command).contains("herdr session stop 'it''s work'"));
         assert!(!stop.command.contains("'\"'\"'"));
+    }
+
+    /// The script a Windows line actually runs, or the line itself on Unix.
+    fn script_for(os_type: &str, command: &str) -> String {
+        if os_type == "Windows" {
+            windows_script(command)
+        } else {
+            command.to_string()
+        }
     }
 
     #[test]
     fn herdr_snapshot_command_lists_sessions_only() {
         for os_type in ["Linux", "Windows"] {
-            let command = build_herdr_snapshot_command(os_type).command;
+            let line = build_herdr_snapshot_command(os_type).command;
+            let command = script_for(os_type, &line);
             assert!(command.contains("===HERDR_SESSIONS==="), "{os_type}");
             assert!(command.contains("session list --json"), "{os_type}");
             // Workspaces and panes need a session socket, so they are fetched
@@ -577,9 +611,10 @@ mod tests {
     #[test]
     fn herdr_session_detail_command_targets_one_session() {
         for os_type in ["Linux", "Windows"] {
-            let command = build_herdr_session_detail_command(os_type, "work")
+            let line = build_herdr_session_detail_command(os_type, "work")
                 .unwrap()
                 .command;
+            let command = script_for(os_type, &line);
             for marker in [
                 "===HERDR_WORKSPACES===",
                 "===HERDR_TABS===",
