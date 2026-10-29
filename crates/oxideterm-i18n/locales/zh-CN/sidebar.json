@@ -72,6 +72,7 @@
       "services": "服务",
       "logs": "日志",
       "tmux": "tmux",
+      "herdr": "Herdr",
       "docker": "Docker",
       "tmux_management": "tmux 管理",
       "docker_management": "Docker 管理",
@@ -435,6 +436,87 @@
         "rename_session_placeholder": "会话名称",
         "rename_window_placeholder": "窗口名称",
         "send_command_placeholder": "要发送的命令"
+      }
+    },
+    "host_herdr": {
+      "unavailable": "此主机上未找到 herdr。",
+      "server_not_running": "herdr 服务器未运行。点击附加按钮启动它。",
+      "sampling": "正在采样 herdr space...",
+      "empty": "没有 herdr 会话",
+      "workspace_empty": "该会话中没有 space",
+      "error": "herdr 命令失败：{{error}}",
+      "last_refreshed": "更新于",
+      "panes_suffix": "pane",
+      "tabs_suffix": "tab",
+      "focused": "焦点",
+      "restore_error": "恢复错误",
+      "orphan_agent": "未关联代理",
+      "attach_title": "herdr",
+      "sessions_title": "会话",
+      "row_space": "space",
+      "row_tab": "tab",
+      "row_pane": "pane",
+      "search_placeholder": "搜索会话...",
+      "search_empty": "无匹配项",
+      "status": {
+        "working": "工作中",
+        "blocked": "已阻塞",
+        "idle": "空闲",
+        "done": "已完成",
+        "unknown": "未知"
+      },
+      "actions": {
+        "refresh": "刷新",
+        "attach": "启动 / 附加 herdr",
+        "agent_attach": "附加到代理",
+        "session_attach": "附加到会话",
+        "session_stop": "停止会话",
+        "session_delete": "删除会话",
+        "new_session": "新建会话",
+        "new_workspace": "新建 space",
+        "rename": "重命名",
+        "close": "关闭",
+        "send": "运行命令",
+        "read": "读取输出"
+      },
+      "confirm": {
+        "title": "确认 herdr 操作",
+        "cancel": "取消",
+        "run": "确认",
+        "close_workspace": "关闭 space {{name}}？其中的所有 tab 和 pane 都会停止。",
+        "close_pane": "关闭 pane {{name}}？其中正在运行的工作会停止。",
+        "close_tab": "关闭 tab {{name}}？其中的所有 pane 都会停止。",
+        "stop_session": "停止会话 {{name}}？该会话内的所有 space 和代理都会停止。",
+        "delete_session": "删除已停止的会话 {{name}}？该会话的已保存状态会被移除。"
+      },
+      "inputs": {
+        "new_session": "新建会话",
+        "new_session_hint": "会话名称",
+        "new_workspace": "新建 space",
+        "new_workspace_hint": "名称 [/远程路径]",
+        "rename_workspace": "重命名 space",
+        "rename_tab": "重命名 tab",
+        "rename_pane": "重命名 pane",
+        "rename_hint": "新名称",
+        "run_pane": "在 pane 中运行命令",
+        "run_pane_hint": "要输入到 pane 的命令"
+      },
+      "read": {
+        "title": "输出：{{pane}}",
+        "loading": "正在加载输出...",
+        "empty": "暂无输出。",
+        "close": "关闭"
+      },
+      "toast": {
+        "snapshot_already_running": "已有 herdr 快照正在加载。",
+        "connection_missing": "所选连接已不可用。",
+        "action_already_running": "已有 herdr 操作正在执行。",
+        "action_failed": "herdr 操作失败。",
+        "action_succeeded": "herdr 操作已完成：{{target}}。",
+        "read_already_running": "已有窗格输出正在加载。",
+        "read_failed": "读取窗格输出失败。",
+        "attach_opened": "已在终端窗口打开 herdr。",
+        "unknown_error": "未知错误"
       }
     },
     "host_schedules": {

@@ -59,6 +59,8 @@ pub(in crate::workspace) enum HostToolsWindowIntent {
     PrepareTmuxInputDialog,
     /// Resets the shared confirmation focus before showing an Entity-owned tmux action.
     PrepareTmuxConfirm,
+    /// Gives the workspace focus to a secret-capable herdr input without moving its value.
+    PrepareHerdrInputDialog,
     /// Persists a Host Tools monitoring toggle while the Entity owns its UI.
     SetMonitoringEnabled {
         tool: ContextSidebarTool,
@@ -118,6 +120,16 @@ pub(in crate::workspace) enum HostToolsNotice {
     TmuxInputRequired,
     TmuxActionFailed,
     TmuxActionFinished {
+        target_label: String,
+        succeeded: bool,
+    },
+    HerdrSnapshotAlreadyRunning,
+    HerdrConnectionMissing,
+    HerdrActionAlreadyRunning,
+    HerdrActionFailed,
+    HerdrReadAlreadyRunning,
+    HerdrReadFailed,
+    HerdrActionFinished {
         target_label: String,
         succeeded: bool,
     },

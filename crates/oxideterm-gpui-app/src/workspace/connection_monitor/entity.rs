@@ -65,6 +65,7 @@ pub(in crate::workspace) struct HostToolsEntity {
     pub(super) host_docker_operations: HostDockerOperationsState,
     pub(super) host_services: HostServicesState,
     pub(super) host_tmux: HostTmuxState,
+    pub(super) host_herdr: HostHerdrState,
     pub(super) host_gpu: HostGpuViewState,
     pub(super) host_logs: HostLogsState,
     pub(super) host_ports: HostPortsState,
@@ -349,6 +350,15 @@ impl HostToolsEntity {
                 .filter(|_| self.host_tmux.snapshot_connection_id.as_deref() == Some(connection_id))
                 .and_then(|snapshot| serde_json::to_value(snapshot).ok())
                 .unwrap_or(serde_json::Value::Null),
+            "herdr" => self
+                .host_herdr
+                .snapshot
+                .as_ref()
+                .filter(|_| {
+                    self.host_herdr.snapshot_connection_id.as_deref() == Some(connection_id)
+                })
+                .and_then(|snapshot| serde_json::to_value(snapshot).ok())
+                .unwrap_or(serde_json::Value::Null),
             "ports" => self
                 .host_ports
                 .snapshot
@@ -458,6 +468,13 @@ impl HostToolsEntity {
                     cx.emit(HostToolsEvent::ShowNotice(notice));
                 }
             }
+            "herdr" => self.request_herdr_snapshot(
+                connection_id,
+                HostSnapshotFeedback::Silent,
+                messages.herdr_unknown_error,
+                runtime,
+                cx,
+            ),
             "ports" => {
                 for notice in self.request_port_snapshot(
                     connection_id,
@@ -532,6 +549,14 @@ impl HostToolsEntity {
             Some(HostToolsWindowModalSnapshot::ScheduleConfirm(
                 confirm.presence.phase(),
             ))
+        } else if self.host_herdr.read_dialog.is_some() {
+            Some(HostToolsWindowModalSnapshot::HerdrRead)
+        } else if self.ui.host_herdr_input_dialog.is_some() {
+            Some(HostToolsWindowModalSnapshot::HerdrInput)
+        } else if let Some(confirm) = self.host_herdr.pending_confirm.as_ref() {
+            Some(HostToolsWindowModalSnapshot::HerdrConfirm(
+                confirm.presence.phase(),
+            ))
         } else if self.ui.host_tmux_input_dialog.is_some() {
             Some(HostToolsWindowModalSnapshot::TmuxInput)
         } else if let Some(confirm) = self.host_tmux.pending_confirm.as_ref() {
@@ -592,6 +617,7 @@ impl HostToolsEntity {
             host_docker_operations: HostDockerOperationsState::new(),
             host_services: HostServicesState::new(),
             host_tmux: HostTmuxState::new(),
+            host_herdr: HostHerdrState::new(),
             host_gpu: HostGpuViewState::new(gpu_update_tx),
             host_logs: HostLogsState::new(),
             host_ports: HostPortsState::new(),
@@ -679,11 +705,17 @@ impl HostToolsEntity {
                 self.ui.host_tmux_expanded_session_id = None;
                 self.ui.host_tmux_expanded_window_id = None;
             }
+            HostToolsTextInput::HerdrSearch => {
+                self.ui.host_herdr_expanded_workspace = None;
+                self.ui.host_herdr_expanded_tab = None;
+            }
             HostToolsTextInput::PortSearch => self.host_ports.expanded_index = None,
             HostToolsTextInput::ScheduleSearch => self.host_schedules.expanded_index = None,
             HostToolsTextInput::FilesystemSearch => self.host_filesystems.expanded_index = None,
             HostToolsTextInput::PackageSearch => self.host_packages.expanded_index = None,
-            HostToolsTextInput::ProcessRenice | HostToolsTextInput::TmuxDialog => {}
+            HostToolsTextInput::ProcessRenice
+            | HostToolsTextInput::TmuxDialog
+            | HostToolsTextInput::HerdrDialog => {}
         }
         true
     }
@@ -1358,6 +1390,183 @@ impl HostToolsEntity {
         true
     }
 
+    pub(super) fn spawn_herdr_snapshot_capture(
+        &self,
+        command: String,
+        request: HostHerdrSnapshotRequest,
+        timeout: Duration,
+        max_output_size: usize,
+        runtime: tokio::runtime::Handle,
+    ) -> bool {
+        let audit = request
+            .feedback
+            .should_toast()
+            .then(|| self.host_tool_audit(&request.connection_id, "query_host_herdr", None));
+        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+            if let Some(audit) = audit {
+                audit.finish(
+                    oxideterm_audit::AuditOutcome::Failed,
+                    oxideterm_audit::AuditEvidence::Request,
+                    None,
+                    None,
+                );
+            }
+            return false;
+        };
+        let delivery_tx = self.reliable_delivery_tx.clone();
+        // Raw herdr inventory stays inside the Entity delivery boundary.
+        runtime.spawn(async move {
+            let result = handle
+                .run_command_capture(&command, timeout, max_output_size)
+                .await
+                .map_err(|_| ());
+            if let Some(audit) = audit {
+                finish_host_query_audit(audit, &result);
+            }
+            let _ = delivery_tx.send(super::delivery::HostToolsReliableDelivery::HerdrSnapshot(
+                HostHerdrSnapshotDelivery { request, result },
+            ));
+        });
+        true
+    }
+
+    pub(super) fn spawn_herdr_session_detail(
+        &self,
+        command: String,
+        request: HostHerdrSessionDetailRequest,
+        timeout: Duration,
+        max_output_size: usize,
+        runtime: tokio::runtime::Handle,
+    ) -> bool {
+        let audit = self.host_tool_audit(
+            &request.connection_id,
+            "query_host_herdr_session",
+            Some(&format!("session={}", request.session)),
+        );
+        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+            audit.finish(
+                oxideterm_audit::AuditOutcome::Failed,
+                oxideterm_audit::AuditEvidence::Request,
+                None,
+                None,
+            );
+            return false;
+        };
+        let delivery_tx = self.reliable_delivery_tx.clone();
+        // Raw herdr inventory stays inside the Entity delivery boundary.
+        runtime.spawn(async move {
+            let result = handle
+                .run_command_capture(&command, timeout, max_output_size)
+                .await
+                .map_err(|_| ());
+            finish_host_query_audit(audit, &result);
+            let _ = delivery_tx.send(
+                super::delivery::HostToolsReliableDelivery::HerdrSessionDetail(
+                    HostHerdrSessionDetailDelivery { request, result },
+                ),
+            );
+        });
+        true
+    }
+
+    /// Audits the action class and target only; user-authored run commands
+    /// never enter the audit record.
+    pub(super) fn spawn_herdr_action(
+        &self,
+        command: zeroize::Zeroizing<String>,
+        request: HostHerdrActionRun,
+        timeout: Duration,
+        max_output_size: usize,
+        runtime: tokio::runtime::Handle,
+    ) -> bool {
+        let audit = self.host_tool_audit(
+            &request.connection_id,
+            "herdr_action",
+            Some(&format!("target={}", request.target_label)),
+        );
+        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+            audit.finish(
+                oxideterm_audit::AuditOutcome::Failed,
+                oxideterm_audit::AuditEvidence::Request,
+                None,
+                None,
+            );
+            return false;
+        };
+        let delivery_tx = self.reliable_delivery_tx.clone();
+        runtime.spawn(async move {
+            let mut audit_exit_code = None;
+            let result = handle
+                .run_command_capture(command.as_str(), timeout, max_output_size)
+                .await
+                .map(|mut output| {
+                    audit_exit_code = output.exit_code;
+                    // Herdr reports failures in the envelope while still
+                    // exiting zero, so the captured stdout decides success.
+                    let succeeded = herdr_action_outcome(&output.stdout, output.exit_code);
+                    zeroize::Zeroize::zeroize(&mut output.stdout);
+                    zeroize::Zeroize::zeroize(&mut output.stderr);
+                    succeeded
+                })
+                .map_err(|_| ());
+            let audit_outcome = match &result {
+                Ok(true) => oxideterm_audit::AuditOutcome::Succeeded,
+                Ok(false) | Err(_) => oxideterm_audit::AuditOutcome::Failed,
+            };
+            audit.finish(
+                audit_outcome,
+                if audit_exit_code.is_some() {
+                    oxideterm_audit::AuditEvidence::ExitCode
+                } else {
+                    oxideterm_audit::AuditEvidence::Protocol
+                },
+                audit_exit_code,
+                None,
+            );
+            let _ = delivery_tx.send(super::delivery::HostToolsReliableDelivery::HerdrAction(
+                HostHerdrActionDelivery { request, result },
+            ));
+        });
+        true
+    }
+
+    pub(super) fn spawn_herdr_read(
+        &self,
+        command: String,
+        request: HostHerdrReadRequest,
+        timeout: Duration,
+        max_output_size: usize,
+        runtime: tokio::runtime::Handle,
+    ) -> bool {
+        let audit = self.host_tool_audit(
+            &request.connection_id,
+            "query_herdr_output",
+            Some(&format!("pane={}", request.pane_id)),
+        );
+        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+            audit.finish(
+                oxideterm_audit::AuditOutcome::Failed,
+                oxideterm_audit::AuditEvidence::Request,
+                None,
+                None,
+            );
+            return false;
+        };
+        let delivery_tx = self.reliable_delivery_tx.clone();
+        // Raw pane output remains inside the Entity delivery and dialog state.
+        runtime.spawn(async move {
+            let result = handle
+                .run_command_capture(&command, timeout, max_output_size)
+                .await
+                .map_err(|_| ());
+            finish_host_query_audit(audit, &result);
+            let _ = delivery_tx.send(super::delivery::HostToolsReliableDelivery::HerdrRead(
+                HostHerdrReadDelivery { request, result },
+            ));
+        });
+        true
+    }
+
     pub(super) fn spawn_tmux_snapshot_capture(
         &self,
         command: String,
@@ -1543,6 +1752,9 @@ impl HostToolsEntity {
         cx: &mut Context<Self>,
     ) -> bool {
         if !self.select_tool(tool, cx) {
+            // Re-clicking the active tool retries a page snapshot that never
+            // started, for example while the connection was still coming up.
+            self.request_active_tool_snapshot(HostSnapshotFeedback::Silent, cx);
             return false;
         }
         self.ui.retain_input_focus_for_tool(tool);
@@ -1559,6 +1771,11 @@ impl HostToolsEntity {
         if tool != ContextSidebarTool::Tmux {
             self.dismiss_tmux_confirm(cx);
             self.dismiss_tmux_input_dialog(cx);
+        }
+        if tool != ContextSidebarTool::Herdr {
+            self.dismiss_herdr_confirm(cx);
+            self.dismiss_herdr_input_dialog(cx);
+            self.dismiss_herdr_read_dialog(cx);
         }
         if tool != ContextSidebarTool::Schedules {
             self.dismiss_schedule_confirm(cx);
@@ -1697,6 +1914,9 @@ impl HostToolsEntity {
         self.dismiss_service_confirm(cx);
         self.dismiss_tmux_input_dialog(cx);
         self.dismiss_tmux_confirm(cx);
+        self.dismiss_herdr_confirm(cx);
+        self.dismiss_herdr_input_dialog(cx);
+        self.dismiss_herdr_read_dialog(cx);
         self.dismiss_schedule_confirm(cx);
 
         let Some(runtime) = self.lifecycle_runtime.clone() else {
@@ -1725,14 +1945,25 @@ impl HostToolsEntity {
         {
             return;
         }
-        let Some(connection_id) = self.selected_connection_id_owned() else {
-            return;
-        };
         let Some(runtime) = self.lifecycle_runtime.clone() else {
             return;
         };
         let Some(messages) = self.messages.clone() else {
             return;
+        };
+        let connection_id = match self.selected_connection_id_owned() {
+            Some(connection_id) => connection_id,
+            None => {
+                // The panel falls back to the first monitor connection; the
+                // request must target that same connection or its delivery is
+                // filtered out as belonging to another node.
+                let Some(connection) = self.monitor_connections().into_iter().next() else {
+                    return;
+                };
+                self.selected_connection_id = Some(connection.connection_id.clone());
+                cx.notify();
+                connection.connection_id
+            }
         };
         #[cfg(test)]
         if let Some(dispatches) = self.test_snapshot_dispatches.as_mut()
@@ -1776,6 +2007,16 @@ impl HostToolsEntity {
                 runtime,
                 cx,
             ),
+            ContextSidebarTool::Herdr => {
+                self.request_herdr_snapshot(
+                    connection_id,
+                    feedback,
+                    messages.herdr_unknown_error,
+                    runtime,
+                    cx,
+                );
+                Vec::new()
+            }
             ContextSidebarTool::Ports => self.request_port_snapshot(
                 connection_id,
                 feedback,
@@ -2079,6 +2320,7 @@ impl WorkspaceApp {
         &mut self,
         modal: HostToolsWindowModalSnapshot,
         event: &KeyDownEvent,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
         match modal {
@@ -2118,6 +2360,23 @@ impl WorkspaceApp {
             }
             HostToolsWindowModalSnapshot::TmuxInput => {
                 self.handle_host_tmux_input_dialog_key(event, cx)
+            }
+            HostToolsWindowModalSnapshot::HerdrConfirm(_) => {
+                self.handle_host_herdr_confirm_key(event, cx)
+            }
+            HostToolsWindowModalSnapshot::HerdrInput => {
+                self.handle_host_herdr_input_dialog_key(event, window, cx)
+            }
+            HostToolsWindowModalSnapshot::HerdrRead => {
+                if self.handle_host_log_search_key(event, cx) {
+                    return true;
+                }
+                if event.keystroke.key.as_str() == "escape" {
+                    self.host_tools.update(cx, |host_tools, cx| {
+                        host_tools.dismiss_herdr_read_dialog(cx);
+                    });
+                }
+                true
             }
             HostToolsWindowModalSnapshot::ScheduleConfirm(_) => {
                 self.handle_host_schedule_confirm_key(event, cx)
@@ -2280,6 +2539,7 @@ mod tests {
                 schedule_unknown_error: "Schedule capture failed".to_string(),
                 tmux_unknown_error: "tmux capture failed".to_string(),
                 tmux_unavailable: "tmux unavailable".to_string(),
+                herdr_unknown_error: "herdr capture failed".to_string(),
             });
             entity.select_connection(connection_id.clone(), None, cx);
             entity.active_tool = ContextSidebarTool::Gpu;
@@ -2691,6 +2951,7 @@ mod tests {
                 schedule_unknown_error: "Schedule capture failed".to_string(),
                 tmux_unknown_error: "tmux capture failed".to_string(),
                 tmux_unavailable: "tmux unavailable".to_string(),
+                herdr_unknown_error: "herdr capture failed".to_string(),
             });
             entity.select_tool(ContextSidebarTool::Services, cx);
             assert!(
@@ -2857,6 +3118,135 @@ mod tests {
                 succeeded: false,
             })
         );
+        assert!(events.try_recv().is_err());
+    }
+
+    #[gpui::test]
+    fn herdr_snapshot_failures_are_redacted_and_stale_actions_are_ignored(cx: &mut TestAppContext) {
+        let (profiler_update_tx, profiler_update_rx) = tokio::sync::mpsc::channel(1);
+        let entity = cx.new(|cx| {
+            HostToolsEntity::new(
+                profiler_update_tx,
+                profiler_update_rx,
+                SshConnectionRegistry::default(),
+                cx,
+            )
+        });
+        let mut events = cx.events(&entity);
+        let snapshot_request = HostHerdrSnapshotRequest {
+            connection_id: "connection-1".to_string(),
+            feedback: HostSnapshotFeedback::Silent,
+            failure_fallback: "herdr capture failed".to_string(),
+        };
+        let sender = entity.update(cx, |entity, _cx| {
+            entity.host_herdr.snapshot_running = Some(snapshot_request.clone());
+            entity.host_herdr.snapshot_in_flight = true;
+            entity.reliable_delivery_tx.clone()
+        });
+        let secret_marker = "Authorization: should-not-reach-herdr-state";
+
+        sender
+            .send(super::delivery::HostToolsReliableDelivery::HerdrSnapshot(
+                HostHerdrSnapshotDelivery {
+                    request: snapshot_request,
+                    result: Ok(SshCommandOutput {
+                        stdout: secret_marker.to_string(),
+                        stderr: secret_marker.to_string(),
+                        exit_code: Some(1),
+                        truncated: false,
+                    }),
+                },
+            ))
+            .unwrap();
+        cx.run_until_parked();
+
+        entity.read_with(cx, |entity, _cx| {
+            assert!(!entity.host_herdr.snapshot_in_flight);
+            let status = &entity.host_herdr.snapshot.as_ref().unwrap().status;
+            assert_eq!(
+                status,
+                &HerdrStatus::Error {
+                    message: "herdr capture failed".to_string(),
+                }
+            );
+            // A failed capture never surfaces the remote stream in state.
+            assert!(!format!("{status:?}").contains(secret_marker));
+        });
+        assert!(events.try_recv().is_err());
+
+        // A session subtree follows the same redaction contract and is cached
+        // under its session so the tree can render it.
+        let detail_request = HostHerdrSessionDetailRequest {
+            connection_id: "connection-1".to_string(),
+            session: "default".to_string(),
+            failure_fallback: "herdr capture failed".to_string(),
+        };
+        let sender = entity.update(cx, |entity, _cx| {
+            entity.host_herdr.session_detail_running = Some(detail_request.clone());
+            entity.reliable_delivery_tx.clone()
+        });
+        sender
+            .send(
+                super::delivery::HostToolsReliableDelivery::HerdrSessionDetail(
+                    HostHerdrSessionDetailDelivery {
+                        request: detail_request,
+                        result: Ok(SshCommandOutput {
+                            stdout: secret_marker.to_string(),
+                            stderr: secret_marker.to_string(),
+                            exit_code: Some(1),
+                            truncated: false,
+                        }),
+                    },
+                ),
+            )
+            .unwrap();
+        cx.run_until_parked();
+
+        entity.read_with(cx, |entity, _cx| {
+            assert!(entity.host_herdr.session_detail_running.is_none());
+            let detail = entity
+                .host_herdr
+                .session_details
+                .get("default")
+                .expect("session detail cached");
+            assert_eq!(
+                detail.status,
+                HerdrStatus::Error {
+                    message: "herdr capture failed".to_string(),
+                }
+            );
+            assert!(!format!("{:?}", detail.status).contains(secret_marker));
+        });
+        assert!(events.try_recv().is_err());
+
+        // A delivery from a superseded action must not clear the running slot
+        // or report completion for the action the user is waiting on.
+        let active = HostHerdrActionRun {
+            connection_id: "connection-1".to_string(),
+            target_label: "wA:pC".to_string(),
+        };
+        let stale = HostHerdrActionRun {
+            connection_id: "connection-1".to_string(),
+            target_label: "wD:pB".to_string(),
+        };
+        let sender = entity.update(cx, |entity, _cx| {
+            entity.host_herdr.action_running = Some(active);
+            entity.reliable_delivery_tx.clone()
+        });
+        sender
+            .send(super::delivery::HostToolsReliableDelivery::HerdrAction(
+                HostHerdrActionDelivery {
+                    request: stale,
+                    result: Ok(true),
+                },
+            ))
+            .unwrap();
+        cx.run_until_parked();
+
+        entity.read_with(cx, |entity, _cx| {
+            let slot = entity.host_herdr.action_running.as_ref();
+            assert_eq!(slot.map(|run| run.target_label.as_str()), Some("wA:pC"));
+        });
         assert!(events.try_recv().is_err());
     }
 

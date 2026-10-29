@@ -72,6 +72,7 @@
       "services": "Dienste",
       "logs": "Protokolle",
       "tmux": "tmux",
+      "herdr": "Herdr",
       "docker": "Docker",
       "tmux_management": "tmux-Verwaltung",
       "docker_management": "Docker-Verwaltung",
@@ -435,6 +436,87 @@
         "rename_session_placeholder": "Sitzungsname",
         "rename_window_placeholder": "Fenstername",
         "send_command_placeholder": "Zu sendender Befehl"
+      }
+    },
+    "host_herdr": {
+      "unavailable": "herdr wurde auf diesem Host nicht gefunden.",
+      "server_not_running": "Der herdr-Server läuft nicht. Über die Schaltfläche starten.",
+      "sampling": "herdr spaces werden abgerufen...",
+      "empty": "Keine herdr-Sitzungen",
+      "workspace_empty": "Keine spaces in dieser Sitzung",
+      "error": "herdr-Befehl fehlgeschlagen: {{error}}",
+      "last_refreshed": "Aktualisiert",
+      "panes_suffix": "pane",
+      "tabs_suffix": "tab",
+      "focused": "Fokus",
+      "restore_error": "Wiederherstellungsfehler",
+      "orphan_agent": "Unverknüpfter Agent",
+      "attach_title": "herdr",
+      "sessions_title": "Sitzungen",
+      "row_space": "space",
+      "row_tab": "tab",
+      "row_pane": "pane",
+      "search_placeholder": "Sitzungen durchsuchen...",
+      "search_empty": "Keine Treffer",
+      "status": {
+        "working": "arbeitet",
+        "blocked": "blockiert",
+        "idle": "bereit",
+        "done": "fertig",
+        "unknown": "unbekannt"
+      },
+      "actions": {
+        "refresh": "Aktualisieren",
+        "attach": "herdr starten / anhängen",
+        "agent_attach": "An Agent anhängen",
+        "session_attach": "An Sitzung anhängen",
+        "session_stop": "Sitzung stoppen",
+        "session_delete": "Sitzung löschen",
+        "new_session": "Neue Sitzung",
+        "new_workspace": "Neuer space",
+        "rename": "Umbenennen",
+        "close": "Schließen",
+        "send": "Befehl ausführen",
+        "read": "Ausgabe lesen"
+      },
+      "confirm": {
+        "title": "herdr-Aktion bestätigen",
+        "cancel": "Abbrechen",
+        "run": "Bestätigen",
+        "close_workspace": "space {{name}} schließen? Alle tabs und panes darin werden beendet.",
+        "close_pane": "pane {{name}} schließen? Laufende Arbeit wird gestoppt.",
+        "close_tab": "tab {{name}} schließen? Alle panes darin werden beendet.",
+        "stop_session": "Sitzung {{name}} stoppen? Alle spaces und Agents der Sitzung werden gestoppt.",
+        "delete_session": "Gestoppte Sitzung {{name}} löschen? Der gespeicherte Zustand wird entfernt."
+      },
+      "inputs": {
+        "new_session": "Neue Sitzung",
+        "new_session_hint": "Sitzungsname",
+        "new_workspace": "Neuer space",
+        "new_workspace_hint": "Name [/Remote-Pfad]",
+        "rename_workspace": "space umbenennen",
+        "rename_tab": "tab umbenennen",
+        "rename_pane": "pane umbenennen",
+        "rename_hint": "Neuer Name",
+        "run_pane": "Befehl in pane ausführen",
+        "run_pane_hint": "Befehl für das pane"
+      },
+      "read": {
+        "title": "Ausgabe: {{pane}}",
+        "loading": "Ausgabe wird geladen...",
+        "empty": "Keine Ausgabe.",
+        "close": "Schließen"
+      },
+      "toast": {
+        "snapshot_already_running": "Ein herdr-Snapshot wird bereits geladen.",
+        "connection_missing": "Die ausgewählte Verbindung ist nicht mehr verfügbar.",
+        "action_already_running": "Eine herdr-Aktion läuft bereits.",
+        "action_failed": "herdr-Aktion fehlgeschlagen.",
+        "action_succeeded": "herdr-Aktion abgeschlossen für {{target}}.",
+        "read_already_running": "Pane-Ausgabe wird bereits geladen.",
+        "read_failed": "Pane-Ausgabe konnte nicht gelesen werden.",
+        "attach_opened": "herdr in einem Terminal geöffnet.",
+        "unknown_error": "Unbekannter Fehler"
       }
     },
     "host_schedules": {
