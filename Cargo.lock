@@ -7559,6 +7559,7 @@ dependencies = [
 name = "oxideterm-herdr"
 version = "2.2.6"
 dependencies = [
+ "base64 0.22.1",
  "serde",
  "serde_json",
 ]
