@@ -148,6 +148,8 @@ pub(super) enum WorkspaceImeTarget {
     HostLogSearch,
     HostTmuxSearch,
     HostTmuxDialogInput,
+    HostHerdrDialog,
+    HostHerdrSearch,
     HostPortSearch,
     HostScheduleSearch,
     HostFilesystemSearch,
@@ -383,7 +385,7 @@ impl HostToolsPlainTextImeFrame {
         marked_text: Option<String>,
         anchor_store: TextInputAnchorStore,
     ) -> Option<Self> {
-        // Tmux dialog commands may contain secrets and must stay on their
+        // Dialog commands may contain secrets and must stay on their
         // zeroizing workspace-owned input path.
         let target = workspace_ime_target_for_plain_host_tools_input(input)?;
         Some(Self {
@@ -433,6 +435,8 @@ pub(super) fn workspace_ime_target_for_plain_host_tools_input(
         HostToolsTextInput::LogSearch => Some(WorkspaceImeTarget::HostLogSearch),
         HostToolsTextInput::TmuxSearch => Some(WorkspaceImeTarget::HostTmuxSearch),
         HostToolsTextInput::TmuxDialog => None,
+        HostToolsTextInput::HerdrDialog => None,
+        HostToolsTextInput::HerdrSearch => Some(WorkspaceImeTarget::HostHerdrSearch),
         HostToolsTextInput::PortSearch => Some(WorkspaceImeTarget::HostPortSearch),
         HostToolsTextInput::ScheduleSearch => Some(WorkspaceImeTarget::HostScheduleSearch),
         HostToolsTextInput::FilesystemSearch => Some(WorkspaceImeTarget::HostFilesystemSearch),
@@ -545,6 +549,8 @@ impl WorkspaceImeTarget {
             Self::HostLogSearch => 10,
             Self::HostTmuxSearch => 11,
             Self::HostTmuxDialogInput => 12,
+            Self::HostHerdrDialog => 28,
+            Self::HostHerdrSearch => 29,
             Self::HostPortSearch => 13,
             Self::HostScheduleSearch => 14,
             Self::HostFilesystemSearch => 15,
@@ -1287,6 +1293,8 @@ impl WorkspaceApp {
                 HostToolsTextInput::LogSearch => WorkspaceImeTarget::HostLogSearch,
                 HostToolsTextInput::TmuxSearch => WorkspaceImeTarget::HostTmuxSearch,
                 HostToolsTextInput::TmuxDialog => WorkspaceImeTarget::HostTmuxDialogInput,
+                HostToolsTextInput::HerdrDialog => WorkspaceImeTarget::HostHerdrDialog,
+                HostToolsTextInput::HerdrSearch => WorkspaceImeTarget::HostHerdrSearch,
                 HostToolsTextInput::PortSearch => WorkspaceImeTarget::HostPortSearch,
                 HostToolsTextInput::ScheduleSearch => WorkspaceImeTarget::HostScheduleSearch,
                 HostToolsTextInput::FilesystemSearch => WorkspaceImeTarget::HostFilesystemSearch,
@@ -2345,6 +2353,18 @@ impl WorkspaceApp {
                 .ui
                 .input_value(HostToolsTextInput::TmuxDialog)
                 .map(|value| ime_text_snapshot(target, value)),
+            WorkspaceImeTarget::HostHerdrDialog => self
+                .host_tools
+                .read(cx)
+                .ui
+                .input_value(HostToolsTextInput::HerdrDialog)
+                .map(|value| ime_text_snapshot(target, value)),
+            WorkspaceImeTarget::HostHerdrSearch => self
+                .host_tools
+                .read(cx)
+                .ui
+                .input_value(HostToolsTextInput::HerdrSearch)
+                .map(str::to_string),
             WorkspaceImeTarget::HostPortSearch => self
                 .host_tools
                 .read(cx)
@@ -3359,6 +3379,22 @@ impl WorkspaceApp {
                     cx,
                 );
             }
+            WorkspaceImeTarget::HostHerdrDialog => {
+                self.replace_host_tools_text_input(
+                    HostToolsTextInput::HerdrDialog,
+                    replacement_range,
+                    text,
+                    cx,
+                );
+            }
+            WorkspaceImeTarget::HostHerdrSearch => {
+                self.replace_host_tools_text_input(
+                    HostToolsTextInput::HerdrSearch,
+                    replacement_range,
+                    text,
+                    cx,
+                );
+            }
             WorkspaceImeTarget::HostPortSearch => {
                 self.replace_host_tools_text_input(
                     HostToolsTextInput::PortSearch,
@@ -3941,6 +3977,7 @@ fn ime_target_is_secret(target: WorkspaceImeTarget) -> bool {
                 | NewConnectionField::JumpPassphrase
         ) | WorkspaceImeTarget::KeyboardInteractive(_)
             | WorkspaceImeTarget::HostTmuxDialogInput
+            | WorkspaceImeTarget::HostHerdrDialog
     ) || matches!(target, WorkspaceImeTarget::Settings(input) if input.is_secret())
         || matches!(target, WorkspaceImeTarget::SessionManager(input) if input.is_secret())
         || matches!(
@@ -4465,26 +4502,28 @@ mod tests {
     }
 
     #[test]
-    fn plain_host_tools_ime_frame_rejects_secret_tmux_dialog_input() {
+    fn plain_host_tools_ime_frame_rejects_secret_dialog_inputs() {
         assert_eq!(
             workspace_ime_target_for_plain_host_tools_input(HostToolsTextInput::ProcessRenice),
             Some(WorkspaceImeTarget::HostProcessRenice)
         );
-        assert_eq!(
-            workspace_ime_target_for_plain_host_tools_input(HostToolsTextInput::TmuxDialog),
-            None
-        );
-        assert!(
-            HostToolsPlainTextImeFrame::new(
-                HostToolsTextInput::TmuxDialog,
-                true,
-                None,
-                None,
-                None,
-                TextInputAnchorStore::default(),
-            )
-            .is_none()
-        );
+        for input in [
+            HostToolsTextInput::TmuxDialog,
+            HostToolsTextInput::HerdrDialog,
+        ] {
+            assert_eq!(workspace_ime_target_for_plain_host_tools_input(input), None);
+            assert!(
+                HostToolsPlainTextImeFrame::new(
+                    input,
+                    true,
+                    None,
+                    None,
+                    None,
+                    TextInputAnchorStore::default(),
+                )
+                .is_none()
+            );
+        }
     }
 
     #[test]

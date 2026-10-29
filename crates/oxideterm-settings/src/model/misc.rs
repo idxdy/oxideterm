@@ -365,6 +365,8 @@ pub struct HostToolsSettings {
     #[serde(default = "default_host_tool_enabled")]
     pub docker_enabled: bool,
     #[serde(default = "default_host_tool_enabled")]
+    pub herdr_enabled: bool,
+    #[serde(default = "default_host_tool_enabled")]
     pub ports_enabled: bool,
     #[serde(default = "default_host_tool_enabled")]
     pub schedules_enabled: bool,
@@ -387,6 +389,7 @@ impl Default for HostToolsSettings {
             logs_enabled: true,
             tmux_enabled: true,
             docker_enabled: true,
+            herdr_enabled: true,
             ports_enabled: true,
             schedules_enabled: true,
             filesystems_enabled: true,
@@ -655,12 +658,13 @@ mod misc_tests {
                     tools.logs_enabled,
                     tools.tmux_enabled,
                     tools.docker_enabled,
+                    tools.herdr_enabled,
                     tools.ports_enabled,
                     tools.schedules_enabled,
                     tools.filesystems_enabled,
                     tools.packages_enabled,
                 ],
-                [true; 10]
+                [true; 11]
             );
         }
     }

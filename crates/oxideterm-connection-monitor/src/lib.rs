@@ -52,6 +52,16 @@ pub use gpu::{
     GpuSnapshotStatus, GpuSummary, GpuUpdate, build_gpu_sample_command, gpu_device_row_signature,
     parse_gpu_snapshot, start_gpu_sampling_on,
 };
+pub use oxideterm_herdr::{
+    HERDR_READ_LINES, HERDR_SNAPSHOT_MAX_OUTPUT_SIZE, HERDR_SNAPSHOT_TIMEOUT, HerdrActionCommand,
+    HerdrActionKind, HerdrAgent, HerdrAttachTarget, HerdrCaptureCommand, HerdrPane, HerdrSession,
+    HerdrSessionDetail, HerdrSnapshot, HerdrStatus, HerdrTab, HerdrWorkspace,
+    build_herdr_action_command, build_herdr_attach_command, build_herdr_read_command,
+    build_herdr_session_detail_command, build_herdr_snapshot_command, herdr_action_outcome,
+    herdr_agent_matches_query, herdr_pane_matches_query, herdr_session_matches_query,
+    herdr_status_label_key, herdr_tab_matches_query, herdr_workspace_matches_query,
+    parse_herdr_session_detail, parse_herdr_snapshot,
+};
 pub use log::{
     LogCaptureCommand, LogCommandCapability, LogPreset, ResourceLogEntry, ResourceLogSnapshot,
     ResourceLogStatus, build_log_follow_command, build_log_snapshot_command, log_level_label_key,

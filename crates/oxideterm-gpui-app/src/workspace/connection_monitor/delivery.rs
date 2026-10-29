@@ -16,6 +16,10 @@ pub(super) enum HostToolsReliableDelivery {
     ServiceLogs(HostServiceLogsDelivery),
     TmuxSnapshot(HostTmuxSnapshotDelivery),
     TmuxAction(HostTmuxActionDelivery),
+    HerdrSnapshot(HostHerdrSnapshotDelivery),
+    HerdrAction(HostHerdrActionDelivery),
+    HerdrRead(HostHerdrReadDelivery),
+    HerdrSessionDetail(HostHerdrSessionDetailDelivery),
     LogSnapshot(HostLogSnapshotDelivery),
     PortSnapshot(HostPortSnapshotDelivery),
     FilesystemSnapshot(HostFilesystemSnapshotDelivery),
@@ -202,6 +206,18 @@ impl HostToolsEntity {
                 }
                 HostToolsReliableDelivery::TmuxAction(delivery) => {
                     self.finish_host_tmux_action(delivery, cx);
+                }
+                HostToolsReliableDelivery::HerdrSnapshot(delivery) => {
+                    self.finish_host_herdr_snapshot(delivery, cx);
+                }
+                HostToolsReliableDelivery::HerdrAction(delivery) => {
+                    self.finish_host_herdr_action(delivery, cx);
+                }
+                HostToolsReliableDelivery::HerdrRead(delivery) => {
+                    self.finish_host_herdr_read(delivery, cx);
+                }
+                HostToolsReliableDelivery::HerdrSessionDetail(delivery) => {
+                    self.finish_host_herdr_session_detail(delivery, cx);
                 }
                 HostToolsReliableDelivery::LogSnapshot(delivery) => {
                     self.finish_host_logs_snapshot(delivery, cx);

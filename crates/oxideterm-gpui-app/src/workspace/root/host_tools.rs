@@ -62,8 +62,8 @@ impl WorkspaceApp {
             }
             HostToolsWindowIntent::BeginPlainTextImeSelection { input, event } => {
                 let Some(target) = workspace_ime_target_for_plain_host_tools_input(input) else {
-                    // Secret-bearing tmux dialog input never crosses this
-                    // plain-text frame boundary.
+                    // Secret-bearing dialog input never crosses this plain-text
+                    // frame boundary.
                     return;
                 };
                 self.ime_marked_text = None;
@@ -81,6 +81,14 @@ impl WorkspaceApp {
             }
             HostToolsWindowIntent::PrepareTmuxConfirm => {
                 self.reset_standard_confirm_focus();
+                cx.notify();
+            }
+            HostToolsWindowIntent::PrepareHerdrInputDialog => {
+                // Only focus state crosses this boundary; the zeroizing input stays in the Entity.
+                self.ime_marked_text = None;
+                self.clear_ime_selection();
+                self.show_active_input_caret(cx);
+                window.focus(&self.focus_handle, cx);
                 cx.notify();
             }
             HostToolsWindowIntent::SetMonitoringEnabled { tool, enabled } => {
@@ -298,6 +306,51 @@ impl WorkspaceApp {
                 } else {
                     (
                         self.i18n.t("sidebar.host_tmux.toast.action_failed"),
+                        TerminalNoticeVariant::Error,
+                    )
+                }
+            }
+            HostToolsNotice::HerdrSnapshotAlreadyRunning => (
+                self.i18n
+                    .t("sidebar.host_herdr.toast.snapshot_already_running"),
+                TerminalNoticeVariant::Warning,
+            ),
+            HostToolsNotice::HerdrConnectionMissing => (
+                self.i18n.t("sidebar.host_herdr.toast.connection_missing"),
+                TerminalNoticeVariant::Error,
+            ),
+            HostToolsNotice::HerdrActionAlreadyRunning => (
+                self.i18n
+                    .t("sidebar.host_herdr.toast.action_already_running"),
+                TerminalNoticeVariant::Warning,
+            ),
+            HostToolsNotice::HerdrActionFailed => (
+                self.i18n.t("sidebar.host_herdr.toast.action_failed"),
+                TerminalNoticeVariant::Error,
+            ),
+            HostToolsNotice::HerdrReadAlreadyRunning => (
+                self.i18n.t("sidebar.host_herdr.toast.read_already_running"),
+                TerminalNoticeVariant::Warning,
+            ),
+            HostToolsNotice::HerdrReadFailed => (
+                self.i18n.t("sidebar.host_herdr.toast.read_failed"),
+                TerminalNoticeVariant::Error,
+            ),
+            HostToolsNotice::HerdrActionFinished {
+                target_label,
+                succeeded,
+            } => {
+                if succeeded {
+                    (
+                        self.i18n_replace(
+                            "sidebar.host_herdr.toast.action_succeeded",
+                            &[("target", target_label)],
+                        ),
+                        TerminalNoticeVariant::Success,
+                    )
+                } else {
+                    (
+                        self.i18n.t("sidebar.host_herdr.toast.action_failed"),
                         TerminalNoticeVariant::Error,
                     )
                 }
