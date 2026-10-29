@@ -1,4 +1,4 @@
-// Copyright (C) 2026 OxideTerm contributors.
+// Copyright (C) 2026 jaime.su
 // SPDX-License-Identifier: GPL-3.0-only
 
 /// Quote one value for use as a single POSIX shell argument.

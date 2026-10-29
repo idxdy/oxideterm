@@ -1,4 +1,4 @@
-// Copyright (C) 2026 OxideTerm contributors.
+// Copyright (C) 2026 jaime.su
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! Snapshot shapes rendered by the monitor UI and the queries it runs over
