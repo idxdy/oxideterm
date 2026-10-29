@@ -425,6 +425,9 @@ pub(in crate::workspace) enum HostToolsWindowModalSnapshot {
     ServiceLogs,
     TmuxConfirm(oxideterm_gpui_ui::motion::ExitPhase),
     TmuxInput,
+    HerdrConfirm(oxideterm_gpui_ui::motion::ExitPhase),
+    HerdrInput,
+    HerdrRead,
     ScheduleConfirm(oxideterm_gpui_ui::motion::ExitPhase),
     ScheduleLogs,
 }
@@ -795,6 +798,8 @@ pub(in crate::workspace) enum HostToolsTextInput {
     LogSearch,
     TmuxSearch,
     TmuxDialog,
+    HerdrSearch,
+    HerdrDialog,
     PortSearch,
     ScheduleSearch,
     FilesystemSearch,
@@ -821,6 +826,140 @@ impl HostTmuxState {
             last_error: None,
             pending_confirm: None,
             action_running: None,
+        }
+    }
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub(super) struct HostHerdrSnapshotRequest {
+    pub(super) connection_id: String,
+    pub(super) feedback: HostSnapshotFeedback,
+    pub(super) failure_fallback: String,
+}
+
+pub(super) struct HostHerdrSnapshotDelivery {
+    pub(super) request: HostHerdrSnapshotRequest,
+    pub(super) result: Result<SshCommandOutput, ()>,
+}
+
+/// Only destructive actions enter the confirm state; free-text values (run
+/// command, labels) stay in the zeroizing input dialog buffer instead.
+#[derive(Clone, Eq, PartialEq)]
+pub(super) enum HostHerdrDestructiveAction {
+    CloseWorkspace { workspace_id: String },
+    CloseTab { tab_id: String },
+    ClosePane { pane_id: String },
+    StopSession { name: String },
+    DeleteSession { name: String },
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub(super) struct HostHerdrActionRequest {
+    pub(super) connection_id: String,
+    /// herdr session that owns the workspace/tab/pane being mutated.
+    pub(super) session: String,
+    pub(super) target_label: String,
+    pub(super) action: HostHerdrDestructiveAction,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub(super) struct HostHerdrActionRun {
+    pub(super) connection_id: String,
+    pub(super) target_label: String,
+}
+
+pub(super) struct HostHerdrActionDelivery {
+    pub(super) request: HostHerdrActionRun,
+    pub(super) result: Result<bool, ()>,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub(in crate::workspace) enum HostHerdrInputDialogKind {
+    NewSession,
+    NewWorkspace,
+    RenameWorkspace { workspace_id: String },
+    RenameTab { tab_id: String },
+    RenamePane { pane_id: String },
+    RunPane { pane_id: String },
+}
+
+pub(in crate::workspace) struct HostHerdrInputDialog {
+    pub(in crate::workspace) kind: HostHerdrInputDialogKind,
+    /// Session the dialog's action targets; herdr addresses workspaces, tabs
+    /// and panes through their session's socket.
+    pub(in crate::workspace) session: String,
+    // Run commands may contain secrets; the buffer zeroizes on close or when
+    // the value hands off to command construction.
+    pub(in crate::workspace) value: zeroize::Zeroizing<String>,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub(super) struct HostHerdrReadRequest {
+    pub(super) connection_id: String,
+    pub(super) session: String,
+    pub(super) pane_id: String,
+    pub(super) cwd_label: String,
+    pub(super) failure_fallback: String,
+}
+
+pub(super) struct HostHerdrReadDelivery {
+    pub(super) request: HostHerdrReadRequest,
+    pub(super) result: Result<SshCommandOutput, ()>,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub(super) struct HostHerdrSessionDetailRequest {
+    pub(super) connection_id: String,
+    pub(super) session: String,
+    pub(super) failure_fallback: String,
+}
+
+pub(super) struct HostHerdrSessionDetailDelivery {
+    pub(super) request: HostHerdrSessionDetailRequest,
+    pub(super) result: Result<SshCommandOutput, ()>,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub(super) struct HostHerdrReadDialog {
+    pub(super) request: HostHerdrReadRequest,
+    // The Entity and render tree share one zeroizing capture buffer.
+    pub(super) output: Option<Arc<zeroize::Zeroizing<String>>>,
+    pub(super) error: Option<String>,
+    pub(super) loading: bool,
+}
+
+pub(super) struct HostHerdrState {
+    pub(super) snapshot_connection_id: Option<String>,
+    pub(super) snapshot: Option<HerdrSnapshot>,
+    pub(super) snapshot_running: Option<HostHerdrSnapshotRequest>,
+    pub(super) snapshot_pending: Option<HostHerdrSnapshotRequest>,
+    pub(super) snapshot_in_flight: bool,
+    pub(super) last_refreshed_ms: Option<u64>,
+    /// Workspaces live under a session, so each expanded session is fetched
+    /// from that session's own socket and cached here.
+    pub(super) session_details: std::collections::HashMap<String, HerdrSessionDetail>,
+    pub(super) session_detail_running: Option<HostHerdrSessionDetailRequest>,
+    pub(super) expanded_session: Option<String>,
+    pub(super) pending_confirm: Option<HostToolConfirmState<HostHerdrActionRequest>>,
+    pub(super) action_running: Option<HostHerdrActionRun>,
+    pub(super) read_dialog: Option<HostHerdrReadDialog>,
+}
+
+impl HostHerdrState {
+    pub(super) fn new() -> Self {
+        Self {
+            snapshot_connection_id: None,
+            snapshot: None,
+            snapshot_running: None,
+            snapshot_pending: None,
+            snapshot_in_flight: false,
+            last_refreshed_ms: None,
+            session_details: std::collections::HashMap::new(),
+            session_detail_running: None,
+            expanded_session: None,
+            pending_confirm: None,
+            action_running: None,
+            read_dialog: None,
         }
     }
 }
@@ -902,6 +1041,7 @@ pub(in crate::workspace) struct HostToolsMessages {
     pub(super) schedule_unknown_error: String,
     pub(super) tmux_unknown_error: String,
     pub(super) tmux_unavailable: String,
+    pub(super) herdr_unknown_error: String,
 }
 
 impl HostToolsMessages {
@@ -916,6 +1056,7 @@ impl HostToolsMessages {
             schedule_unknown_error: i18n.t("sidebar.host_schedules.toast.unknown_error"),
             tmux_unknown_error: i18n.t("sidebar.host_tmux.toast.unknown_error"),
             tmux_unavailable: i18n.t("sidebar.host_tmux.unavailable"),
+            herdr_unknown_error: i18n.t("sidebar.host_herdr.toast.unknown_error"),
         }
     }
 }
@@ -1000,9 +1141,13 @@ pub(in crate::workspace) struct HostToolsUiState {
     pub(super) host_service_list_cache: RefCell<VirtualListSignatureCache>,
     pub(in crate::workspace) host_log_search_query: String,
     pub(in crate::workspace) host_tmux_search_query: String,
+    pub(in crate::workspace) host_herdr_search_query: String,
     pub(in crate::workspace) host_tmux_expanded_session_id: Option<String>,
+    pub(in crate::workspace) host_herdr_expanded_workspace: Option<String>,
+    pub(in crate::workspace) host_herdr_expanded_tab: Option<String>,
     pub(in crate::workspace) host_tmux_expanded_window_id: Option<String>,
     pub(in crate::workspace) host_tmux_input_dialog: Option<HostTmuxInputDialog>,
+    pub(in crate::workspace) host_herdr_input_dialog: Option<HostHerdrInputDialog>,
     pub(super) host_tmux_list_state: ListState,
     pub(super) host_tmux_list_cache: RefCell<VirtualListSignatureCache>,
     pub(in crate::workspace) host_port_search_query: String,
@@ -1045,9 +1190,13 @@ impl HostToolsUiState {
             host_service_list_cache: RefCell::new(VirtualListSignatureCache::default()),
             host_log_search_query: String::new(),
             host_tmux_search_query: String::new(),
+            host_herdr_search_query: String::new(),
             host_tmux_expanded_session_id: None,
+            host_herdr_expanded_workspace: None,
+            host_herdr_expanded_tab: None,
             host_tmux_expanded_window_id: None,
             host_tmux_input_dialog: None,
+            host_herdr_input_dialog: None,
             host_tmux_list_state: tauri_virtual_list_state(
                 0,
                 ListAlignment::Top,
@@ -1088,6 +1237,9 @@ impl HostToolsUiState {
                 Some(HostToolsTextInput::TmuxSearch | HostToolsTextInput::TmuxDialog),
                 ContextSidebarTool::Tmux
             ) | (
+                Some(HostToolsTextInput::HerdrSearch | HostToolsTextInput::HerdrDialog),
+                ContextSidebarTool::Herdr
+            ) | (
                 Some(HostToolsTextInput::PortSearch),
                 ContextSidebarTool::Ports
             ) | (
@@ -1121,8 +1273,13 @@ impl HostToolsUiState {
             HostToolsTextInput::ServiceSearch => Some(&self.host_service_search_query),
             HostToolsTextInput::LogSearch => Some(&self.host_log_search_query),
             HostToolsTextInput::TmuxSearch => Some(&self.host_tmux_search_query),
+            HostToolsTextInput::HerdrSearch => Some(&self.host_herdr_search_query),
             HostToolsTextInput::TmuxDialog => self
                 .host_tmux_input_dialog
+                .as_ref()
+                .map(|dialog| dialog.value.as_str()),
+            HostToolsTextInput::HerdrDialog => self
+                .host_herdr_input_dialog
                 .as_ref()
                 .map(|dialog| dialog.value.as_str()),
             HostToolsTextInput::PortSearch => Some(&self.host_port_search_query),
@@ -1146,8 +1303,13 @@ impl HostToolsUiState {
             HostToolsTextInput::ServiceSearch => Some(&mut self.host_service_search_query),
             HostToolsTextInput::LogSearch => Some(&mut self.host_log_search_query),
             HostToolsTextInput::TmuxSearch => Some(&mut self.host_tmux_search_query),
+            HostToolsTextInput::HerdrSearch => Some(&mut self.host_herdr_search_query),
             HostToolsTextInput::TmuxDialog => self
                 .host_tmux_input_dialog
+                .as_mut()
+                .map(|dialog| &mut *dialog.value),
+            HostToolsTextInput::HerdrDialog => self
+                .host_herdr_input_dialog
                 .as_mut()
                 .map(|dialog| &mut *dialog.value),
             HostToolsTextInput::PortSearch => Some(&mut self.host_port_search_query),
