@@ -1386,6 +1386,10 @@ impl WorkspaceApp {
                 root.child(dialog)
             })
             .when_some(
+                self.render_host_ecapture_confirm_dialog(cx),
+                |root, dialog| root.child(dialog),
+            )
+            .when_some(
                 self.render_host_schedule_confirm_dialog(cx),
                 |root, dialog| root.child(dialog),
             )

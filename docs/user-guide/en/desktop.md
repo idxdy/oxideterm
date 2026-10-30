@@ -12,12 +12,14 @@ Use the activity bars and connection entries to reach app surfaces:
 
 - Sessions: create, open, group, and monitor SSH work.
 - File manager and SFTP: browse files and manage transfers.
-- Connection pool, monitor, and Host Tools: inspect connection runtime state, resource snapshots, processes, containers, services, tmux, logs, ports, and metrics.
+- Connection pool, monitor, and Host Tools: inspect connection runtime state, resource snapshots, processes, containers, services, tmux, eCapture, logs, ports, and metrics.
 - Remote desktop: install and enable the RDP or VNC plugin, then open a profile from New Connection or Session Manager. For WSL Graphics on Windows, use New Connection → WSL Graphics.
 - Plugins: manage installed plugins and plugin settings.
 - Cloud sync: inspect sync status and run sync actions.
 - Notifications & Audit: review notifications, recorded operations, session history, and terminal-output recordings.
 - Settings: change app behavior and provider configuration.
+
+Host Tools include eCapture TLS plaintext captures, which are more limited than the rest of that surface: they work only on connected Linux SSH hosts that already have the `ecapture` binary and root or passwordless `sudo -n`. They add no listener or port forward, keep running while the panel is hidden or the app restarts, and `Clear` is refused while the capture process is alive.
 
 When a workflow becomes confusing, return to Sessions or Connection Monitor first. Those views show whether a host is saved, connecting, connected, stale, or unavailable.
 

@@ -146,6 +146,9 @@ pub(super) enum WorkspaceImeTarget {
     HostDockerSearch,
     HostServiceSearch,
     HostLogSearch,
+    HostEcaptureSearch,
+    HostEcaptureTarget,
+    HostEcapturePid,
     HostTmuxSearch,
     HostTmuxDialogInput,
     HostMuxDialog,
@@ -432,6 +435,9 @@ pub(super) fn workspace_ime_target_for_plain_host_tools_input(
         HostToolsTextInput::DockerSearch => Some(WorkspaceImeTarget::HostDockerSearch),
         HostToolsTextInput::ServiceSearch => Some(WorkspaceImeTarget::HostServiceSearch),
         HostToolsTextInput::LogSearch => Some(WorkspaceImeTarget::HostLogSearch),
+        HostToolsTextInput::EcaptureSearch => Some(WorkspaceImeTarget::HostEcaptureSearch),
+        HostToolsTextInput::EcaptureTarget => Some(WorkspaceImeTarget::HostEcaptureTarget),
+        HostToolsTextInput::EcapturePid => Some(WorkspaceImeTarget::HostEcapturePid),
         HostToolsTextInput::TmuxSearch => Some(WorkspaceImeTarget::HostTmuxSearch),
         HostToolsTextInput::TmuxDialog => None,
         // The shared multiplexer search reuses the tmux frame; the mux dialog
@@ -547,6 +553,9 @@ impl WorkspaceImeTarget {
             Self::HostDockerSearch => 8,
             Self::HostServiceSearch => 9,
             Self::HostLogSearch => 10,
+            Self::HostEcaptureSearch => 28,
+            Self::HostEcaptureTarget => 29,
+            Self::HostEcapturePid => 30,
             Self::HostTmuxSearch => 11,
             Self::HostTmuxDialogInput => 12,
             Self::HostMuxDialog => 28,
@@ -1298,6 +1307,9 @@ impl WorkspaceApp {
                 HostToolsTextInput::DockerSearch => WorkspaceImeTarget::HostDockerSearch,
                 HostToolsTextInput::ServiceSearch => WorkspaceImeTarget::HostServiceSearch,
                 HostToolsTextInput::LogSearch => WorkspaceImeTarget::HostLogSearch,
+                HostToolsTextInput::EcaptureSearch => WorkspaceImeTarget::HostEcaptureSearch,
+                HostToolsTextInput::EcaptureTarget => WorkspaceImeTarget::HostEcaptureTarget,
+                HostToolsTextInput::EcapturePid => WorkspaceImeTarget::HostEcapturePid,
                 HostToolsTextInput::TmuxSearch => WorkspaceImeTarget::HostTmuxSearch,
                 HostToolsTextInput::TmuxDialog => WorkspaceImeTarget::HostTmuxDialogInput,
                 HostToolsTextInput::MuxDialog => WorkspaceImeTarget::HostMuxDialog,
@@ -2383,6 +2395,24 @@ impl WorkspaceApp {
                 .ui
                 .input_value(HostToolsTextInput::LogSearch)
                 .map(str::to_string),
+            WorkspaceImeTarget::HostEcaptureSearch => self
+                .host_tools
+                .read(cx)
+                .ui
+                .input_value(HostToolsTextInput::EcaptureSearch)
+                .map(str::to_string),
+            WorkspaceImeTarget::HostEcaptureTarget => self
+                .host_tools
+                .read(cx)
+                .ui
+                .input_value(HostToolsTextInput::EcaptureTarget)
+                .map(str::to_string),
+            WorkspaceImeTarget::HostEcapturePid => self
+                .host_tools
+                .read(cx)
+                .ui
+                .input_value(HostToolsTextInput::EcapturePid)
+                .map(str::to_string),
             WorkspaceImeTarget::HostTmuxSearch => self
                 .host_tools
                 .read(cx)
@@ -3394,6 +3424,30 @@ impl WorkspaceApp {
             WorkspaceImeTarget::HostLogSearch => {
                 self.replace_host_tools_text_input(
                     HostToolsTextInput::LogSearch,
+                    replacement_range,
+                    text,
+                    cx,
+                );
+            }
+            WorkspaceImeTarget::HostEcaptureSearch => {
+                self.replace_host_tools_text_input(
+                    HostToolsTextInput::EcaptureSearch,
+                    replacement_range,
+                    text,
+                    cx,
+                );
+            }
+            WorkspaceImeTarget::HostEcaptureTarget => {
+                self.replace_host_tools_text_input(
+                    HostToolsTextInput::EcaptureTarget,
+                    replacement_range,
+                    text,
+                    cx,
+                );
+            }
+            WorkspaceImeTarget::HostEcapturePid => {
+                self.replace_host_tools_text_input(
+                    HostToolsTextInput::EcapturePid,
                     replacement_range,
                     text,
                     cx,

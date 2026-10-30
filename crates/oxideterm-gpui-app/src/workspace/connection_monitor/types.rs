@@ -134,6 +134,20 @@ pub(super) const HOST_PACKAGE_SERVICE_COLUMN_WIDTH: f32 = 108.0;
 pub(super) const HOST_PACKAGE_CONTEXT_COLUMNS_MIN_WIDTH: f32 = 720.0;
 pub(super) const HOST_PACKAGE_SNAPSHOT_TIMEOUT: Duration = Duration::from_secs(18);
 pub(super) const HOST_PACKAGE_SNAPSHOT_MAX_OUTPUT_SIZE: usize = 512 * 1024;
+pub(super) const HOST_ECAPTURE_LIST_ESTIMATED_ROW_HEIGHT: f32 = 54.0;
+// eCapture attaches eBPF uprobes on start; startup can take longer than a
+// snapshot command, but a poll always stays below the SSH capture budget.
+pub(super) const HOST_ECAPTURE_PROBE_TIMEOUT: Duration = Duration::from_secs(8);
+pub(super) const HOST_ECAPTURE_PROBE_MAX_OUTPUT_SIZE: usize = 32 * 1024;
+pub(super) const HOST_ECAPTURE_START_TIMEOUT: Duration = Duration::from_secs(20);
+pub(super) const HOST_ECAPTURE_START_MAX_OUTPUT_SIZE: usize = 64 * 1024;
+pub(super) const HOST_ECAPTURE_POLL_TIMEOUT: Duration = Duration::from_secs(8);
+pub(super) const HOST_ECAPTURE_POLL_MAX_OUTPUT_SIZE: usize = 512 * 1024;
+pub(super) const HOST_ECAPTURE_ACTION_TIMEOUT: Duration = Duration::from_secs(15);
+pub(super) const HOST_ECAPTURE_ACTION_MAX_OUTPUT_SIZE: usize = 16 * 1024;
+pub(super) const HOST_ECAPTURE_POLL_INTERVAL: Duration = Duration::from_millis(1500);
+pub(super) const HOST_ECAPTURE_PAYLOAD_PREVIEW_LINES: usize = 120;
+pub(super) const HOST_ECAPTURE_INPUT_HEIGHT: f32 = 30.0;
 
 pub(super) const MONITOR_POOL_REFRESH_INTERVAL: Duration = Duration::from_millis(2000);
 // The compact sidebar must stay on GPUI List scrolling; ordinary Div overflow
@@ -451,6 +465,7 @@ pub(in crate::workspace) enum HostToolsWindowModalSnapshot {
     MuxConfirm(oxideterm_gpui_ui::motion::ExitPhase),
     MuxInput,
     MuxRead,
+    EcaptureConfirm(oxideterm_gpui_ui::motion::ExitPhase),
     ScheduleConfirm(oxideterm_gpui_ui::motion::ExitPhase),
     ScheduleLogs,
     PackageConfirm(oxideterm_gpui_ui::motion::ExitPhase),
@@ -832,6 +847,9 @@ pub(in crate::workspace) enum HostToolsTextInput {
     DockerSearch,
     ServiceSearch,
     LogSearch,
+    EcaptureSearch,
+    EcaptureTarget,
+    EcapturePid,
     TmuxSearch,
     TmuxDialog,
     MuxDialog,
@@ -839,6 +857,148 @@ pub(in crate::workspace) enum HostToolsTextInput {
     ScheduleSearch,
     FilesystemSearch,
     PackageSearch,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub(super) struct HostEcaptureProbeRequest {
+    pub(super) connection_id: String,
+    pub(super) feedback: HostSnapshotFeedback,
+    pub(super) failure_fallback: String,
+}
+
+pub(super) struct HostEcaptureProbeDelivery {
+    pub(super) request: HostEcaptureProbeRequest,
+    pub(super) result: Result<ResourceEcaptureProbe, String>,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub(super) struct HostEcapturePollRequest {
+    pub(super) connection_id: String,
+    pub(super) run_id: String,
+    pub(super) start_line: u64,
+    /// Session generation this poll was issued against. A start or clear
+    /// replaces the cursor while a poll may still be in flight, and a cursor
+    /// value alone cannot tell the two streams apart.
+    pub(super) generation: u64,
+    pub(super) feedback: HostSnapshotFeedback,
+    pub(super) failure_fallback: String,
+}
+
+pub(super) struct HostEcapturePollDelivery {
+    pub(super) request: HostEcapturePollRequest,
+    // The worker parses the framing in place and zeroizes the command output,
+    // so only the bounded event range and its runtime log tail reach the
+    // Entity. The session parses those lines into records immediately; nothing
+    // here is logged, audited, or persisted.
+    pub(super) result: Result<EcapturePoll, String>,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub(super) struct HostEcaptureStartRequest {
+    pub(super) connection_id: String,
+    pub(super) run_id: String,
+    /// Template identity for the audit record; the command itself is built
+    /// before the request is queued.
+    pub(super) spec: EcaptureSpec,
+    pub(super) failure_fallback: String,
+}
+
+pub(super) struct HostEcaptureStartOutcome {
+    pub(super) started: bool,
+    pub(super) failure: Option<String>,
+}
+
+pub(super) struct HostEcaptureStartDelivery {
+    pub(super) request: HostEcaptureStartRequest,
+    pub(super) result: Result<HostEcaptureStartOutcome, String>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum HostEcaptureActionKind {
+    Stop,
+    Clear,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub(super) struct HostEcaptureActionRequest {
+    pub(super) connection_id: String,
+    pub(super) run_id: String,
+    pub(super) kind: HostEcaptureActionKind,
+}
+
+pub(super) struct HostEcaptureActionDelivery {
+    pub(super) request: HostEcaptureActionRequest,
+    pub(super) result: Result<bool, ()>,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub(super) enum HostEcaptureConfirmAction {
+    Start {
+        spec: EcaptureSpec,
+        binary: Option<String>,
+    },
+    Clear {
+        run_id: String,
+    },
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub(super) struct HostEcaptureConfirmRequest {
+    pub(super) connection_id: String,
+    pub(super) action: HostEcaptureConfirmAction,
+    /// The exact generated command, shown before a privileged start.
+    pub(super) preview: String,
+}
+
+pub(super) struct HostEcaptureState {
+    pub(super) probe_connection_id: Option<String>,
+    pub(super) probe: Option<ResourceEcaptureProbe>,
+    pub(super) probe_running: Option<HostEcaptureProbeRequest>,
+    // Captures are owned by the remote host and keyed by connection, so
+    // switching hosts keeps every cursor and its event ring.
+    pub(super) sessions: std::collections::HashMap<String, EcaptureSession>,
+    /// Bumped whenever a start or clear replaces a cursor, so an in-flight poll
+    /// issued against the previous stream cannot be applied.
+    pub(super) stream_generation: u64,
+    pub(super) poll_running: Option<HostEcapturePollRequest>,
+    pub(super) start_running: Option<HostEcaptureStartRequest>,
+    pub(super) action_running: Option<HostEcaptureActionRequest>,
+    pub(super) pending_confirm: Option<HostToolConfirmState<HostEcaptureConfirmRequest>>,
+    pub(super) template: EcaptureTemplate,
+    pub(super) filter: EcaptureFilter,
+    pub(super) expanded_sequence: Option<u64>,
+    /// Validation failures are label keys so every render stays translated.
+    pub(super) form_error_key: Option<&'static str>,
+    pub(super) error_text: Option<String>,
+    pub(super) list_state: ListState,
+    pub(super) list_cache: RefCell<VirtualListSignatureCache>,
+}
+
+impl HostEcaptureState {
+    pub(super) fn new() -> Self {
+        Self {
+            probe_connection_id: None,
+            probe: None,
+            probe_running: None,
+            sessions: std::collections::HashMap::new(),
+            stream_generation: 0,
+            poll_running: None,
+            start_running: None,
+            action_running: None,
+            pending_confirm: None,
+            template: EcaptureTemplate::Libssl,
+            filter: EcaptureFilter::All,
+            expanded_sequence: None,
+            form_error_key: None,
+            error_text: None,
+            list_state: tauri_virtual_list_state(
+                0,
+                ListAlignment::Top,
+                TauriVirtualListSpec::new(px(HOST_ECAPTURE_LIST_ESTIMATED_ROW_HEIGHT), 8),
+            ),
+            list_cache: RefCell::new(VirtualListSignatureCache::default()),
+        }
+    }
 }
 
 pub(super) struct HostTmuxState {
@@ -1086,6 +1246,7 @@ pub(in crate::workspace) struct HostToolsMessages {
     pub(super) tmux_unknown_error: String,
     pub(super) tmux_unavailable: String,
     pub(super) local_connection_label: String,
+    pub(super) ecapture_unknown_error: String,
 }
 
 impl HostToolsMessages {
@@ -1101,6 +1262,7 @@ impl HostToolsMessages {
             tmux_unknown_error: i18n.t("sidebar.host_tmux.toast.unknown_error"),
             tmux_unavailable: i18n.t("sidebar.host_tmux.unavailable"),
             local_connection_label: i18n.t("sidebar.host_connection.local_machine"),
+            ecapture_unknown_error: i18n.t("sidebar.host_ecapture.toast.unknown_error"),
         }
     }
 }
@@ -1184,6 +1346,9 @@ pub(in crate::workspace) struct HostToolsUiState {
     pub(super) host_service_list_state: ListState,
     pub(super) host_service_list_cache: RefCell<VirtualListSignatureCache>,
     pub(in crate::workspace) host_log_search_query: String,
+    pub(in crate::workspace) host_ecapture_search: String,
+    pub(in crate::workspace) host_ecapture_target: String,
+    pub(in crate::workspace) host_ecapture_pid: String,
     pub(in crate::workspace) host_tmux_search_query: String,
     pub(in crate::workspace) host_tmux_expanded_session_id: Option<String>,
     pub(in crate::workspace) host_tmux_expanded_window_id: Option<String>,
@@ -1230,6 +1395,9 @@ impl HostToolsUiState {
             ),
             host_service_list_cache: RefCell::new(VirtualListSignatureCache::default()),
             host_log_search_query: String::new(),
+            host_ecapture_search: String::new(),
+            host_ecapture_target: String::new(),
+            host_ecapture_pid: String::new(),
             host_tmux_search_query: String::new(),
             host_tmux_expanded_session_id: None,
             host_tmux_expanded_window_id: None,
@@ -1279,6 +1447,15 @@ impl HostToolsUiState {
                 ),
                 ContextSidebarTool::Tmux
             ) | (
+                Some(
+                    HostToolsTextInput::EcaptureSearch
+                        | HostToolsTextInput::EcaptureTarget
+                        | HostToolsTextInput::EcapturePid
+                ),
+                ContextSidebarTool::Ecapture
+            ) | (
+                ContextSidebarTool::Tmux
+            ) | (
                 Some(HostToolsTextInput::PortSearch),
                 ContextSidebarTool::Ports
             ) | (
@@ -1311,6 +1488,9 @@ impl HostToolsUiState {
             HostToolsTextInput::DockerSearch => Some(&self.host_docker_search_query),
             HostToolsTextInput::ServiceSearch => Some(&self.host_service_search_query),
             HostToolsTextInput::LogSearch => Some(&self.host_log_search_query),
+            HostToolsTextInput::EcaptureSearch => Some(&self.host_ecapture_search),
+            HostToolsTextInput::EcaptureTarget => Some(&self.host_ecapture_target),
+            HostToolsTextInput::EcapturePid => Some(&self.host_ecapture_pid),
             HostToolsTextInput::TmuxSearch => Some(&self.host_tmux_search_query),
             HostToolsTextInput::TmuxDialog => self
                 .host_tmux_input_dialog
@@ -1340,6 +1520,9 @@ impl HostToolsUiState {
             HostToolsTextInput::DockerSearch => Some(&mut self.host_docker_search_query),
             HostToolsTextInput::ServiceSearch => Some(&mut self.host_service_search_query),
             HostToolsTextInput::LogSearch => Some(&mut self.host_log_search_query),
+            HostToolsTextInput::EcaptureSearch => Some(&mut self.host_ecapture_search),
+            HostToolsTextInput::EcaptureTarget => Some(&mut self.host_ecapture_target),
+            HostToolsTextInput::EcapturePid => Some(&mut self.host_ecapture_pid),
             HostToolsTextInput::TmuxSearch => Some(&mut self.host_tmux_search_query),
             HostToolsTextInput::TmuxDialog => self
                 .host_tmux_input_dialog

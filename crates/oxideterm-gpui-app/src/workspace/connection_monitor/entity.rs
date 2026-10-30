@@ -72,6 +72,7 @@ pub(in crate::workspace) struct HostToolsEntity {
     pub(super) host_filesystems: HostFilesystemsState,
     pub(super) host_packages: HostPackagesState,
     pub(super) host_schedules: HostSchedulesState,
+    pub(super) host_ecapture: HostEcaptureState,
     pub(in crate::workspace) active_runtime_section: ConnectionRuntimeSection,
     pub(in crate::workspace) previous_runtime_section: ConnectionRuntimeSection,
     selected_connection_id: Option<String>,
@@ -543,6 +544,10 @@ impl HostToolsEntity {
             ))
         } else if self.ui.host_tmux_input_dialog.is_some() {
             Some(HostToolsWindowModalSnapshot::TmuxInput)
+        } else if let Some(confirm) = self.host_ecapture.pending_confirm.as_ref() {
+            Some(HostToolsWindowModalSnapshot::EcaptureConfirm(
+                confirm.presence.phase(),
+            ))
         } else if let Some(confirm) = self.host_tmux.pending_confirm.as_ref() {
             Some(HostToolsWindowModalSnapshot::TmuxConfirm(
                 confirm.presence.phase(),
@@ -611,6 +616,7 @@ impl HostToolsEntity {
             host_filesystems: HostFilesystemsState::new(),
             host_packages: HostPackagesState::new(),
             host_schedules: HostSchedulesState::new(),
+            host_ecapture: HostEcaptureState::new(),
             active_runtime_section: ConnectionRuntimeSection::Overview,
             previous_runtime_section: ConnectionRuntimeSection::Overview,
             selected_connection_id: None,
@@ -688,6 +694,7 @@ impl HostToolsEntity {
             HostToolsTextInput::DockerSearch => self.ui.host_docker_expanded_id = None,
             HostToolsTextInput::ServiceSearch => self.ui.host_service_expanded_id = None,
             HostToolsTextInput::LogSearch => self.host_logs.expanded_index = None,
+            HostToolsTextInput::EcaptureSearch => self.host_ecapture.expanded_sequence = None,
             HostToolsTextInput::TmuxSearch => {
                 self.ui.host_tmux_expanded_session_id = None;
                 self.ui.host_tmux_expanded_window_id = None;
@@ -700,7 +707,9 @@ impl HostToolsEntity {
             HostToolsTextInput::PackageSearch => self.host_packages.expanded_index = None,
             HostToolsTextInput::ProcessRenice
             | HostToolsTextInput::TmuxDialog
-            | HostToolsTextInput::MuxDialog => {}
+            | HostToolsTextInput::MuxDialog
+            | HostToolsTextInput::EcaptureTarget
+            | HostToolsTextInput::EcapturePid => {}
         }
         true
     }
@@ -1687,6 +1696,256 @@ impl HostToolsEntity {
         true
     }
 
+    pub(super) fn spawn_ecapture_probe(
+        &self,
+        command: String,
+        request: HostEcaptureProbeRequest,
+        timeout: Duration,
+        max_output_size: usize,
+        runtime: tokio::runtime::Handle,
+    ) -> bool {
+        let audit = request
+            .feedback
+            .should_toast()
+            .then(|| self.host_tool_audit(&request.connection_id, "query_host_ecapture", None));
+        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+            if let Some(audit) = audit {
+                audit.finish(
+                    oxideterm_audit::AuditOutcome::Failed,
+                    oxideterm_audit::AuditEvidence::Request,
+                    None,
+                    None,
+                );
+            }
+            return false;
+        };
+        let delivery_tx = self.reliable_delivery_tx.clone();
+        runtime.spawn(async move {
+            let mut result = handle
+                .run_command_capture(&command, timeout, max_output_size)
+                .await
+                .map_err(|_| ());
+            if let Some(audit) = audit {
+                finish_host_query_audit(audit, &result);
+            }
+            let parsed = match result.as_mut() {
+                Ok(output) => {
+                    let parsed = if output.exit_code.unwrap_or(0) == 0 {
+                        Ok(parse_ecapture_probe(&output.stdout, output.truncated))
+                    } else {
+                        Err(host_tool_capture_failure_message(
+                            &output.stdout,
+                            &output.stderr,
+                            output.exit_code,
+                            &request.failure_fallback,
+                        ))
+                    };
+                    zeroize_host_snapshot_output(output);
+                    parsed
+                }
+                Err(()) => Err(request.failure_fallback.clone()),
+            };
+            let _ = delivery_tx.send(super::delivery::HostToolsReliableDelivery::EcaptureProbe(
+                HostEcaptureProbeDelivery {
+                    request,
+                    result: parsed,
+                },
+            ));
+        });
+        true
+    }
+
+    pub(super) fn spawn_ecapture_poll(
+        &self,
+        command: String,
+        request: HostEcapturePollRequest,
+        timeout: Duration,
+        max_output_size: usize,
+        runtime: tokio::runtime::Handle,
+    ) -> bool {
+        let audit = request
+            .feedback
+            .should_toast()
+            .then(|| self.host_tool_audit(&request.connection_id, "query_host_ecapture", None));
+        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+            if let Some(audit) = audit {
+                audit.finish(
+                    oxideterm_audit::AuditOutcome::Failed,
+                    oxideterm_audit::AuditEvidence::Request,
+                    None,
+                    None,
+                );
+            }
+            return false;
+        };
+        let delivery_tx = self.reliable_delivery_tx.clone();
+        // Captured TLS plaintext is parsed inside the worker; only bounded
+        // records reach the Entity delivery queue.
+        runtime.spawn(async move {
+            let mut result = handle
+                .run_command_capture(&command, timeout, max_output_size)
+                .await
+                .map_err(|_| ());
+            if let Some(audit) = audit {
+                finish_host_query_audit(audit, &result);
+            }
+            let parsed = match result.as_mut() {
+                Ok(output) => {
+                    let parsed = if output.exit_code.unwrap_or(0) == 0 {
+                        Ok(parse_ecapture_poll(
+                            &request.run_id,
+                            &output.stdout,
+                            output.truncated,
+                        ))
+                    } else {
+                        Err(host_tool_capture_failure_message(
+                            &output.stdout,
+                            &output.stderr,
+                            output.exit_code,
+                            &request.failure_fallback,
+                        ))
+                    };
+                    zeroize_host_snapshot_output(output);
+                    parsed
+                }
+                Err(()) => Err(request.failure_fallback.clone()),
+            };
+            let _ = delivery_tx.send(super::delivery::HostToolsReliableDelivery::EcapturePoll(
+                HostEcapturePollDelivery {
+                    request,
+                    result: parsed,
+                },
+            ));
+        });
+        true
+    }
+
+    pub(super) fn spawn_ecapture_start(
+        &self,
+        command: zeroize::Zeroizing<String>,
+        request: HostEcaptureStartRequest,
+        timeout: Duration,
+        max_output_size: usize,
+        runtime: tokio::runtime::Handle,
+    ) -> bool {
+        let audit = self.host_tool_audit(
+            &request.connection_id,
+            "start_ecapture",
+            Some(&format!("template={:?}", request.spec.template)),
+        );
+        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+            audit.finish(
+                oxideterm_audit::AuditOutcome::Failed,
+                oxideterm_audit::AuditEvidence::Request,
+                None,
+                None,
+            );
+            return false;
+        };
+        let delivery_tx = self.reliable_delivery_tx.clone();
+        runtime.spawn(async move {
+            let mut audit_exit_code = None;
+            let result = handle
+                .run_command_capture(command.as_str(), timeout, max_output_size)
+                .await
+                .map(|mut output| {
+                    audit_exit_code = output.exit_code;
+                    let started = output.exit_code.unwrap_or(0) == 0
+                        && parse_ecapture_start_finished(&request.run_id, &output.stdout);
+                    let failure = (!started).then(|| {
+                        host_tool_capture_failure_message(
+                            &output.stdout,
+                            &output.stderr,
+                            output.exit_code,
+                            &request.failure_fallback,
+                        )
+                    });
+                    zeroize_host_snapshot_output(&mut output);
+                    HostEcaptureStartOutcome { started, failure }
+                })
+                .map_err(|_| request.failure_fallback.clone());
+            let audit_outcome = match (&result, audit_exit_code) {
+                (Err(_), _) => oxideterm_audit::AuditOutcome::Failed,
+                (_, Some(0)) => oxideterm_audit::AuditOutcome::Succeeded,
+                (_, Some(_)) => oxideterm_audit::AuditOutcome::Failed,
+                (_, None) => oxideterm_audit::AuditOutcome::Unknown,
+            };
+            audit.finish(
+                audit_outcome,
+                if audit_exit_code.is_some() {
+                    oxideterm_audit::AuditEvidence::ExitCode
+                } else {
+                    oxideterm_audit::AuditEvidence::Protocol
+                },
+                audit_exit_code,
+                None,
+            );
+            let _ = delivery_tx.send(super::delivery::HostToolsReliableDelivery::EcaptureStart(
+                HostEcaptureStartDelivery { request, result },
+            ));
+        });
+        true
+    }
+
+    pub(super) fn spawn_ecapture_action(
+        &self,
+        command: zeroize::Zeroizing<String>,
+        request: HostEcaptureActionRequest,
+        timeout: Duration,
+        max_output_size: usize,
+        runtime: tokio::runtime::Handle,
+    ) -> bool {
+        let audit = self.host_tool_audit(
+            &request.connection_id,
+            "ecapture_action",
+            Some(&format!("kind={:?}", request.kind)),
+        );
+        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+            audit.finish(
+                oxideterm_audit::AuditOutcome::Failed,
+                oxideterm_audit::AuditEvidence::Request,
+                None,
+                None,
+            );
+            return false;
+        };
+        let delivery_tx = self.reliable_delivery_tx.clone();
+        runtime.spawn(async move {
+            let mut audit_exit_code = None;
+            let result = handle
+                .run_command_capture(command.as_str(), timeout, max_output_size)
+                .await
+                .map(|mut output| {
+                    audit_exit_code = output.exit_code;
+                    let succeeded = output.exit_code.unwrap_or(0) == 0;
+                    zeroize::Zeroize::zeroize(&mut output.stdout);
+                    zeroize::Zeroize::zeroize(&mut output.stderr);
+                    succeeded
+                })
+                .map_err(|_| ());
+            let audit_outcome = match (&result, audit_exit_code) {
+                (Err(_), _) => oxideterm_audit::AuditOutcome::Failed,
+                (_, Some(0)) => oxideterm_audit::AuditOutcome::Succeeded,
+                (_, Some(_)) => oxideterm_audit::AuditOutcome::Failed,
+                (_, None) => oxideterm_audit::AuditOutcome::Unknown,
+            };
+            audit.finish(
+                audit_outcome,
+                if audit_exit_code.is_some() {
+                    oxideterm_audit::AuditEvidence::ExitCode
+                } else {
+                    oxideterm_audit::AuditEvidence::Protocol
+                },
+                audit_exit_code,
+                None,
+            );
+            let _ = delivery_tx.send(super::delivery::HostToolsReliableDelivery::EcaptureAction(
+                HostEcaptureActionDelivery { request, result },
+            ));
+        });
+        true
+    }
+
     pub(super) fn compact_monitor_list_state(&self) -> ListState {
         self.compact_monitor_list_state.clone()
     }
@@ -1796,6 +2055,9 @@ impl HostToolsEntity {
         }
         if tool != ContextSidebarTool::Schedules {
             self.dismiss_schedule_confirm(cx);
+        }
+        if tool != ContextSidebarTool::Ecapture {
+            self.dismiss_ecapture_confirm(cx);
         }
 
         if let Some(runtime) = self.lifecycle_runtime.clone() {
@@ -1938,6 +2200,8 @@ impl HostToolsEntity {
         self.dismiss_mux_input_dialog(cx);
         self.dismiss_mux_read_dialog(cx);
         self.dismiss_schedule_confirm(cx);
+        self.dismiss_ecapture_confirm(cx);
+        self.clear_ecapture_error(cx);
 
         let Some(runtime) = self.lifecycle_runtime.clone() else {
             return;
@@ -1993,6 +2257,7 @@ impl HostToolsEntity {
                     | ContextSidebarTool::Gpu
                     | ContextSidebarTool::Processes
                     | ContextSidebarTool::Docker
+                    | ContextSidebarTool::Ecapture
             )
         {
             // Tests record the command boundary without opening a real SSH channel.
@@ -2022,6 +2287,13 @@ impl HostToolsEntity {
                 self.refresh_mux_sessions(connection_id, feedback, cx);
                 Vec::new()
             }
+            ContextSidebarTool::Ecapture => self.request_ecapture_snapshot(
+                connection_id,
+                feedback,
+                runtime,
+                messages.ecapture_unknown_error,
+                cx,
+            ),
             ContextSidebarTool::Tmux => self.request_tmux_snapshot(
                 connection_id,
                 feedback,
@@ -2415,6 +2687,9 @@ impl WorkspaceApp {
                 self.handle_host_mux_input_dialog_key(event, window, cx)
             }
             HostToolsWindowModalSnapshot::MuxRead => self.handle_host_mux_read_key(event, cx),
+            HostToolsWindowModalSnapshot::EcaptureConfirm(_) => {
+                self.handle_host_ecapture_confirm_key(event, cx)
+            }
             HostToolsWindowModalSnapshot::ScheduleConfirm(_) => {
                 self.handle_host_schedule_confirm_key(event, cx)
             }
@@ -2584,6 +2859,7 @@ mod tests {
                 tmux_unknown_error: "tmux capture failed".to_string(),
                 tmux_unavailable: "tmux unavailable".to_string(),
                 local_connection_label: "This machine".to_string(),
+                ecapture_unknown_error: "eCapture capture failed".to_string(),
             });
             entity.select_connection(connection_id.clone(), None, cx);
             entity.active_tool = ContextSidebarTool::Gpu;
@@ -2680,10 +2956,11 @@ mod tests {
                 false,
                 cx,
             );
-            entity.request_active_tool_snapshot(HostSnapshotFeedback::Silent, cx);
         });
 
         // Re-showing Services restarts only the shared profiler plus Services.
+        // The lifecycle transition itself re-requests the active page, so a
+        // caller must not add a second request on top of it.
         wait_for_counter(&shell_open_count, hidden_shell_open_count + 1);
         std::thread::sleep(Duration::from_millis(25));
         assert_eq!(
@@ -2996,6 +3273,7 @@ mod tests {
                 tmux_unknown_error: "tmux capture failed".to_string(),
                 tmux_unavailable: "tmux unavailable".to_string(),
                 local_connection_label: "This machine".to_string(),
+                ecapture_unknown_error: "eCapture capture failed".to_string(),
             });
             entity.select_tool(ContextSidebarTool::Services, cx);
             assert!(
@@ -3731,6 +4009,7 @@ mod tests {
                 tmux_unknown_error: "tmux capture failed".to_string(),
                 tmux_unavailable: "tmux unavailable".to_string(),
                 local_connection_label: "This machine".to_string(),
+                ecapture_unknown_error: "eCapture capture failed".to_string(),
             });
             let connections = entity.monitor_connections();
             assert_eq!(connections.len(), 2);

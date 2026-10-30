@@ -20,6 +20,11 @@ pub(super) enum HostToolsReliableDelivery {
     MuxDetail(MuxDetailDelivery),
     MuxAction(MuxActionDelivery),
     MuxRead(MuxReadDelivery),
+    EcaptureProbe(HostEcaptureProbeDelivery),
+    EcapturePoll(HostEcapturePollDelivery),
+    EcaptureStart(HostEcaptureStartDelivery),
+    EcaptureAction(HostEcaptureActionDelivery),
+    EcapturePollTick(String),
     LogSnapshot(HostLogSnapshotDelivery),
     PortSnapshot(HostPortSnapshotDelivery),
     FilesystemSnapshot(HostFilesystemSnapshotDelivery),
@@ -218,6 +223,20 @@ impl HostToolsEntity {
                 }
                 HostToolsReliableDelivery::MuxRead(delivery) => {
                     self.finish_host_mux_read(delivery, cx);
+                HostToolsReliableDelivery::EcaptureProbe(delivery) => {
+                    self.finish_host_ecapture_probe(delivery, cx);
+                }
+                HostToolsReliableDelivery::EcapturePoll(delivery) => {
+                    self.finish_host_ecapture_poll(delivery, cx);
+                }
+                HostToolsReliableDelivery::EcaptureStart(delivery) => {
+                    self.finish_host_ecapture_start(delivery, cx);
+                }
+                HostToolsReliableDelivery::EcaptureAction(delivery) => {
+                    self.finish_host_ecapture_action(delivery, cx);
+                }
+                HostToolsReliableDelivery::EcapturePollTick(connection_id) => {
+                    self.handle_host_ecapture_poll_tick(connection_id, cx);
                 }
                 HostToolsReliableDelivery::LogSnapshot(delivery) => {
                     self.finish_host_logs_snapshot(delivery, cx);

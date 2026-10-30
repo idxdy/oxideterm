@@ -1372,6 +1372,7 @@ impl WorkspaceApp {
                     | ContextSidebarTool::Processes
                     | ContextSidebarTool::Services
                     | ContextSidebarTool::Logs
+                    | ContextSidebarTool::Ecapture
                     | ContextSidebarTool::Tmux
                     | ContextSidebarTool::Docker
                     | ContextSidebarTool::Ports
@@ -1393,6 +1394,9 @@ impl WorkspaceApp {
             return;
         }
         if self.handle_host_log_search_key(event, cx) {
+            return;
+        }
+        if self.handle_host_ecapture_key(event, cx) {
             return;
         }
         if self.handle_host_tmux_search_key(event, cx) {

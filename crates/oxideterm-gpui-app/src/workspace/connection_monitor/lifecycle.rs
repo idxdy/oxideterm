@@ -67,6 +67,7 @@ impl HostToolsEntity {
         force_pool_refresh: bool,
         cx: &mut Context<Self>,
     ) {
+        let was_visible = self.visibility.sidebar_is_visible();
         self.visibility = visibility;
         self.monitoring = monitoring;
         self.sampling_config = sampling_config;
@@ -87,6 +88,12 @@ impl HostToolsEntity {
             self.stop_profiler_sampling();
             self.pause_service_refreshes();
             return;
+        }
+        if !was_visible {
+            // Hidden pages drop their scheduled refreshes, so re-showing Host
+            // Tools must re-request the active page's snapshot instead of
+            // waiting for the user to switch tools.
+            self.request_active_tool_snapshot(HostSnapshotFeedback::Silent, cx);
         }
 
         let connections = self.monitor_connections();
@@ -158,10 +165,17 @@ impl HostToolsEntity {
         runtime: tokio::runtime::Handle,
         cx: &mut Context<Self>,
     ) {
+        let ecapture_was_enabled = self.monitoring.ecapture_enabled;
         self.visibility = visibility;
         self.monitoring = monitoring;
         self.sampling_config = sampling_config;
         self.lifecycle_runtime = Some(runtime.clone());
+        if ecapture_was_enabled && !self.monitoring.ecapture_enabled {
+            // A detached capture keeps writing TLS plaintext to the host after
+            // the page is disabled, and polling (the only size guard) stops, so
+            // disabling must stop it and invalidate a pending start.
+            self.disable_host_ecapture(runtime.clone(), cx);
+        }
         if sampling_config.is_empty() || !visibility.sidebar_is_visible() {
             self.stop_profiler_sampling();
         } else {

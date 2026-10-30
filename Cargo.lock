@@ -7284,6 +7284,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "oxideterm-ecapture"
+version = "2.3.0"
+dependencies = [
+ "regex",
+ "serde",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "oxideterm-editor-core"
 version = "2.3.1"
 dependencies = [
@@ -7407,6 +7416,7 @@ dependencies = [
  "oxideterm-connection-monitor",
  "oxideterm-connections",
  "oxideterm-desktop-presence",
+ "oxideterm-ecapture",
  "oxideterm-editor-core",
  "oxideterm-editor-syntax",
  "oxideterm-environment",
