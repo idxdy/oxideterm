@@ -44,7 +44,7 @@ pub fn stats_command(os_type: &str, instance: &ContainerInstance) -> String {
         _ => format!(
             "echo '===CONTAINER_STATS==='; \
              if command -v {program} >/dev/null 2>&1; then \
-             {prefix} stats {no_stream}--format json 2>&1 | head -n 500 | awk '{{print \"STAT\\t\" $0}}'; \
+             {prefix} stats {no_stream}--format json 2>&1 | awk '{{print \"STAT\\t\" $0}}'; \
              else printf 'ERR\\t%s\\n' '{program} CLI not found'; fi; \
              echo '===CONTAINER_STATS_END==='"
         ),
@@ -56,23 +56,26 @@ pub fn parse_stats(output: &str) -> Vec<ContainerStat> {
         return Vec::new();
     };
     let mut records = Vec::new();
-    let body = section
+    let payloads = section
         .lines()
         .filter_map(|line| line.strip_prefix("STAT\t"))
-        .collect::<Vec<_>>()
-        .join("\n");
-    let body = if body.trim_start().starts_with('[') {
-        body.trim().to_string()
-    } else {
-        // Docker emits one JSON object per line; wrap the lines as an array so
-        // both shapes share one parser.
-        format!(
+        .collect::<Vec<_>>();
+    // Podman prints one array; Docker prints one object per line. Engine
+    // warnings share the stream and must not break either shape.
+    let body = match payloads
+        .iter()
+        .position(|payload| payload.trim_start().starts_with('['))
+    {
+        Some(start) => payloads[start..].join("\n"),
+        None => format!(
             "[{}]",
-            body.lines()
-                .filter(|line| !line.trim().is_empty())
+            payloads
+                .iter()
+                .filter(|payload| payload.trim_start().starts_with('{'))
+                .copied()
                 .collect::<Vec<_>>()
                 .join(",")
-        )
+        ),
     };
     let Ok(Value::Array(entries)) = serde_json::from_str::<Value>(&body) else {
         return Vec::new();
@@ -117,7 +120,11 @@ fn extract_section<'a>(output: &'a str, name: &str) -> Option<&'a str> {
     let start = format!("==={name}===");
     let end = format!("==={name}_END===");
     let after_start = output.split_once(&start)?.1;
-    Some(after_start.split_once(&end)?.0.trim())
+    // Truncated captures keep whatever rows arrived; only the tail is lost.
+    Some(match after_start.split_once(&end) {
+        Some((section, _)) => section.trim(),
+        None => after_start.trim(),
+    })
 }
 
 #[cfg(test)]

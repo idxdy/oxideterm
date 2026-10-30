@@ -320,15 +320,14 @@ const REDIS_VALUE_TAIL: &str = concat!(
     "printf 'usage\\t%s\\n' \"$(oxide_cli -n \"$oxide_db\" MEMORY USAGE \"$oxide_key\" 2>/dev/null | head -n 1 | tr -d '\\r')\"; ",
     "printf '===REDIS_BODY===\\n%s\\n' \"$(oxide_cli -n \"$oxide_db\" JSON.GET \"$oxide_key\" 2>/dev/null)\"; ",
     ";; ",
+    "*NOAUTH*|*WRONGPASS*|*'invalid password'*|*'no password is set'*|*'AUTH failed'*) ",
+    "printf 'status\\tauth\\n' ;; ",
     "*) ",
     "printf 'status\\tready\\n'; ",
     "printf 'type\\tother\\n'; ",
-    "printf 'rawtype\\t%s\\n' \"$(printf '%s' \"$oxide_type\" | tr '\\t' ' ')\" ;; ",
-    "printf '===REDIS_BODY===\\n%s\\n' \"$oxide_body\"; ",
+    "printf 'rawtype\\t%s\\n' \"$(printf '%s' \"$oxide_type\" | tr '\\t' ' ')\"; ",
+    "printf '===REDIS_BODY===\\n\\n'; ",
     ";; ",
-    "*NOAUTH*|*WRONGPASS*|*'invalid password'*|*'no password is set'*|*'AUTH failed'*) ",
-    "printf 'status\\tauth\\n' ;; ",
-    "*) printf 'status\\terror\\t%s\\n' \"$(printf '%s' \"$oxide_type\" | tr '\\t' ' ')\" ;; ",
     "esac; fi; "
 );
 
@@ -1858,6 +1857,34 @@ mod tests {
             redis_replace_value_command(&endpoint, "Windows", RedisValueWriteKind::String)
                 .is_none()
         );
+    }
+
+    #[test]
+    fn value_command_is_shell_syntax_valid() {
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+
+        let endpoint =
+            ResourceRedisEndpoint::new(ResourceRedisEndpointKind::Host, REDIS_PROBE_TARGET);
+        let command = redis_value_command(&endpoint, "Linux").expect("value command");
+        // Generated shell is part of the contract: a stray `;;` broke every
+        // value read once, so parse it before it reaches a host.
+        let Ok(mut child) = Command::new("bash")
+            .args(["-n", "-s"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+        else {
+            return;
+        };
+        child
+            .stdin
+            .take()
+            .expect("stdin")
+            .write_all(command.as_bytes())
+            .expect("write script");
+        assert!(child.wait().expect("bash -n").success());
     }
 
     #[test]

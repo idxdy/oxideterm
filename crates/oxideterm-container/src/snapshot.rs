@@ -9,6 +9,7 @@
 //! cannot flood the delivery channel. Output never leaves the host's shell: it
 //! is parsed by [`crate::parse_snapshot`] on the app side.
 
+use crate::engine::ContainerEngine;
 use crate::instance::ContainerInstance;
 
 pub fn snapshot_command(os_type: &str, instance: &ContainerInstance) -> String {
@@ -18,29 +19,10 @@ pub fn snapshot_command(os_type: &str, instance: &ContainerInstance) -> String {
     }
 }
 
-/// Docker and `wslc` accept `--format json` (one object per line); Podman
-/// accepts the same value but projects lowercase keys and empty status/ports,
-/// so it uses the richer Go-template projection and appends the missing
-/// columns as tabs.
-fn container_format(instance: &ContainerInstance) -> &'static str {
-    match instance.engine {
-        crate::ContainerEngine::Podman => {
-            "--format '{{json .}}\\t{{.Status}}\\t{{.Ports}}\\t{{.RunningFor}}'"
-        }
-        _ => "--format json",
-    }
-}
-
-fn image_format(instance: &ContainerInstance) -> &'static str {
-    match instance.engine {
-        crate::ContainerEngine::Podman => "--format '{{json .}}'",
-        _ => "--format json",
-    }
-}
-
-fn pod_format() -> &'static str {
-    "--format '{{json .}}\\t{{.Created}}'"
-}
+/// Records stay one-per-line on every engine: Docker/`wslc` use `--format
+/// json`, Podman uses a compact Go template. Arrays are also accepted by the
+/// reader, but they are never the projection here because their pretty-printed
+/// lines cannot be capped without cutting a record.
 
 fn posix_snapshot(instance: &ContainerInstance) -> String {
     let program = instance.engine.program();
@@ -48,15 +30,18 @@ fn posix_snapshot(instance: &ContainerInstance) -> String {
     let pods = instance.engine.supports_pods();
     let mut script = String::new();
     script.push_str("echo '===CONTAINER==='; ");
+    // Podman's template form prints one compact object per line (status, ports
+    // and age projected alongside), so line caps keep whole records. Docker and
+    // `wslc` do the same through `--format json`.
     script.push_str(&format!(
         "if command -v {program} >/dev/null 2>&1; then \
-         oxide_ctr=$({prefix} ps -a --no-trunc {} 2>&1); oxide_ctr_rc=$?; \
+         oxide_ctr=$({prefix} ps -a --no-trunc {} 2>/dev/null); oxide_ctr_rc=$?; \
          if [ \"$oxide_ctr_rc\" -eq 0 ]; then \
          printf '%s\\n' \"$oxide_ctr\" | head -n 500 | awk '{{print \"CTR\\t\" $0}}'; \
          {prefix} images {} 2>/dev/null | head -n 300 | awk '{{print \"IMG\\t\" $0}}'; \
          {prefix} volume ls {} 2>/dev/null | head -n 300 | awk '{{print \"VOL\\t\" $0}}'; \
          {prefix} network ls {} 2>/dev/null | head -n 300 | awk '{{print \"NET\\t\" $0}}'; ",
-        container_format(instance),
+        row_format(instance),
         image_format(instance),
         image_format(instance),
         image_format(instance),
@@ -91,7 +76,7 @@ fn windows_snapshot(instance: &ContainerInstance) -> String {
          @(& {prefix} images {} 2>$null) | Select-Object -First 300 | ForEach-Object {{ Write-Output ('IMG'+[char]9+$_) }}; \
          @(& {prefix} volume ls {} 2>$null) | Select-Object -First 300 | ForEach-Object {{ Write-Output ('VOL'+[char]9+$_) }}; \
          @(& {prefix} network ls {} 2>$null) | Select-Object -First 300 | ForEach-Object {{ Write-Output ('NET'+[char]9+$_) }}; ",
-        container_format(instance),
+        row_format(instance),
         image_format(instance),
         image_format(instance),
         image_format(instance),
@@ -112,6 +97,28 @@ fn windows_snapshot(instance: &ContainerInstance) -> String {
     script
 }
 
+/// Podman projects empty `Status`/`Ports` through `{{json .}}`, so the extra
+/// columns supply them; Docker and `wslc` already carry them in JSON.
+fn row_format(instance: &ContainerInstance) -> &'static str {
+    match instance.engine {
+        ContainerEngine::Podman => {
+            "--format '{{json .}}\\t{{.Status}}\\t{{.Ports}}\\t{{.RunningFor}}'"
+        }
+        _ => "--format json",
+    }
+}
+
+fn image_format(instance: &ContainerInstance) -> &'static str {
+    match instance.engine {
+        ContainerEngine::Podman => "--format '{{json .}}'",
+        _ => "--format json",
+    }
+}
+
+fn pod_format() -> &'static str {
+    "--format '{{json .}}\\t{{.Created}}'"
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -124,13 +131,15 @@ mod tests {
 
     #[test]
     fn docker_snapshot_uses_the_json_projection_and_socket_endpoint() {
-        let podman_like = instance(
-            ContainerEngine::Docker,
-            ContainerTransport::Socket {
-                endpoint: "unix:///var/run/docker.sock".into(),
-            },
+        let script = snapshot_command(
+            "Linux",
+            &instance(
+                ContainerEngine::Docker,
+                ContainerTransport::Socket {
+                    endpoint: "unix:///var/run/docker.sock".into(),
+                },
+            ),
         );
-        let script = snapshot_command("Linux", &podman_like);
         assert!(
             script
                 .contains("docker -H 'unix:///var/run/docker.sock' ps -a --no-trunc --format json")
@@ -144,7 +153,7 @@ mod tests {
     }
 
     #[test]
-    fn podman_snapshot_appends_status_ports_and_includes_pods() {
+    fn podman_snapshot_uses_compact_rows_and_pods() {
         let script = snapshot_command(
             "Linux",
             &instance(
@@ -157,9 +166,7 @@ mod tests {
         assert!(script.contains(
             "podman --url 'unix:///run/user/1000/podman/podman.sock' ps -a --no-trunc --format '{{json .}}\\t{{.Status}}\\t{{.Ports}}\\t{{.RunningFor}}'"
         ));
-        assert!(script.contains("pod pod ps --format") || script.contains("pod ps --format"));
-        assert!(script.contains("{{json .}}\\t{{.Created}}"));
-        assert!(script.contains("awk '{print \"POD\\t\" $0}'"));
+        assert!(script.contains("pod ps --format '{{json .}}\\t{{.Created}}'"));
     }
 
     #[test]

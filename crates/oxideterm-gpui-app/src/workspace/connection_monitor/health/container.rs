@@ -15,7 +15,7 @@ use oxideterm_gpui_ui::button::{ButtonVariant, IconButtonOptions};
 const HOST_CONTAINER_ACTION_TIMEOUT: Duration = Duration::from_secs(20);
 const HOST_CONTAINER_ACTION_MAX_OUTPUT: usize = 4096;
 const HOST_CONTAINER_CAPTURE_TIMEOUT: Duration = Duration::from_secs(30);
-const HOST_CONTAINER_CAPTURE_MAX_OUTPUT: usize = 256 * 1024;
+const HOST_CONTAINER_CAPTURE_MAX_OUTPUT: usize = 2 * 1024 * 1024;
 
 /// Clamped resize for the capture dialog's corner handle.
 pub(super) fn resized_container_text_dialog_size(
@@ -3044,7 +3044,8 @@ impl HostToolsEntity {
                     Ok(mut output) if output.exit_code.unwrap_or(0) == 0 => {
                         let text = std::mem::take(&mut output.stdout);
                         zeroize::Zeroize::zeroize(&mut output.stderr);
-                        oxideterm_container::parse_snapshot(&text)
+                        let parsed = oxideterm_container::parse_snapshot(&text);
+                        parsed
                     }
                     Ok(mut output) => {
                         let hint = first_stderr_line(&output.stderr)

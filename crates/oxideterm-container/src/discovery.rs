@@ -56,18 +56,18 @@ fn posix_discovery() -> String {
          oxide_ep=''; oxide_kind=''; oxide_v=''; \
          for oxide_candidate in \"unix:///var/run/docker.sock\" \"${DOCKER_HOST}\" \"unix://${HOME}/.docker/run/docker.sock\" \"unix:///run/user/$(id -u)/docker.sock\" \"tcp://127.0.0.1:2375\"; do \
          case \"$oxide_candidate\" in unix://*|npipe://*) oxide_kind=SOCKET ;; tcp://*) oxide_kind=TCP ;; *) continue ;; esac; \
-         oxide_v=$($oxide_to docker -H \"$oxide_candidate\" version --format '{{.Server.Version}}' 2>/dev/null | head -n 1); \
-         if [ -n \"$oxide_v\" ]; then oxide_ep=\"$oxide_candidate\"; break; fi; \
+         oxide_v=$($oxide_to docker -H \"$oxide_candidate\" version --format '{{.Server.Version}}' 2>/dev/null); oxide_rc=$?; \
+         if [ \"$oxide_rc\" -eq 0 ] && [ -n \"$oxide_v\" ]; then oxide_ep=\"$oxide_candidate\"; break; fi; \
          done; \
          if [ -z \"$oxide_ep\" ]; then \
-         oxide_v=$($oxide_to docker -H 'tcp://127.0.0.1:2376' --tlsverify version --format '{{.Server.Version}}' 2>/dev/null | head -n 1); \
-         if [ -n \"$oxide_v\" ]; then oxide_ep='tcp://127.0.0.1:2376'; oxide_kind=TCP; fi; \
+         oxide_v=$($oxide_to docker -H 'tcp://127.0.0.1:2376' --tlsverify version --format '{{.Server.Version}}' 2>/dev/null); oxide_rc=$?; \
+         if [ \"$oxide_rc\" -eq 0 ] && [ -n \"$oxide_v\" ]; then oxide_ep='tcp://127.0.0.1:2376'; oxide_kind=TCP; fi; \
          fi; \
          if [ -n \"$oxide_ep\" ]; then \
          printf 'INST\\tDOCKER\\t%s\\t%s\\t%s\\n' \"$oxide_kind\" \"$oxide_ep\" \"$oxide_v\"; \
          else \
-         oxide_v=$($oxide_to docker version --format '{{.Server.Version}}' 2>/dev/null | head -n 1); \
-         if [ -n \"$oxide_v\" ]; then \
+         oxide_v=$($oxide_to docker version --format '{{.Server.Version}}' 2>/dev/null); oxide_rc=$?; \
+         if [ \"$oxide_rc\" -eq 0 ] && [ -n \"$oxide_v\" ]; then \
          printf 'INST\\tDOCKER\\tCLI\\t\\t%s\\n' \"$oxide_v\"; \
          else \
          printf 'UNAVAILABLE\\tDOCKER\\t%s\\n' \"$(docker version 2>&1 >/dev/null | head -n 1 | tr '\\t' ' ')\"; \
@@ -82,14 +82,14 @@ fn posix_discovery() -> String {
          oxide_ep=''; oxide_kind=''; oxide_v=''; \
          for oxide_candidate in \"unix:///run/podman/podman.sock\" \"unix:///run/user/$(id -u)/podman/podman.sock\" \"unix://${XDG_RUNTIME_DIR}/podman/podman.sock\" \"tcp://127.0.0.1:2375\"; do \
          case \"$oxide_candidate\" in unix://*) oxide_kind=SOCKET ;; tcp://*) oxide_kind=TCP ;; *) continue ;; esac; \
-         oxide_v=$($oxide_to podman --url \"$oxide_candidate\" version --format '{{.Server.Version}}' 2>/dev/null | head -n 1); \
-         if [ -n \"$oxide_v\" ]; then oxide_ep=\"$oxide_candidate\"; break; fi; \
+         oxide_v=$($oxide_to podman --url \"$oxide_candidate\" info --format '{{.Version.Version}}' 2>/dev/null); oxide_rc=$?; \
+         if [ \"$oxide_rc\" -eq 0 ] && [ -n \"$oxide_v\" ]; then oxide_ep=\"$oxide_candidate\"; break; fi; \
          done; \
          if [ -n \"$oxide_ep\" ]; then \
          printf 'INST\\tPODMAN\\t%s\\t%s\\t%s\\n' \"$oxide_kind\" \"$oxide_ep\" \"$oxide_v\"; \
          else \
-         oxide_v=$($oxide_to podman version --format '{{.Server.Version}}' 2>/dev/null | head -n 1); \
-         if [ -n \"$oxide_v\" ]; then \
+         oxide_v=$($oxide_to podman version --format '{{.Server.Version}}' 2>/dev/null); oxide_rc=$?; \
+         if [ \"$oxide_rc\" -eq 0 ] && [ -n \"$oxide_v\" ]; then \
          printf 'INST\\tPODMAN\\tCLI\\t\\t%s\\n' \"$oxide_v\"; \
          else \
          printf 'UNAVAILABLE\\tPODMAN\\t%s\\n' \"$(podman version 2>&1 >/dev/null | head -n 1 | tr '\\t' ' ')\"; \

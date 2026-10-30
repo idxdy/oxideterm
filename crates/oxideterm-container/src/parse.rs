@@ -21,14 +21,36 @@ const ROW_PREFIX_POD: &str = "POD";
 const MARKER_UNAVAILABLE: &str = "UNAVAILABLE";
 const MARKER_ERROR: &str = "ERR";
 
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum RowKind {
+    Container,
+    Image,
+    Volume,
+    Network,
+    Pod,
+}
+
+impl RowKind {
+    fn from_prefix(prefix: &str) -> Option<Self> {
+        match prefix {
+            ROW_PREFIX_CONTAINER => Some(Self::Container),
+            ROW_PREFIX_IMAGE => Some(Self::Image),
+            ROW_PREFIX_VOLUME => Some(Self::Volume),
+            ROW_PREFIX_NETWORK => Some(Self::Network),
+            ROW_PREFIX_POD => Some(Self::Pod),
+            _ => None,
+        }
+    }
+}
+
 pub fn parse_snapshot(output: &str) -> ContainerSnapshot {
     let Some(section) = extract_section(output, "CONTAINER") else {
         return ContainerSnapshot::default();
     };
 
     let mut snapshot = ContainerSnapshot::default();
-    let mut container_rows = 0usize;
-    let mut parsed_containers = 0usize;
+    let mut buckets: std::collections::BTreeMap<RowKind, Vec<&str>> =
+        std::collections::BTreeMap::new();
 
     for line in section
         .lines()
@@ -61,38 +83,44 @@ pub fn parse_snapshot(output: &str) -> ContainerSnapshot {
         let Some((prefix, payload)) = split_row(line) else {
             continue;
         };
-        let (json, extra) = split_json_prefix(payload)
-            .map(|(json, rest)| (json, rest.trim_start_matches('\t')))
-            .unwrap_or((payload, ""));
-        match prefix {
-            ROW_PREFIX_CONTAINER => {
-                container_rows += 1;
-                if let Some(container) = parse_container(json, extra) {
-                    parsed_containers += 1;
-                    snapshot.containers.push(container);
+        if let Some(kind) = RowKind::from_prefix(prefix) {
+            buckets.entry(kind).or_default().push(payload);
+        }
+    }
+
+    let mut container_rows = 0usize;
+    let mut parsed_containers = 0usize;
+    for (kind, payloads) in buckets {
+        for (json, extra) in record_payloads(&payloads) {
+            match kind {
+                RowKind::Container => {
+                    container_rows += 1;
+                    if let Some(container) = parse_container(&json, &extra) {
+                        parsed_containers += 1;
+                        snapshot.containers.push(container);
+                    }
+                }
+                RowKind::Image => {
+                    if let Some(image) = parse_image(&json) {
+                        snapshot.images.push(image);
+                    }
+                }
+                RowKind::Volume => {
+                    if let Some(volume) = parse_volume(&json) {
+                        snapshot.volumes.push(volume);
+                    }
+                }
+                RowKind::Network => {
+                    if let Some(network) = parse_network(&json) {
+                        snapshot.networks.push(network);
+                    }
+                }
+                RowKind::Pod => {
+                    if let Some(pod) = parse_pod(&json, &extra) {
+                        snapshot.pods.push(pod);
+                    }
                 }
             }
-            ROW_PREFIX_IMAGE => {
-                if let Some(image) = parse_image(json) {
-                    snapshot.images.push(image);
-                }
-            }
-            ROW_PREFIX_VOLUME => {
-                if let Some(volume) = parse_volume(json) {
-                    snapshot.volumes.push(volume);
-                }
-            }
-            ROW_PREFIX_NETWORK => {
-                if let Some(network) = parse_network(json) {
-                    snapshot.networks.push(network);
-                }
-            }
-            ROW_PREFIX_POD => {
-                if let Some(pod) = parse_pod(json, extra) {
-                    snapshot.pods.push(pod);
-                }
-            }
-            _ => {}
         }
     }
 
@@ -106,6 +134,45 @@ pub fn parse_snapshot(output: &str) -> ContainerSnapshot {
         ContainerStatus::Available
     };
     snapshot
+}
+
+/// Parses one section's payload lines.
+///
+/// Docker and `wslc` print one JSON object per line (plus optional tab columns
+/// for appended fields); Podman prints a single JSON array. Engine warnings
+/// share the stream, so anything that is not part of the JSON payload is
+/// dropped instead of being counted as a broken row.
+fn record_payloads(payloads: &[&str]) -> Vec<(String, String)> {
+    // Array mode only when the section itself starts with `[`; a JSON object
+    // legitimately contains arrays (Names, Labels, subnets), and treating
+    // those as the section payload would silently drop every row.
+    let array_start = payloads
+        .iter()
+        .position(|payload| payload.trim_start().starts_with('['));
+    let joined = array_start
+        .map(|start| payloads[start..].join("\n"))
+        .unwrap_or_default();
+    if let (Some(start), Some(end)) = (joined.find('['), joined.rfind(']'))
+        && start < end
+    {
+        if let Ok(serde_json::Value::Array(entries)) =
+            serde_json::from_str::<serde_json::Value>(&joined[start..=end])
+        {
+            return entries
+                .into_iter()
+                .filter(|entry| entry.is_object())
+                .filter_map(|entry| serde_json::to_string(&entry).ok())
+                .map(|json| (json, String::new()))
+                .collect();
+        }
+    }
+    payloads
+        .iter()
+        .filter_map(|payload| {
+            let (json, rest) = split_json_prefix(payload)?;
+            Some((json.to_string(), rest.trim_start_matches('\t').to_string()))
+        })
+        .collect()
 }
 
 fn error_snapshot(message: &str) -> ContainerSnapshot {
@@ -379,7 +446,13 @@ fn extract_section<'a>(output: &'a str, name: &str) -> Option<&'a str> {
     let start = format!("==={name}===");
     let end = format!("==={name}_END===");
     let after_start = output.split_once(&start)?.1;
-    Some(after_start.split_once(&end)?.0.trim())
+    // A capture capped mid-stream loses the end marker; the rows that did
+    // arrive are still valid, so parse up to the truncation instead of
+    // discarding the whole inventory.
+    Some(match after_start.split_once(&end) {
+        Some((section, _)) => section.trim(),
+        None => after_start.trim(),
+    })
 }
 
 #[cfg(test)]
@@ -470,7 +543,13 @@ mod tests {
                 message: "Cannot connect to the Docker daemon".to_string()
             }
         );
-        let unparseable = parse_snapshot("===CONTAINER===\nCTR\tnot json\n===CONTAINER_END===");
+        // Engine warnings and other noise are ignored; a JSON-shaped row that
+        // still cannot be parsed is reported instead of silently dropped.
+        let noise = parse_snapshot(
+            "===CONTAINER===\nCTR\ttime=\"...\" level=warning msg=\"rootless\"\n===CONTAINER_END===",
+        );
+        assert_eq!(noise.status, ContainerStatus::Available);
+        let unparseable = parse_snapshot("===CONTAINER===\nCTR\t{\"State\":}\n===CONTAINER_END===");
         assert!(matches!(unparseable.status, ContainerStatus::Error { .. }));
     }
 
