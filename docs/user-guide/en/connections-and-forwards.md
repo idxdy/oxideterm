@@ -97,7 +97,7 @@ For unstable hosts, keep Connection Monitor open while testing. It shows whether
 
 ## Host Tools
 
-Host Tools are node-level views for inspecting the remote environment. Use them for processes, Docker, services, tmux, packages, logs, ports, filesystems, scheduled tasks, and metrics.
+Host Tools are node-level views for inspecting the remote environment. Use them for processes, Docker, services, tmux, eCapture, packages, logs, ports, filesystems, scheduled tasks, and metrics.
 
 Resource snapshots can become stale independently of the terminal tab. Refresh the Host Tools page or reconnect the owning node before retrying actions. Host Tools actions should remain explicit and reviewable; do not use them as hidden background cleanup.
 

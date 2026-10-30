@@ -73,6 +73,7 @@ pub(super) enum ContextSidebarTool {
     Processes,
     Services,
     Logs,
+    Ecapture,
     Tmux,
     Docker,
     Ports,

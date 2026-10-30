@@ -71,6 +71,7 @@
       "processes": "进程",
       "services": "服务",
       "logs": "日志",
+      "ecapture": "eCapture",
       "tmux": "tmux",
       "docker": "Docker",
       "tmux_management": "tmux 管理",
@@ -360,6 +361,109 @@
         "follow_opened": "正在追踪 {{preset}} 日志。",
         "partial_support": "{{os}} 上的主机日志为部分支持。",
         "unknown_error": "未知错误"
+      }
+    },
+    "host_ecapture": {
+      "search_placeholder": "搜索事件...",
+      "events": "事件",
+      "dropped": "已丢弃",
+      "skipped": "已跳过",
+      "unavailable": "此主机上无法使用 eCapture。",
+      "unavailable_hint": "请安装 eCapture 并允许免密 sudo 以捕获 TLS 明文。",
+      "waiting": "等待 TLS 流量...",
+      "empty": "没有匹配的捕获事件",
+      "empty_idle": "选择模板并开始捕获。",
+      "truncated": "已截断",
+      "status": {
+        "checking": "正在检查主机...",
+        "running": "运行中",
+        "stopped": "已停止",
+        "probe_failed": "检查失败"
+      },
+      "capability": {
+        "full": "就绪",
+        "partial": "需要 root",
+        "unknown": "未知"
+      },
+      "templates": {
+        "libssl": "libssl",
+        "node": "Node.js",
+        "gotls": "Go",
+        "docker": "Docker"
+      },
+      "fields": {
+        "libssl_path": "libssl 路径",
+        "libssl_placeholder": "自动检测（可选）",
+        "node_path": "Node 程序或 libssl",
+        "node_placeholder": "/usr/local/bin/node",
+        "go_binary": "Go 程序",
+        "go_placeholder": "/opt/app/server",
+        "container": "容器",
+        "container_placeholder": "api-gateway",
+        "pid": "PID 过滤",
+        "pid_placeholder": "所有进程"
+      },
+      "actions": {
+        "start": "开始",
+        "stop": "停止",
+        "clear": "清除",
+        "refresh": "刷新 eCapture"
+      },
+      "filters": {
+        "all": "全部",
+        "requests": "请求",
+        "responses": "响应"
+      },
+      "direction": {
+        "read": "接收",
+        "write": "发送",
+        "unknown": "数据"
+      },
+      "kinds": {
+        "data": "数据",
+        "request": "请求",
+        "response": "响应"
+      },
+      "columns": {
+        "direction": "方向",
+        "event": "事件",
+        "pid": "PID",
+        "length": "长度",
+        "time": "时间",
+        "connection": "连接",
+        "fd": "FD"
+      },
+      "validation": {
+        "target_required": "请输入此模板的目标。",
+        "target_too_long": "目标路径过长。",
+        "target_invalid": "目标包含不支持的字符。",
+        "pid_invalid": "PID 必须是数字。",
+        "privilege_required": "eCapture 需要主机上的 root 或免密 sudo。",
+        "binary_missing": "请先在主机上安装 eCapture 再开始捕获。",
+        "probe_pending": "请等待主机检查完成。"
+      },
+      "confirm": {
+        "start_title": "启动 eCapture",
+        "start_desc": "eCapture 会在 TLS 库上挂载 eBPF 探针并读取明文流量。它以 root 运行，并将捕获数据写入主机上的临时文件。",
+        "start_action": "开始捕获",
+        "clear_title": "清除捕获数据",
+        "clear_desc": "删除此主机上保存的捕获事件？需要先停止捕获。",
+        "clear_action": "删除数据",
+        "cancel": "取消"
+      },
+      "toast": {
+        "busy": "已有 eCapture 任务在运行。",
+        "connection_missing": "所选连接已不可用。",
+        "probe_failed": "无法检查此主机上的 eCapture。",
+        "snapshot_failed": "无法读取 eCapture 事件。",
+        "started": "eCapture 捕获已开始。",
+        "start_failed": "eCapture 启动失败。",
+        "stopped": "eCapture 捕获已停止。",
+        "stop_failed": "eCapture 未能停止。",
+        "cleared": "已删除捕获事件。",
+        "clear_failed": "删除捕获事件失败。",
+        "stream_limit": "达到 64 MiB 上限，捕获已停止。",
+        "unknown_error": "未知的 eCapture 错误"
       }
     },
     "host_tmux": {

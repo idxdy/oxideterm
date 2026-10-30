@@ -193,6 +193,20 @@ pub(in crate::workspace) enum HostToolsNotice {
         task_name: String,
         succeeded: bool,
     },
+    EcaptureBusy,
+    EcaptureConnectionMissing,
+    EcaptureUnavailable,
+    EcaptureProbeFailed,
+    EcaptureSnapshotFailed,
+    EcaptureStarted,
+    EcaptureStartFailed,
+    EcaptureStopped {
+        succeeded: bool,
+    },
+    EcaptureCleared {
+        succeeded: bool,
+    },
+    EcaptureStreamLimit,
 }
 
 impl EventEmitter<HostToolsEvent> for HostToolsEntity {}

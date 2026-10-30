@@ -251,7 +251,7 @@ Examples:
 - Open an SSH node.
 - Start SFTP.
 - Create a forward.
-- Inspect host tools such as processes, Docker, services, tmux, packages, logs, ports, and filesystems.
+- Inspect host tools such as processes, Docker, services, tmux, eCapture, packages, logs, ports, and filesystems.
 - Open an IDE workspace.
 - Open a graphics/VNC session.
 - Confirm a terminal file-transfer prompt.
@@ -678,6 +678,7 @@ Host Tools cover:
 - Docker containers and logs.
 - Services.
 - tmux sessions, windows, and panes.
+- eCapture TLS plaintext captures on Linux hosts, driven over the existing SSH exec channel without extra ports or forwarding.
 - Package inventory.
 - System logs.
 - Listening ports and exposure hints.
@@ -1191,6 +1192,7 @@ flowchart TB
 | `process.rs` | Filter, sort, display, and build actions for processes | Process actions are explicit host-tool commands, not terminal keystrokes |
 | `docker.rs`, `service.rs`, `tmux.rs` | Model host managers and their actions | Manager-specific parsing stays in the monitor domain |
 | `package.rs`, `log.rs`, `port.rs`, `filesystem.rs`, `scheduled_task.rs` | Sample package inventory, logs, ports, filesystems, and scheduled tasks | Resource tools can fail independently without changing SSH node ownership |
+| `oxideterm-ecapture/src/*` | Build detached eCapture start/poll/stop scripts and parse the captured TLS event stream | Captures stay host-owned files polled over the SSH exec channel; no listener or forward is added |
 
 ### SFTP Domain Modules
 

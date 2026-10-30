@@ -71,6 +71,7 @@
       "processes": "Tiến trình",
       "services": "Dịch vụ",
       "logs": "Nhật ký",
+      "ecapture": "eCapture",
       "tmux": "tmux",
       "docker": "Docker",
       "tmux_management": "Quản lý tmux",
@@ -360,6 +361,109 @@
         "follow_opened": "Đang theo dõi nhật ký {{preset}}.",
         "partial_support": "Nhật ký máy chủ chỉ được hỗ trợ một phần trên {{os}}.",
         "unknown_error": "Lỗi không rõ"
+      }
+    },
+    "host_ecapture": {
+      "search_placeholder": "Tìm sự kiện...",
+      "events": "sự kiện",
+      "dropped": "bị bỏ",
+      "skipped": "bị nhảy",
+      "unavailable": "eCapture không khả dụng trên máy chủ này.",
+      "unavailable_hint": "Cài eCapture và cho phép sudo không mật khẩu để bắt văn bản TLS.",
+      "waiting": "Đang chờ lưu lượng TLS...",
+      "empty": "Không có sự kiện đã bắt phù hợp",
+      "empty_idle": "Chọn mẫu và bắt đầu bắt gói.",
+      "truncated": "bị cắt",
+      "status": {
+        "checking": "Đang kiểm tra máy chủ...",
+        "running": "Đang chạy",
+        "stopped": "Đã dừng",
+        "probe_failed": "Kiểm tra thất bại"
+      },
+      "capability": {
+        "full": "Sẵn sàng",
+        "partial": "Cần root",
+        "unknown": "Không rõ"
+      },
+      "templates": {
+        "libssl": "libssl",
+        "node": "Node.js",
+        "gotls": "Go",
+        "docker": "Docker"
+      },
+      "fields": {
+        "libssl_path": "Đường dẫn libssl",
+        "libssl_placeholder": "Tự phát hiện (tùy chọn)",
+        "node_path": "Tệp Node hoặc libssl",
+        "node_placeholder": "/usr/local/bin/node",
+        "go_binary": "Tệp Go",
+        "go_placeholder": "/opt/app/server",
+        "container": "Container",
+        "container_placeholder": "api-gateway",
+        "pid": "Lọc PID",
+        "pid_placeholder": "Tất cả tiến trình"
+      },
+      "actions": {
+        "start": "Bắt đầu",
+        "stop": "Dừng",
+        "clear": "Xóa",
+        "refresh": "Làm mới eCapture"
+      },
+      "filters": {
+        "all": "Tất cả",
+        "requests": "Yêu cầu",
+        "responses": "Phản hồi"
+      },
+      "direction": {
+        "read": "nhận",
+        "write": "gửi",
+        "unknown": "dữ liệu"
+      },
+      "kinds": {
+        "data": "Dữ liệu",
+        "request": "Yêu cầu",
+        "response": "Phản hồi"
+      },
+      "columns": {
+        "direction": "Hướng",
+        "event": "Sự kiện",
+        "pid": "PID",
+        "length": "Độ dài",
+        "time": "Thời gian",
+        "connection": "Kết nối",
+        "fd": "FD"
+      },
+      "validation": {
+        "target_required": "Nhập đối tượng cho mẫu này.",
+        "target_too_long": "Đường dẫn đối tượng quá dài.",
+        "target_invalid": "Đối tượng chứa ký tự không được hỗ trợ.",
+        "pid_invalid": "PID phải là số.",
+        "privilege_required": "eCapture cần root hoặc sudo không mật khẩu trên máy chủ.",
+        "binary_missing": "Cài eCapture trên máy chủ trước khi bắt đầu.",
+        "probe_pending": "Chờ kiểm tra máy chủ hoàn tất."
+      },
+      "confirm": {
+        "start_title": "Bắt đầu eCapture",
+        "start_desc": "eCapture gắn đầu dò eBPF vào thư viện TLS và đọc lưu lượng văn bản thuần. Nó chạy bằng root và ghi dữ liệu đã bắt vào tệp tạm trên máy chủ.",
+        "start_action": "Bắt đầu bắt gói",
+        "clear_title": "Xóa dữ liệu đã bắt",
+        "clear_desc": "Xóa các sự kiện đã lưu trên máy chủ này? Phải dừng bắt gói trước.",
+        "clear_action": "Xóa dữ liệu",
+        "cancel": "Hủy"
+      },
+      "toast": {
+        "busy": "Đã có tác vụ eCapture đang chạy.",
+        "connection_missing": "Kết nối đã chọn không còn khả dụng.",
+        "probe_failed": "Không thể kiểm tra eCapture trên máy chủ này.",
+        "snapshot_failed": "Không thể đọc sự kiện eCapture.",
+        "started": "Đã bắt đầu bắt gói eCapture.",
+        "start_failed": "eCapture không khởi động được.",
+        "stopped": "Đã dừng bắt gói eCapture.",
+        "stop_failed": "eCapture không dừng.",
+        "cleared": "Đã xóa sự kiện đã bắt.",
+        "clear_failed": "Không thể xóa sự kiện đã bắt.",
+        "stream_limit": "Đã dừng bắt gói khi đạt giới hạn 64 MiB.",
+        "unknown_error": "Lỗi eCapture không rõ"
       }
     },
     "host_tmux": {

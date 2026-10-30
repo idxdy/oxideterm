@@ -251,7 +251,7 @@ flowchart LR
 - 打开 SSH 节点。
 - 启动 SFTP。
 - 创建转发。
-- 检查进程、Docker、服务、tmux、软件包、日志、端口和文件系统等主机工具。
+- 检查进程、Docker、服务、tmux、eCapture、软件包、日志、端口和文件系统等主机工具。
 - 打开 IDE 工作区。
 - 打开图形/VNC 会话。
 - 确认终端文件传输提示。
@@ -672,6 +672,7 @@ AI 和插件通过能力句柄、宿主快照或终端钩子使用能力。它�
 - Docker 容器和日志。
 - 服务。
 - tmux 会话、窗口和面板。
+- Linux 主机上的 eCapture TLS 明文捕获，通过现有 SSH 执行通道驱动，不额外开放端口或转发。
 - 软件包清单。
 - 系统日志。
 - 监听端口和暴露风险提示。
@@ -1176,6 +1177,7 @@ flowchart TB
 | `process.rs` | 过滤、排序、展示进程，并构建进程动作 | 进程动作是明确主机工具命令，不是终端按键 |
 | `docker.rs`, `service.rs`, `tmux.rs` | 建模主机管理器及其动作 | 管理器专属解析留在监控领域 |
 | `package.rs`, `log.rs`, `port.rs`, `filesystem.rs`, `scheduled_task.rs` | 采样软件包清单、日志、端口、文件系统和计划任务 | 资源工具可以独立失败，但不改变 SSH 节点归属 |
+| `oxideterm-ecapture/src/*` | 构建分离运行的 eCapture 启动、轮询和停止脚本，并解析捕获的 TLS 事件流 | 捕获文件归远端主机所有，仅通过 SSH 执行通道轮询，不新增监听或转发 |
 
 ### SFTP 领域模块
 
