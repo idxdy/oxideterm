@@ -435,7 +435,8 @@
         "volumes": "Volume",
         "networks": "Mạng",
         "pods": "Pod",
-        "stats": "Tài nguyên"
+        "stats": "Tài nguyên",
+        "registries": "Registry"
       },
       "search_placeholder": "Tìm kiếm",
       "loading": "Đang tải…",
@@ -447,7 +448,8 @@
         "images": "ảnh",
         "volumes": "volume",
         "networks": "mạng",
-        "pods": "pod"
+        "pods": "pod",
+        "registries": "registry"
       },
       "empty": {
         "containers": "Không có vùng chứa",
@@ -456,7 +458,8 @@
         "networks": "Không có mạng",
         "pods": "Không có pod",
         "no_engine": "Không phát hiện công cụ vùng chứa",
-        "stats": "Không có vùng chứa nào đang chạy."
+        "stats": "Không có vùng chứa nào đang chạy.",
+        "registries": "Không có registry nào đã xác thực"
       },
       "states": {
         "running": "Đang chạy",
@@ -581,6 +584,10 @@
         "search_placeholder": "từ khóa",
         "login_title": "Đăng nhập registry",
         "login_placeholder": "registry"
+      },
+      "sources": {
+        "docker": "Docker",
+        "podman": "Podman"
       }
     },
     "host_redis": {

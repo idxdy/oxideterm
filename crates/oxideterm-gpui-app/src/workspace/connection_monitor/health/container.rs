@@ -817,9 +817,9 @@ impl HostToolsEntity {
                         .cloned()
                         .map(ContainerRow::Pod),
                 ),
-                // Stats are captured on demand and rendered from their own
-                // snapshot, not from the inventory list.
-                HostContainerTab::Stats => {}
+                // Stats and registries are captured on demand and rendered
+                // from their own snapshots, not from the inventory list.
+                HostContainerTab::Stats | HostContainerTab::Registries => {}
             }
         }
         Some(HostContainerPanelSnapshot {
@@ -1142,6 +1142,16 @@ impl HostToolsEntity {
             tabs.push((HostContainerTab::Pods, "sidebar.host_container.tabs.pods"));
         }
         tabs.push((HostContainerTab::Stats, "sidebar.host_container.tabs.stats"));
+        if panel
+            .instance
+            .as_ref()
+            .is_some_and(|instance| instance.engine.supports_registry_auth())
+        {
+            tabs.push((
+                HostContainerTab::Registries,
+                "sidebar.host_container.tabs.registries",
+            ));
+        }
         let active_index = tabs
             .iter()
             .position(|(tab, _)| *tab == panel.tab)
@@ -1160,9 +1170,12 @@ impl HostToolsEntity {
                         .flex()
                         .items_center()
                         .justify_center()
-                        .child(i18n.t(*label_key))
+                        .child(div().min_w_0().truncate().child(i18n.t(*label_key)))
                         .into_any_element(),
                 )
+                // Seven possible tabs share one rail: trim the default item
+                // padding so every label keeps a readable slice.
+                .px(px(4.0))
                 .text_size(px(11.0))
                 .on_mouse_down(
                     MouseButton::Left,
@@ -1175,11 +1188,12 @@ impl HostToolsEntity {
                 .into_any_element()
             })
             .collect::<Vec<_>>();
+        // Fill shares the panel width; a fixed width clipped the trailing
+        // tabs (Pods/Stats/Registries) outside the visible panel.
         oxideterm_gpui_ui::segmented_control(
             tokens,
             "host-container-tab-switcher",
-            oxideterm_gpui_ui::SegmentedControlOptions::new(active_index, active_index, tabs.len())
-                .compact(320.0),
+            oxideterm_gpui_ui::SegmentedControlOptions::new(active_index, active_index, tabs.len()),
             items,
         )
         .into_any_element()
@@ -1236,6 +1250,15 @@ impl HostToolsEntity {
         if panel.tab == HostContainerTab::Stats {
             return self.render_container_stats(tokens, i18n, selectable_text, cx);
         }
+        if panel.tab == HostContainerTab::Registries {
+            return self.render_container_registries(
+                tokens,
+                i18n,
+                mono_font_family,
+                selectable_text,
+                cx,
+            );
+        }
         // A missing snapshot means detection/first capture has not resolved
         // yet; showing an empty inventory would wrongly imply the host is empty.
         if self.host_container.snapshot.is_none()
@@ -1280,6 +1303,89 @@ impl HostToolsEntity {
                 selectable_text,
                 cx,
             ))
+            .into_any_element()
+    }
+
+    fn render_container_registries(
+        &self,
+        tokens: &ThemeTokens,
+        i18n: &I18n,
+        mono_font_family: SharedString,
+        selectable_text: &SelectableTextRenderState,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let theme = tokens.ui;
+        if self.host_container.registries_running {
+            return host_tools_center_state(
+                LucideIcon::KeyRound,
+                theme.text_muted,
+                i18n.t("sidebar.host_container.loading"),
+                selectable_text,
+                cx,
+            );
+        }
+        let registries = self
+            .host_container
+            .registries
+            .as_deref()
+            .unwrap_or_default();
+        if registries.is_empty() {
+            return host_tools_center_state(
+                LucideIcon::KeyRound,
+                theme.text_muted,
+                i18n.t("sidebar.host_container.empty.registries"),
+                selectable_text,
+                cx,
+            );
+        }
+        let rows = registries
+            .iter()
+            .map(|registry| {
+                div()
+                    .w_full()
+                    .min_w_0()
+                    .px_3()
+                    .py_2()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .border_b_1()
+                    .border_color(rgba((theme.border << 8) | MONITOR_BORDER_ALPHA))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .font_family(mono_font_family.clone())
+                            .text_size(px(12.0))
+                            .text_color(rgb(theme.text))
+                            .child(registry.registry.clone()),
+                    )
+                    .child(
+                        div()
+                            .flex_none()
+                            .text_size(px(10.0))
+                            .text_color(rgb(theme.text_muted))
+                            .child(i18n.t(registry.source.label_key())),
+                    )
+            })
+            .collect::<Vec<_>>();
+        div()
+            .w_full()
+            .min_w_0()
+            .flex_1()
+            .min_h_0()
+            .flex()
+            .flex_col()
+            .overflow_hidden()
+            .child(
+                div()
+                    .id("host-container-registries-scroll")
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .children(rows),
+            )
             .into_any_element()
     }
 
@@ -1503,6 +1609,7 @@ impl HostToolsEntity {
             HostContainerTab::Networks => "sidebar.host_container.counts.networks",
             HostContainerTab::Pods => "sidebar.host_container.counts.pods",
             HostContainerTab::Stats => "sidebar.host_container.counts.containers",
+            HostContainerTab::Registries => "sidebar.host_container.counts.registries",
         };
         let mut actions: Vec<(LucideIcon, &'static str, &'static str, ContainerCountAction)> =
             Vec::new();
@@ -1601,7 +1708,7 @@ impl HostToolsEntity {
                 "host-container-create-pod",
                 ContainerCountAction::Input(HostContainerInputKind::CreatePod),
             )),
-            HostContainerTab::Stats => {}
+            HostContainerTab::Stats | HostContainerTab::Registries => {}
         }
         let prune_label = i18n.t(suffix_key);
         let buttons =
@@ -1683,6 +1790,7 @@ impl HostToolsEntity {
                 HostContainerTab::Networks => "sidebar.host_container.empty.networks",
                 HostContainerTab::Pods => "sidebar.host_container.empty.pods",
                 HostContainerTab::Stats => "sidebar.host_container.empty.stats",
+                HostContainerTab::Registries => "sidebar.host_container.empty.registries",
             };
             return host_tools_center_state(
                 LucideIcon::Layers,
@@ -1706,7 +1814,7 @@ impl HostToolsEntity {
         let instance = panel.instance.clone();
         let connection_id = Arc::new(panel.selected_connection_id.clone());
         let list_state = self.host_container.list_state.clone();
-        let list_spec = TauriVirtualListSpec::new(px(64.0), 6);
+        let list_spec = TauriVirtualListSpec::new(px(88.0), 6);
         let host_tools = cx.entity();
         let row_tokens = *tokens;
         let row_i18n = i18n.clone();
@@ -1762,18 +1870,18 @@ impl HostToolsEntity {
     ) {
         let theme = tokens.ui;
         let options = IconButtonOptions {
-            size: 22.0,
+            size: 20.0,
             has_background: true,
             background: Some(rgb(theme.bg_hover)),
             hover_background: Some(rgb(theme.bg_panel)),
             idle_opacity: if enabled { 1.0 } else { 0.35 },
             disabled: !enabled,
-            ..IconButtonOptions::compact(22.0)
+            ..IconButtonOptions::compact(20.0)
         };
         *row = std::mem::replace(row, div()).child(host_tools_tooltip_icon_button(
             tokens,
             icon,
-            12.0,
+            11.0,
             rgb(theme.text),
             options,
             tooltip,
@@ -1818,10 +1926,18 @@ impl HostToolsEntity {
                     return shell.into_any_element();
                 };
                 let availability = container_action_availability(&container.state);
+                let selected =
+                    self.host_container.selected_row.as_deref() == Some(container.id.as_str());
                 let id = container.id.clone();
                 let name = container.name.clone();
                 let connection_id_owned = connection_id.to_string();
-                let mut actions = div().flex_none().flex().items_center().gap(px(2.0));
+                let mut actions = div()
+                    .w_full()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .justify_end()
+                    .gap(px(1.0));
                 let inspect_title = format!(
                     "{} · {name}",
                     i18n.t("sidebar.host_container.actions.inspect")
@@ -2107,23 +2223,31 @@ impl HostToolsEntity {
                 } else {
                     container.status.clone()
                 };
+                // Info and actions are separate lines: a single row let the
+                // action strip squeeze the container name out of the panel.
                 shell
+                    .when(selected, |row| row.bg(rgb(theme.bg_hover)))
+                    .flex_col()
+                    .items_stretch()
+                    .gap(px(3.0))
                     .child(
                         div()
-                            .flex_none()
-                            .size(px(7.0))
-                            .rounded_full()
-                            .bg(rgb(container_state_color(tokens, &container.state))),
-                    )
-                    .child(
-                        div()
-                            .flex_1()
+                            .w_full()
                             .min_w_0()
                             .flex()
-                            .flex_col()
-                            .gap(px(1.0))
+                            .items_center()
+                            .gap_2()
                             .child(
                                 div()
+                                    .flex_none()
+                                    .size(px(7.0))
+                                    .rounded_full()
+                                    .bg(rgb(container_state_color(tokens, &container.state))),
+                            )
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
                                     .truncate()
                                     .text_size(px(12.0))
                                     .text_color(rgb(theme.text))
@@ -2131,34 +2255,55 @@ impl HostToolsEntity {
                             )
                             .child(
                                 div()
+                                    .flex_none()
+                                    .max_w(px(110.0))
                                     .truncate()
-                                    .font_family(mono_font_family)
                                     .text_size(px(10.0))
                                     .text_color(rgb(theme.text_muted))
-                                    .child(container.image.clone()),
+                                    .child(status),
                             ),
                     )
                     .child(
                         div()
-                            .flex_none()
-                            .w(px(92.0))
-                            .truncate()
-                            .text_size(px(10.0))
-                            .text_color(rgb(theme.text_muted))
-                            .child(status),
+                            .w_full()
+                            .min_w_0()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .truncate()
+                                    .font_family(mono_font_family.clone())
+                                    .text_size(px(10.0))
+                                    .text_color(rgb(theme.text_muted))
+                                    .child(container.image.clone()),
+                            )
+                            .child(
+                                div()
+                                    .flex_none()
+                                    .max_w(px(120.0))
+                                    .truncate()
+                                    .text_size(px(10.0))
+                                    .text_color(rgb(theme.text_muted))
+                                    .child(container.ports.clone().unwrap_or_default()),
+                            ),
                     )
-                    .child(
-                        div()
-                            .flex_none()
-                            .w(px(88.0))
-                            .truncate()
-                            .text_size(px(10.0))
-                            .text_color(rgb(theme.text_muted))
-                            .child(container.ports.clone().unwrap_or_default()),
+                    .when(selected, |row| row.child(actions))
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener({
+                            let row_id = container.id.clone();
+                            move |host_tools, _event, _window, cx| {
+                                host_tools.toggle_container_row_selection(row_id.clone(), cx);
+                                cx.stop_propagation();
+                            }
+                        }),
                     )
-                    .child(actions)
                     .into_any_element()
             }
+
             ContainerRow::Image(image) => {
                 let Some(instance) = instance else {
                     return shell.into_any_element();
@@ -2710,6 +2855,7 @@ impl HostToolsEntity {
     ) {
         if self.host_container.tab != tab {
             self.host_container.tab = tab;
+            self.host_container.selected_row = None;
             self.host_container.list_state = tauri_virtual_list_state(
                 0,
                 ListAlignment::Top,
@@ -2720,8 +2866,27 @@ impl HostToolsEntity {
             {
                 self.request_container_stats(connection_id, cx);
             }
+            if tab == HostContainerTab::Registries
+                && let Some(connection_id) = self.selected_connection_id_owned()
+            {
+                self.request_container_registries(connection_id, cx);
+            }
             cx.notify();
         }
+    }
+
+    pub(in crate::workspace::connection_monitor) fn toggle_container_row_selection(
+        &mut self,
+        row_id: String,
+        cx: &mut Context<Self>,
+    ) {
+        self.host_container.selected_row =
+            if self.host_container.selected_row.as_deref() == Some(row_id.as_str()) {
+                None
+            } else {
+                Some(row_id)
+            };
+        cx.notify();
     }
 
     pub(in crate::workspace::connection_monitor) fn select_container_instance(
@@ -3010,6 +3175,24 @@ impl HostToolsEntity {
                     self.host_container.snapshot = None;
                     self.host_container.snapshot_connection_id = None;
                 }
+                cx.notify();
+            }
+            HostContainerCaptureKind::Registries => {
+                self.host_container.registries_running = false;
+                let registries = match delivery.result {
+                    Ok(mut output) if output.exit_code.unwrap_or(0) == 0 => {
+                        let text = std::mem::take(&mut output.stdout);
+                        zeroize::Zeroize::zeroize(&mut output.stderr);
+                        oxideterm_container::parse_registries(&text)
+                    }
+                    Ok(mut output) => {
+                        zeroize::Zeroize::zeroize(&mut output.stdout);
+                        zeroize::Zeroize::zeroize(&mut output.stderr);
+                        Vec::new()
+                    }
+                    Err(_) => Vec::new(),
+                };
+                self.host_container.registries = Some(registries);
                 cx.notify();
             }
             HostContainerCaptureKind::Stats => {
@@ -3313,6 +3496,46 @@ impl HostToolsEntity {
             Err(_) => cx.emit(HostToolsEvent::ShowNotice(
                 HostToolsNotice::ContainerActionFailed,
             )),
+        }
+    }
+
+    pub(in crate::workspace::connection_monitor) fn request_container_registries(
+        &mut self,
+        connection_id: String,
+        cx: &mut Context<Self>,
+    ) {
+        if self.host_container.registries_running {
+            return;
+        }
+        let Some(runtime) = self.lifecycle_runtime.clone() else {
+            return;
+        };
+        let Some(os_type) = self.connection_os_type(&connection_id) else {
+            return;
+        };
+        let Some(instance) = self.selected_container_instance() else {
+            return;
+        };
+        let request = HostContainerCaptureRequest {
+            connection_id,
+            kind: HostContainerCaptureKind::Registries,
+            failure_fallback: self
+                .messages
+                .as_ref()
+                .map(|messages| messages.podman_capture_failed.clone())
+                .unwrap_or_else(|| "Container registry read failed.".to_string()),
+        };
+        let command = oxideterm_container::registries_command(&os_type, &instance);
+        if self.spawn_container_capture(
+            command,
+            request,
+            HOST_CONTAINER_CAPTURE_TIMEOUT,
+            128 * 1024,
+            runtime,
+        ) {
+            self.host_container.registries_running = true;
+            self.host_container.registries = None;
+            cx.notify();
         }
     }
 

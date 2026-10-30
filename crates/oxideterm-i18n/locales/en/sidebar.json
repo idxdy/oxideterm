@@ -435,7 +435,8 @@
         "volumes": "Volumes",
         "networks": "Networks",
         "pods": "Pods",
-        "stats": "Stats"
+        "stats": "Stats",
+        "registries": "Registries"
       },
       "search_placeholder": "Search",
       "loading": "Loading…",
@@ -447,7 +448,8 @@
         "images": "images",
         "volumes": "volumes",
         "networks": "networks",
-        "pods": "pods"
+        "pods": "pods",
+        "registries": "Registries"
       },
       "empty": {
         "containers": "No containers",
@@ -456,7 +458,8 @@
         "networks": "No networks",
         "pods": "No pods",
         "no_engine": "No container engine detected",
-        "stats": "No running containers."
+        "stats": "No running containers.",
+        "registries": "No authenticated registries"
       },
       "states": {
         "running": "Running",
@@ -581,6 +584,10 @@
         "search_placeholder": "term",
         "login_title": "Log in to registry",
         "login_placeholder": "registry"
+      },
+      "sources": {
+        "docker": "Docker",
+        "podman": "Podman"
       }
     },
     "host_redis": {

@@ -958,6 +958,7 @@ pub(super) enum HostContainerTab {
     Networks,
     Pods,
     Stats,
+    Registries,
 }
 
 pub(super) const HOST_CONTAINER_CAPTURE_DIALOG_DEFAULT_WIDTH: f32 = 760.0;
@@ -1028,6 +1029,8 @@ pub(in crate::workspace) enum HostContainerCaptureKind {
     Snapshot(oxideterm_container::ContainerInstance),
     /// One-shot container resource usage.
     Stats,
+    /// Authenticated registries read from the engine auth file.
+    Registries,
     /// Read-only output rendered in the shared text dialog.
     Text {
         capture: oxideterm_container::ContainerCapture,
@@ -1083,6 +1086,10 @@ pub(super) struct HostContainerState {
     pub(super) input_running: bool,
     pub(super) stats: Option<Vec<oxideterm_container::ContainerStat>>,
     pub(super) stats_running: bool,
+    pub(super) registries: Option<Vec<oxideterm_container::ContainerRegistry>>,
+    pub(super) registries_running: bool,
+    /// Row whose action strip is expanded; only one row shows actions at a time.
+    pub(super) selected_row: Option<String>,
     /// One virtual list serves every inventory tab.
     pub(super) list_state: ListState,
     pub(super) list_cache: std::cell::RefCell<VirtualListSignatureCache>,
@@ -1111,10 +1118,13 @@ impl HostContainerState {
             input_running: false,
             stats: None,
             stats_running: false,
+            registries: None,
+            registries_running: false,
+            selected_row: None,
             list_state: tauri_virtual_list_state(
                 0,
                 ListAlignment::Top,
-                TauriVirtualListSpec::new(px(64.0), 6),
+                TauriVirtualListSpec::new(px(88.0), 6),
             ),
             list_cache: std::cell::RefCell::new(VirtualListSignatureCache::default()),
         }

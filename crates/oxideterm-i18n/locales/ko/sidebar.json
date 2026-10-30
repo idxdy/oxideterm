@@ -435,7 +435,8 @@
         "volumes": "볼륨",
         "networks": "네트워크",
         "pods": "Pod",
-        "stats": "리소스"
+        "stats": "리소스",
+        "registries": "레지스트리"
       },
       "search_placeholder": "검색",
       "loading": "불러오는 중…",
@@ -447,7 +448,8 @@
         "images": "이미지",
         "volumes": "볼륨",
         "networks": "네트워크",
-        "pods": "Pod"
+        "pods": "Pod",
+        "registries": "레지스트리"
       },
       "empty": {
         "containers": "컨테이너 없음",
@@ -456,7 +458,8 @@
         "networks": "네트워크 없음",
         "pods": "Pod 없음",
         "no_engine": "컨테이너 엔진을 찾을 수 없습니다",
-        "stats": "실행 중인 컨테이너가 없습니다."
+        "stats": "실행 중인 컨테이너가 없습니다.",
+        "registries": "인증된 레지스트리가 없습니다"
       },
       "states": {
         "running": "실행 중",
@@ -581,6 +584,10 @@
         "search_placeholder": "검색어",
         "login_title": "레지스트리 로그인",
         "login_placeholder": "레지스트리"
+      },
+      "sources": {
+        "docker": "Docker",
+        "podman": "Podman"
       }
     },
     "host_redis": {

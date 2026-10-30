@@ -17,6 +17,7 @@ mod instance;
 mod model;
 mod parse;
 mod quote;
+mod registries;
 mod snapshot;
 mod stats;
 mod terminal;
@@ -38,6 +39,9 @@ pub use model::{
     container_row_signature, container_state_label_key, pod_row_signature, pod_state_label_key,
 };
 pub use parse::{parse_snapshot, split_json_prefix};
+pub use registries::{
+    ContainerRegistry, ContainerRegistrySource, parse_registries, registries_command,
+};
 pub use snapshot::snapshot_command;
 pub use stats::{ContainerStat, parse_stats, stats_command};
 pub use terminal::{ContainerTerminalOp, terminal_command};

@@ -435,7 +435,8 @@
         "volumes": "磁碟區",
         "networks": "網路",
         "pods": "Pod",
-        "stats": "資源"
+        "stats": "資源",
+        "registries": "倉庫"
       },
       "search_placeholder": "搜尋",
       "loading": "載入中…",
@@ -447,7 +448,8 @@
         "images": "個映像",
         "volumes": "個磁碟區",
         "networks": "個網路",
-        "pods": "個 Pod"
+        "pods": "個 Pod",
+        "registries": "個倉庫"
       },
       "empty": {
         "containers": "沒有容器",
@@ -456,7 +458,8 @@
         "networks": "沒有網路",
         "pods": "沒有 Pod",
         "no_engine": "未偵測到容器引擎",
-        "stats": "沒有正在執行的容器。"
+        "stats": "沒有正在執行的容器。",
+        "registries": "沒有已認證的倉庫"
       },
       "states": {
         "running": "執行中",
@@ -581,6 +584,10 @@
         "search_placeholder": "關鍵字",
         "login_title": "登入映像倉庫",
         "login_placeholder": "倉庫位址"
+      },
+      "sources": {
+        "docker": "Docker",
+        "podman": "Podman"
       }
     },
     "host_redis": {

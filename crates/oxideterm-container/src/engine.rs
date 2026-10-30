@@ -86,6 +86,12 @@ impl ContainerEngine {
         !matches!(self, Self::Wslc)
     }
 
+    /// Docker and Podman keep authenticated registries in an `auths` map;
+    /// `wslc` has no documented auth file.
+    pub fn supports_registry_auth(self) -> bool {
+        !matches!(self, Self::Wslc)
+    }
+
     /// `docker stats`/`podman stats` stream unless told otherwise; `wslc stats`
     /// is already a one-shot snapshot and rejects `--no-stream`.
     pub fn supports_stats_no_stream(self) -> bool {

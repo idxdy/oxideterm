@@ -435,7 +435,8 @@
         "volumes": "卷",
         "networks": "网络",
         "pods": "Pod",
-        "stats": "资源"
+        "stats": "资源",
+        "registries": "仓库"
       },
       "search_placeholder": "搜索",
       "loading": "加载中…",
@@ -447,7 +448,8 @@
         "images": "个镜像",
         "volumes": "个卷",
         "networks": "个网络",
-        "pods": "个 Pod"
+        "pods": "个 Pod",
+        "registries": "个仓库"
       },
       "empty": {
         "containers": "没有容器",
@@ -456,7 +458,8 @@
         "networks": "没有网络",
         "pods": "没有 Pod",
         "no_engine": "未检测到容器引擎",
-        "stats": "没有正在运行的容器。"
+        "stats": "没有正在运行的容器。",
+        "registries": "没有已认证的仓库"
       },
       "states": {
         "running": "运行中",
@@ -581,6 +584,10 @@
         "search_placeholder": "关键词",
         "login_title": "登录镜像仓库",
         "login_placeholder": "仓库地址"
+      },
+      "sources": {
+        "docker": "Docker",
+        "podman": "Podman"
       }
     },
     "host_redis": {
