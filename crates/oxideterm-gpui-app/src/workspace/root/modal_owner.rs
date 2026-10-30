@@ -95,6 +95,9 @@ pub(in crate::workspace) enum ActiveWindowModalOwner {
         phase: oxideterm_gpui_ui::motion::ExitPhase,
     },
     HostTmuxInput,
+    HostEcaptureConfirm {
+        phase: oxideterm_gpui_ui::motion::ExitPhase,
+    },
     HostScheduleConfirm {
         phase: oxideterm_gpui_ui::motion::ExitPhase,
     },
@@ -160,7 +163,9 @@ impl ActiveWindowModalOwner {
             Self::AiClearAll { .. } => 10,
             Self::AiDeleteMessage { .. } => 11,
             Self::SettingsReset { .. } => 12,
-            Self::CommandHistoryClear { .. } => 50,
+            // Rendered by the same settings-reset portal child, so it must not
+            // outrank modals mounted above that child.
+            Self::CommandHistoryClear { .. } => 12,
             Self::SettingsDataDirectory { .. } => 13,
             Self::RemoteShellIntegration => 14,
             Self::TerminalTriggerQuickCommand => 15,
@@ -168,36 +173,37 @@ impl ActiveWindowModalOwner {
             Self::NodeDisconnect { .. } => 17,
             Self::TabClose { .. } => 18,
             Self::HostProcessConfirm { .. } => 19,
+            Self::HostPackageConfirm { .. } => 20,
             Self::HostDockerConfirm { .. } => 21,
             Self::HostDockerLogs => 22,
             Self::HostServiceConfirm { .. } => 23,
             Self::HostServiceLogs => 24,
             Self::HostTmuxConfirm { .. } => 25,
             Self::HostTmuxInput => 26,
-            Self::HostScheduleConfirm { .. } => 27,
-            Self::HostScheduleLogs => 28,
-            Self::HostPackageConfirm { .. } => 20,
-            Self::NativePluginConfirm { .. } => 29,
-            Self::TabRename => 30,
-            Self::ArchiveCommand => 31,
+            Self::HostEcaptureConfirm { .. } => 27,
+            Self::HostScheduleConfirm { .. } => 28,
+            Self::HostScheduleLogs => 29,
+            Self::NativePluginConfirm { .. } => 30,
+            Self::TabRename => 31,
+            Self::ArchiveCommand => 32,
             Self::SshTunnel => 1,
-            Self::ActiveTabWindowModal { .. } => 32,
-            Self::TerminalCastPlayer => 33,
-            Self::ThemeEditor { .. } => 34,
-            Self::SettingsSshConfigImport { .. } => 35,
-            Self::TerminalCommandSpecsEditor => 36,
-            Self::QuickCommandsManager => 37,
-            Self::AiTextEditor => 38,
-            Self::OxideImport { .. } => 39,
-            Self::OxideExport { .. } => 40,
-            Self::CommandPalette => 41,
-            Self::VersionMigration => 42,
-            Self::Onboarding => 43,
-            Self::LegalNotice { .. } => 44,
-            Self::NativeUpdateReleaseNotes { .. } => 45,
-            Self::Shortcuts => 46,
-            Self::AppLockDialog => 47,
-            Self::MermaidZoom => 48,
+            Self::ActiveTabWindowModal { .. } => 33,
+            Self::TerminalCastPlayer => 34,
+            Self::ThemeEditor { .. } => 35,
+            Self::SettingsSshConfigImport { .. } => 36,
+            Self::TerminalCommandSpecsEditor => 37,
+            Self::QuickCommandsManager => 38,
+            Self::AiTextEditor => 39,
+            Self::OxideImport { .. } => 40,
+            Self::OxideExport { .. } => 41,
+            Self::CommandPalette => 42,
+            Self::VersionMigration => 43,
+            Self::Onboarding => 44,
+            Self::LegalNotice { .. } => 45,
+            Self::NativeUpdateReleaseNotes { .. } => 46,
+            Self::Shortcuts => 47,
+            Self::AppLockDialog => 48,
+            Self::MermaidZoom => 49,
         }
     }
 
@@ -220,6 +226,7 @@ impl ActiveWindowModalOwner {
             | Self::HostDockerConfirm { phase }
             | Self::HostServiceConfirm { phase }
             | Self::HostTmuxConfirm { phase }
+            | Self::HostEcaptureConfirm { phase }
             | Self::HostScheduleConfirm { phase }
             | Self::HostPackageConfirm { phase }
             | Self::NativePluginConfirm { phase }
@@ -470,6 +477,9 @@ impl ActiveWindowModalProjection {
             }
             connection_monitor::HostToolsWindowModalSnapshot::TmuxInput => {
                 ActiveWindowModalOwner::HostTmuxInput
+            }
+            connection_monitor::HostToolsWindowModalSnapshot::EcaptureConfirm(phase) => {
+                ActiveWindowModalOwner::HostEcaptureConfirm { phase }
             }
             connection_monitor::HostToolsWindowModalSnapshot::ScheduleConfirm(phase) => {
                 ActiveWindowModalOwner::HostScheduleConfirm { phase }
@@ -1125,6 +1135,14 @@ impl WorkspaceApp {
             ActiveWindowModalOwner::HostTmuxInput => {
                 let _ = self.handle_host_tools_window_modal_key(
                     connection_monitor::HostToolsWindowModalSnapshot::TmuxInput,
+                    event,
+                    window,
+                    cx,
+                );
+            }
+            ActiveWindowModalOwner::HostEcaptureConfirm { phase } => {
+                let _ = self.handle_host_tools_window_modal_key(
+                    connection_monitor::HostToolsWindowModalSnapshot::EcaptureConfirm(phase),
                     event,
                     window,
                     cx,

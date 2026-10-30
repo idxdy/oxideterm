@@ -22,7 +22,7 @@ Primary areas:
 
 - Sessions: saved connections, active SSH nodes, and terminal sessions.
 - Connection pool: reusable connection/runtime state.
-- Connection monitor and Host Tools: health, reconnect status, processes, Docker, services, tmux, packages, logs, ports, filesystems, and metrics.
+- Connection monitor and Host Tools: health, reconnect status, processes, Docker, services, tmux, eCapture, packages, logs, ports, filesystems, and metrics.
 - Connection matrix: a broader connection overview.
 - File manager and SFTP: browse, preview, upload, download, and edit remote files.
 - Graphics/VNC: open a saved RDP/VNC profile, or open node-launched graphics when a connected SSH node provides it.
@@ -124,7 +124,9 @@ For forwarding without a terminal, use [Standalone SSH Tunnels](connections-and-
 
 ## Host Tools and Graphics
 
-Use Host Tools from the connected-node context when you need a read-oriented view of processes, containers, services, tmux, packages, logs, ports, filesystems, scheduled tasks, or host metrics. Actions that change host state should be reviewed in the app confirmation flow before execution.
+Use Host Tools from the connected-node context when you need a read-oriented view of processes, containers, services, tmux, eCapture, packages, logs, ports, filesystems, scheduled tasks, or host metrics. Actions that change host state should be reviewed in the app confirmation flow before execution.
+
+eCapture is the most constrained Host Tool. It runs on Linux only: the probe and the start, stop, and clear commands all reject any other remote OS family, so the panel cannot start a capture on a Windows or macOS host. It is also the one Host Tool that cannot use the local target, because its commands are dispatched over the SSH exec channel; choose a connected SSH host instead. The host must already have an `ecapture` binary that the probe finds on `PATH`, and the session must run as root or be able to execute `sudo -n` without a prompt; OxideTerm never installs or downloads eCapture. No listener or port forward is created: eCapture runs detached and writes its TLS plaintext event stream to a per-connection directory under `/tmp`, which the panel polls incrementally over the same SSH channel. Because the process is detached, hiding the panel or restarting the app does not stop the capture, and `Clear` removes the run directory only when the process is no longer alive.
 
 For remote desktops, first install and enable **RDP** or **VNC** in **Plugin Manager → Marketplace**, then open the connection from New Connection or Session Manager. OxideTerm owns the profiles, SSH gateway settings, and native viewer; the plugin supplies the protocol engine. See [Graphics and VNC](connections-and-forwards.md#graphics-and-vnc). Windows WSL Graphics uses a separate built-in viewer and does not require these remote-desktop plugins.
 

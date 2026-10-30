@@ -97,9 +97,11 @@ For unstable hosts, keep Connection Monitor open while testing. It shows whether
 
 ## Host Tools
 
-Host Tools are node-level views for inspecting the remote environment. Use them for processes, Docker, services, tmux, packages, logs, ports, filesystems, scheduled tasks, and metrics.
+Host Tools are node-level views for inspecting the remote environment. Use them for processes, Docker, services, tmux, eCapture, packages, logs, ports, filesystems, scheduled tasks, and metrics.
 
 Resource snapshots can become stale independently of the terminal tab. Refresh the Host Tools page or reconnect the owning node before retrying actions. Host Tools actions should remain explicit and reviewable; do not use them as hidden background cleanup.
+
+eCapture is the most constrained Host Tool. It runs on Linux only; the probe and the start, stop, and clear commands reject any other remote OS family. It also cannot target the local machine that other Host Tools accept, because its commands are dispatched over the SSH exec channel of a connected node. The host must already have an `ecapture` binary that the probe finds on `PATH`, plus root or a passwordless `sudo -n`; OxideTerm never installs eCapture. Instead of opening a listener or port forward, eCapture runs detached and writes its TLS plaintext events to a per-connection directory under `/tmp`, which the panel polls incrementally over the same SSH channel. The capture therefore survives hiding the panel or restarting the app; `Clear` deletes the run directory and is refused while the process is still alive.
 
 ## Graphics And VNC
 

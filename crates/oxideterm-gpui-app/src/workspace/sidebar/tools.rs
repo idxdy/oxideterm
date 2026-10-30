@@ -5,13 +5,14 @@ use oxideterm_gpui_ui::select::{
     select_separator,
 };
 
-const TOOLS: [ContextSidebarTool; 11] = [
+const TOOLS: [ContextSidebarTool; 12] = [
     ContextSidebarTool::Monitor,
     ContextSidebarTool::Processes,
     ContextSidebarTool::Gpu,
     ContextSidebarTool::Docker,
     ContextSidebarTool::Services,
     ContextSidebarTool::Logs,
+    ContextSidebarTool::Ecapture,
     ContextSidebarTool::Ports,
     ContextSidebarTool::Tmux,
     ContextSidebarTool::Filesystems,
@@ -29,6 +30,7 @@ impl ContextSidebarTool {
             Self::Processes => "sidebar.panels.processes",
             Self::Services => "sidebar.panels.services",
             Self::Logs => "sidebar.panels.logs",
+            Self::Ecapture => "sidebar.panels.ecapture",
             Self::Tmux => "sidebar.panels.tmux",
             Self::Docker => "sidebar.panels.docker",
             Self::Ports => "sidebar.panels.ports",
@@ -45,6 +47,7 @@ impl ContextSidebarTool {
             Self::Processes => LucideIcon::ListTree,
             Self::Services => LucideIcon::ServerCog,
             Self::Logs => LucideIcon::FileText,
+            Self::Ecapture => LucideIcon::KeyRound,
             Self::Tmux => LucideIcon::SplitSquareHorizontal,
             Self::Docker => LucideIcon::Docker,
             Self::Ports => LucideIcon::Network,
@@ -390,13 +393,13 @@ mod tests {
     #[test]
     fn shrinking_the_rail_moves_only_trailing_tools_into_more() {
         // All tools fit exactly without reserving an unnecessary More button.
-        let all_visible = visible_tool_count(498.0, 40.0, 9.0);
-        assert_eq!(all_visible, 11);
+        let all_visible = visible_tool_count(538.0, 40.0, 9.0);
+        assert_eq!(all_visible, 12);
         assert_eq!(overflow_tools(all_visible), vec![]);
-        assert_eq!(visible_tool_count(700.0, 40.0, 9.0), 11);
+        assert_eq!(visible_tool_count(700.0, 40.0, 9.0), 12);
         // Once the last row no longer fits, More needs a row of its own.
-        let almost_all = visible_tool_count(497.0, 40.0, 9.0);
-        assert_eq!(almost_all, 9);
+        let almost_all = visible_tool_count(537.0, 40.0, 9.0);
+        assert_eq!(almost_all, 10);
         assert_eq!(
             overflow_tools(almost_all),
             vec![ContextSidebarTool::Schedules, ContextSidebarTool::Packages]
@@ -420,6 +423,7 @@ mod tests {
                 ContextSidebarTool::Docker,
                 ContextSidebarTool::Services,
                 ContextSidebarTool::Logs,
+                ContextSidebarTool::Ecapture,
                 ContextSidebarTool::Ports,
                 ContextSidebarTool::Tmux,
                 ContextSidebarTool::Filesystems,

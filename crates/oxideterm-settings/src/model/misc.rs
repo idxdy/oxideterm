@@ -372,6 +372,8 @@ pub struct HostToolsSettings {
     pub filesystems_enabled: bool,
     #[serde(default = "default_host_tool_enabled")]
     pub packages_enabled: bool,
+    #[serde(default = "default_host_tool_enabled")]
+    pub ecapture_enabled: bool,
     #[serde(flatten)]
     pub extra: ExtraFields,
 }
@@ -391,6 +393,7 @@ impl Default for HostToolsSettings {
             schedules_enabled: true,
             filesystems_enabled: true,
             packages_enabled: true,
+            ecapture_enabled: true,
             extra: ExtraFields::new(),
         }
     }
@@ -659,8 +662,9 @@ mod misc_tests {
                     tools.schedules_enabled,
                     tools.filesystems_enabled,
                     tools.packages_enabled,
+                    tools.ecapture_enabled,
                 ],
-                [true; 10]
+                [true; 11]
             );
         }
     }
