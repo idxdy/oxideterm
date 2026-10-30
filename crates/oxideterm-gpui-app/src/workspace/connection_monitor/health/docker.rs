@@ -672,7 +672,7 @@ impl HostToolsEntity {
             .child(self.render_host_docker_exec_button(
                 connection_id,
                 container,
-                action_running || !availability.can_use_live_tools || !terminal_available,
+                action_running || !availability.can_exec || !terminal_available,
                 tokens,
                 i18n,
                 cx,
@@ -709,6 +709,42 @@ impl HostToolsEntity {
                 "sidebar.host_docker.actions.restart",
                 true,
                 action_running || !availability.can_restart,
+                tokens,
+                i18n,
+                cx,
+            ))
+            .child(self.render_host_docker_action_button(
+                connection_id,
+                container,
+                DockerActionKind::Pause,
+                LucideIcon::Pause,
+                "sidebar.host_docker.actions.pause",
+                false,
+                action_running || !availability.can_pause,
+                tokens,
+                i18n,
+                cx,
+            ))
+            .child(self.render_host_docker_action_button(
+                connection_id,
+                container,
+                DockerActionKind::Unpause,
+                LucideIcon::Play,
+                "sidebar.host_docker.actions.unpause",
+                false,
+                action_running || !availability.can_unpause,
+                tokens,
+                i18n,
+                cx,
+            ))
+            .child(self.render_host_docker_action_button(
+                connection_id,
+                container,
+                DockerActionKind::Remove,
+                LucideIcon::Trash2,
+                "sidebar.host_docker.actions.remove",
+                true,
+                action_running || !availability.can_remove,
                 tokens,
                 i18n,
                 cx,
@@ -1378,7 +1414,9 @@ impl HostToolsEntity {
                 ConfirmDialogView {
                     variant: if matches!(
                         request.action,
-                        DockerActionKind::Stop | DockerActionKind::Restart
+                        DockerActionKind::Stop
+                            | DockerActionKind::Restart
+                            | DockerActionKind::Remove
                     ) {
                         ConfirmDialogVariant::Danger
                     } else {
@@ -1706,6 +1744,9 @@ fn host_docker_confirm_description_key(action: &DockerActionKind) -> &'static st
         DockerActionKind::Start => "sidebar.host_docker.confirm.start_desc",
         DockerActionKind::Stop => "sidebar.host_docker.confirm.stop_desc",
         DockerActionKind::Restart => "sidebar.host_docker.confirm.restart_desc",
+        DockerActionKind::Pause => "sidebar.host_docker.confirm.pause_desc",
+        DockerActionKind::Unpause => "sidebar.host_docker.confirm.unpause_desc",
+        DockerActionKind::Remove => "sidebar.host_docker.confirm.remove_desc",
     }
 }
 
@@ -1714,6 +1755,9 @@ fn host_docker_confirm_label_key(action: &DockerActionKind) -> &'static str {
         DockerActionKind::Start => "sidebar.host_docker.actions.start",
         DockerActionKind::Stop => "sidebar.host_docker.actions.stop",
         DockerActionKind::Restart => "sidebar.host_docker.actions.restart",
+        DockerActionKind::Pause => "sidebar.host_docker.actions.pause",
+        DockerActionKind::Unpause => "sidebar.host_docker.actions.unpause",
+        DockerActionKind::Remove => "sidebar.host_docker.actions.remove",
     }
 }
 

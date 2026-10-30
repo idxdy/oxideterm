@@ -142,6 +142,11 @@ impl HostToolsEntity {
         if self.profiler_connection_missing(&connection_id) {
             self.start_profiler(connection_id, sampling_config, runtime, cx);
         }
+        if self.active_tool() == ContextSidebarTool::Container {
+            // Detection is one-shot per connection; the panel refreshes it on
+            // demand and after every mutation.
+            self.request_container_discovery_if_needed(cx);
+        }
     }
 
     pub(in crate::workspace) fn apply_monitoring_settings(
@@ -304,6 +309,7 @@ impl WorkspaceApp {
             gpu: host_tools.monitor_enabled && host_tools.gpu_enabled,
             processes: host_tools.processes_enabled,
             docker: host_tools.docker_enabled,
+            podman: host_tools.podman_enabled,
         }
     }
 

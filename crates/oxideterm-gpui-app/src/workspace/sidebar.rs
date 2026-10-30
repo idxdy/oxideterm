@@ -75,10 +75,13 @@ pub(super) enum ContextSidebarTool {
     Logs,
     Tmux,
     Docker,
+    Podman,
+    Container,
     Ports,
     Schedules,
     Filesystems,
     Packages,
+    Redis,
 }
 
 #[derive(Clone, Copy)]

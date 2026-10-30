@@ -27,10 +27,13 @@ impl ContextSidebarTool {
             Self::Logs => settings.logs_enabled,
             Self::Tmux => settings.tmux_enabled,
             Self::Docker => settings.docker_enabled,
+            Self::Podman => settings.podman_enabled,
+            Self::Container => true,
             Self::Ports => settings.ports_enabled,
             Self::Schedules => settings.schedules_enabled,
             Self::Filesystems => settings.filesystems_enabled,
             Self::Packages => settings.packages_enabled,
+            Self::Redis => settings.redis_enabled,
         }
     }
 
@@ -48,10 +51,15 @@ impl ContextSidebarTool {
             Self::Logs => settings.logs_enabled = enabled,
             Self::Tmux => settings.tmux_enabled = enabled,
             Self::Docker => settings.docker_enabled = enabled,
+            Self::Podman => settings.podman_enabled = enabled,
+            // The Container tool detects engines on demand; there is no
+            // persistent probe to enable or disable yet.
+            Self::Container => {}
             Self::Ports => settings.ports_enabled = enabled,
             Self::Schedules => settings.schedules_enabled = enabled,
             Self::Filesystems => settings.filesystems_enabled = enabled,
             Self::Packages => settings.packages_enabled = enabled,
+            Self::Redis => settings.redis_enabled = enabled,
         }
     }
 }
@@ -226,6 +234,8 @@ impl HostToolsEntity {
 }
 
 // Each Host Tools module owns its complete UI and request lifecycle.
+#[path = "health/container.rs"]
+mod container;
 #[path = "health/docker.rs"]
 mod docker;
 #[path = "health/filesystems.rs"]
@@ -238,10 +248,16 @@ mod logs;
 mod monitor;
 #[path = "health/packages.rs"]
 mod packages;
+#[path = "health/podman.rs"]
+mod podman;
+#[path = "health/podman_resources.rs"]
+mod podman_resources;
 #[path = "health/ports.rs"]
 mod ports;
 #[path = "health/process.rs"]
 mod process;
+#[path = "health/redis.rs"]
+mod redis;
 #[path = "health/scheduled_tasks.rs"]
 mod scheduled_tasks;
 #[path = "health/services.rs"]
@@ -286,9 +302,18 @@ impl WorkspaceApp {
             });
             return;
         }
+        if tool == ContextSidebarTool::Container {
+            self.host_tools.update(cx, |host_tools, cx| {
+                host_tools.request_container_discovery_if_needed(cx)
+            });
+            return;
+        }
         if matches!(
             tool,
-            ContextSidebarTool::Gpu | ContextSidebarTool::Processes | ContextSidebarTool::Docker
+            ContextSidebarTool::Gpu
+                | ContextSidebarTool::Processes
+                | ContextSidebarTool::Docker
+                | ContextSidebarTool::Podman
         ) {
             return;
         }
@@ -330,10 +355,13 @@ impl WorkspaceApp {
                 ContextSidebarTool::Logs => self.render_host_logs_panel(cx),
                 ContextSidebarTool::Tmux => self.render_host_tmux_panel(cx),
                 ContextSidebarTool::Docker => self.render_host_docker_panel(cx),
+                ContextSidebarTool::Podman => self.render_host_podman_panel(cx),
+                ContextSidebarTool::Container => self.render_host_container_panel(cx),
                 ContextSidebarTool::Ports => self.render_host_ports_panel(cx),
                 ContextSidebarTool::Schedules => self.render_host_schedules_panel(cx),
                 ContextSidebarTool::Filesystems => self.render_host_filesystems_panel(cx),
                 ContextSidebarTool::Packages => self.render_host_packages_panel(cx),
+                ContextSidebarTool::Redis => self.render_host_redis_panel(cx),
             }
         } else {
             self.render_host_tool_monitoring_disabled(active_tool, cx)

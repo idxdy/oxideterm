@@ -18,7 +18,7 @@ use tokio::{
 
 use crate::{
     MetricsSource, PreviousResourceSample, RESOURCE_HISTORY_CAPACITY, ResourceMetrics,
-    ResourceSystemInfo, docker_sample_command, parse_resource_metrics,
+    ResourceSystemInfo, docker_sample_command, parse_resource_metrics, podman_sample_command,
     previous_sample_from_metrics, push_history,
 };
 
@@ -123,11 +123,12 @@ pub struct ResourceSamplingConfig {
     pub gpu: bool,
     pub processes: bool,
     pub docker: bool,
+    pub podman: bool,
 }
 
 impl ResourceSamplingConfig {
     pub fn is_empty(self) -> bool {
-        !self.system && !self.gpu && !self.processes && !self.docker
+        !self.system && !self.gpu && !self.processes && !self.docker && !self.podman
     }
 }
 
@@ -138,6 +139,7 @@ impl Default for ResourceSamplingConfig {
             gpu: true,
             processes: true,
             docker: true,
+            podman: true,
         }
     }
 }
@@ -590,6 +592,9 @@ fn build_sample_command_with_system_info(
     if config.docker {
         commands.push(docker_sample_command(os_type).to_string());
     }
+    if config.podman {
+        commands.push(podman_sample_command(os_type).to_string());
+    }
     commands.push("echo '===END==='".to_string());
     format!("{}\n", commands.join("; "))
 }
@@ -693,6 +698,9 @@ fn build_windows_sample_command(
     }
     if config.docker {
         script.push_str(&docker_sample_command("Windows"));
+    }
+    if config.podman {
+        script.push_str(&podman_sample_command("Windows"));
     }
     script.push_str("Write-Output '===END===';");
     // OpenSSH on Windows may start cmd.exe or PowerShell; invoking PowerShell
@@ -1073,6 +1081,7 @@ mod tests {
                 gpu: false,
                 processes: true,
                 docker: false,
+                podman: false,
             },
         );
 
@@ -1080,6 +1089,7 @@ mod tests {
         assert!(!processes_only.contains("===STAT==="));
         assert!(!processes_only.contains("===GPUS==="));
         assert!(!processes_only.contains("===DOCKER==="));
+        assert!(!processes_only.contains("===PODMAN==="));
         assert!(!processes_only.contains("===PORTS==="));
 
         let docker_only = build_sample_command_for(
@@ -1089,12 +1099,28 @@ mod tests {
                 gpu: false,
                 processes: false,
                 docker: true,
+                podman: false,
             },
         );
         assert!(docker_only.contains("===DOCKER==="));
+        assert!(!docker_only.contains("===PODMAN==="));
         assert!(!docker_only.contains("Win32_OperatingSystem"));
         assert!(!docker_only.contains("===TOPPROCS==="));
         assert!(!docker_only.contains("===PORTS==="));
+
+        let podman_only = build_sample_command_for(
+            "Linux",
+            ResourceSamplingConfig {
+                system: false,
+                gpu: false,
+                processes: false,
+                docker: false,
+                podman: true,
+            },
+        );
+        assert!(podman_only.contains("===PODMAN==="));
+        assert!(!podman_only.contains("===DOCKER==="));
+        assert!(!podman_only.contains("===TOPPROCS==="));
     }
 
     #[cfg(unix)]

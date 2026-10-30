@@ -4,6 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::docker::{ResourceDockerSnapshot, parse_docker_snapshot};
+use crate::podman::{ResourcePodmanSnapshot, parse_podman_snapshot};
 use crate::service::{ResourceServiceSnapshot, parse_service_snapshot};
 
 pub const RESOURCE_HISTORY_CAPACITY: usize = 60;
@@ -146,6 +147,8 @@ pub struct ResourceMetrics {
     #[serde(default)]
     pub docker: ResourceDockerSnapshot,
     #[serde(default)]
+    pub podman: ResourcePodmanSnapshot,
+    #[serde(default)]
     pub services: ResourceServiceSnapshot,
     pub ssh_rtt_ms: Option<u64>,
     pub source: MetricsSource,
@@ -180,6 +183,7 @@ impl ResourceMetrics {
             gpus: Vec::new(),
             top_processes: Vec::new(),
             docker: ResourceDockerSnapshot::default(),
+            podman: ResourcePodmanSnapshot::default(),
             services: ResourceServiceSnapshot::default(),
             ssh_rtt_ms: None,
             source,
@@ -275,11 +279,13 @@ pub fn parse_resource_metrics(
     let gpus = parse_gpus(output);
     let top_processes = parse_top_processes(output);
     let docker = parse_docker_snapshot(output);
+    let podman = parse_podman_snapshot(output);
     let services = parse_service_snapshot(output);
     let has_memory = mem.is_some();
     let has_auxiliary_metrics = !gpus.is_empty()
         || !top_processes.is_empty()
-        || !matches!(docker.status, crate::ResourceDockerStatus::Unknown);
+        || !matches!(docker.status, crate::ResourceDockerStatus::Unknown)
+        || !matches!(podman.status, crate::ResourcePodmanStatus::Unknown);
 
     let cpu_percent = match (&cpu_snap, previous) {
         (Some(current), Some(previous)) => cpu_usage_percent(current, &previous.cpu),
@@ -426,6 +432,7 @@ pub fn parse_resource_metrics(
         gpus,
         top_processes,
         docker,
+        podman,
         services,
         ssh_rtt_ms: None,
         source,
@@ -1332,5 +1339,27 @@ cpu  1 2 3 4 5 6 7 8
 
         assert_eq!(metrics.cpu_percent, Some(37.5));
         assert_eq!(metrics.source, MetricsSource::Partial);
+    }
+    #[test]
+    fn podman_pods_survive_the_sampling_parse() {
+        // The Pods tab reads `metrics.podman.pods`; this locks the sampling
+        // payload → metrics path for pods (containers keep their own coverage).
+        let output = concat!(
+            "===PODMAN===\n",
+            "PS\t{\"Id\":\"a1b2c3d4e5f6\",\"Names\":[\"web\"],\"Image\":\"nginx:alpine\",",
+            "\"State\":\"running\",\"Status\":\"\",\"Ports\":null}\tUp 2 minutes\n",
+            "POD\t{\"Id\":\"3cd7df7af038e334ea5eb404719eea184303544618b797d57887c41f6ddc9ed0\",",
+            "\"Name\":\"pod_ldap\",\"Status\":\"Exited\",\"Containers\":[{\"Id\":\"552d85b062e9\"}]}\t8 weeks ago\n",
+            "===PODMAN_END===",
+        );
+        let metrics = parse_resource_metrics(output, None, 10_000);
+        assert_eq!(metrics.podman.containers.len(), 1);
+        assert_eq!(metrics.podman.containers[0].status, "Up 2 minutes");
+        assert_eq!(metrics.podman.pods.len(), 1);
+        let pod = &metrics.podman.pods[0];
+        assert_eq!(pod.name, "pod_ldap");
+        assert_eq!(pod.status, "Exited");
+        assert_eq!(pod.created, "8 weeks ago");
+        assert_eq!(pod.containers, 1);
     }
 }

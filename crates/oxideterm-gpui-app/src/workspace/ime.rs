@@ -144,14 +144,26 @@ pub(super) enum WorkspaceImeTarget {
     HostProcessSearch,
     HostProcessRenice,
     HostDockerSearch,
+    HostPodmanSearch,
     HostServiceSearch,
     HostLogSearch,
     HostTmuxSearch,
     HostTmuxDialogInput,
+    HostPodmanDialog,
     HostPortSearch,
     HostScheduleSearch,
     HostFilesystemSearch,
     HostPackageSearch,
+    HostContainerSearch,
+    HostContainerDialog,
+    HostRedisPassword,
+    HostRedisRename,
+    HostRedisSetValue,
+    HostRedisSetValueField,
+    HostRedisCreateKeyName,
+    HostRedisCreateKeyValue,
+    HostRedisCreateKeyField,
+    HostRedisCreateKeyTtl,
     QuickCommand(QuickCommandInput),
     Settings(SettingsInput),
     SessionManager(SessionManagerInput),
@@ -429,14 +441,30 @@ pub(super) fn workspace_ime_target_for_plain_host_tools_input(
         HostToolsTextInput::ProcessSearch => Some(WorkspaceImeTarget::HostProcessSearch),
         HostToolsTextInput::ProcessRenice => Some(WorkspaceImeTarget::HostProcessRenice),
         HostToolsTextInput::DockerSearch => Some(WorkspaceImeTarget::HostDockerSearch),
+        HostToolsTextInput::PodmanSearch => Some(WorkspaceImeTarget::HostPodmanSearch),
         HostToolsTextInput::ServiceSearch => Some(WorkspaceImeTarget::HostServiceSearch),
         HostToolsTextInput::LogSearch => Some(WorkspaceImeTarget::HostLogSearch),
         HostToolsTextInput::TmuxSearch => Some(WorkspaceImeTarget::HostTmuxSearch),
         HostToolsTextInput::TmuxDialog => None,
+        HostToolsTextInput::PodmanDialog => Some(WorkspaceImeTarget::HostPodmanDialog),
         HostToolsTextInput::PortSearch => Some(WorkspaceImeTarget::HostPortSearch),
         HostToolsTextInput::ScheduleSearch => Some(WorkspaceImeTarget::HostScheduleSearch),
         HostToolsTextInput::FilesystemSearch => Some(WorkspaceImeTarget::HostFilesystemSearch),
         HostToolsTextInput::PackageSearch => Some(WorkspaceImeTarget::HostPackageSearch),
+        HostToolsTextInput::ContainerSearch => Some(WorkspaceImeTarget::HostContainerSearch),
+        HostToolsTextInput::ContainerDialog => Some(WorkspaceImeTarget::HostContainerDialog),
+        HostToolsTextInput::RedisPassword => Some(WorkspaceImeTarget::HostRedisPassword),
+        HostToolsTextInput::RedisRename => Some(WorkspaceImeTarget::HostRedisRename),
+        HostToolsTextInput::RedisSetValue => Some(WorkspaceImeTarget::HostRedisSetValue),
+        HostToolsTextInput::RedisSetValueField => Some(WorkspaceImeTarget::HostRedisSetValueField),
+        HostToolsTextInput::RedisCreateKeyName => Some(WorkspaceImeTarget::HostRedisCreateKeyName),
+        HostToolsTextInput::RedisCreateKeyValue => {
+            Some(WorkspaceImeTarget::HostRedisCreateKeyValue)
+        }
+        HostToolsTextInput::RedisCreateKeyField => {
+            Some(WorkspaceImeTarget::HostRedisCreateKeyField)
+        }
+        HostToolsTextInput::RedisCreateKeyTtl => Some(WorkspaceImeTarget::HostRedisCreateKeyTtl),
     }
 }
 
@@ -541,6 +569,8 @@ impl WorkspaceImeTarget {
             Self::HostProcessSearch => 6,
             Self::HostProcessRenice => 7,
             Self::HostDockerSearch => 8,
+            Self::HostPodmanSearch => 22,
+            Self::HostPodmanDialog => 50,
             Self::HostServiceSearch => 9,
             Self::HostLogSearch => 10,
             Self::HostTmuxSearch => 11,
@@ -549,6 +579,16 @@ impl WorkspaceImeTarget {
             Self::HostScheduleSearch => 14,
             Self::HostFilesystemSearch => 15,
             Self::HostPackageSearch => 16,
+            Self::HostContainerSearch => 36,
+            Self::HostContainerDialog => 37,
+            Self::HostRedisPassword => 28,
+            Self::HostRedisRename => 29,
+            Self::HostRedisSetValue => 30,
+            Self::HostRedisSetValueField => 35,
+            Self::HostRedisCreateKeyName => 31,
+            Self::HostRedisCreateKeyValue => 32,
+            Self::HostRedisCreateKeyField => 33,
+            Self::HostRedisCreateKeyTtl => 34,
             Self::QuickCommand(input) => 500 + input.anchor_key(),
             Self::Settings(input) => 1_000 + input.anchor_key(),
             Self::SessionManager(input) => 1_500 + input.anchor_key(),
@@ -1283,14 +1323,34 @@ impl WorkspaceApp {
                 HostToolsTextInput::ProcessSearch => WorkspaceImeTarget::HostProcessSearch,
                 HostToolsTextInput::ProcessRenice => WorkspaceImeTarget::HostProcessRenice,
                 HostToolsTextInput::DockerSearch => WorkspaceImeTarget::HostDockerSearch,
+                HostToolsTextInput::PodmanSearch => WorkspaceImeTarget::HostPodmanSearch,
                 HostToolsTextInput::ServiceSearch => WorkspaceImeTarget::HostServiceSearch,
                 HostToolsTextInput::LogSearch => WorkspaceImeTarget::HostLogSearch,
                 HostToolsTextInput::TmuxSearch => WorkspaceImeTarget::HostTmuxSearch,
                 HostToolsTextInput::TmuxDialog => WorkspaceImeTarget::HostTmuxDialogInput,
+                HostToolsTextInput::PodmanDialog => WorkspaceImeTarget::HostPodmanDialog,
                 HostToolsTextInput::PortSearch => WorkspaceImeTarget::HostPortSearch,
                 HostToolsTextInput::ScheduleSearch => WorkspaceImeTarget::HostScheduleSearch,
                 HostToolsTextInput::FilesystemSearch => WorkspaceImeTarget::HostFilesystemSearch,
                 HostToolsTextInput::PackageSearch => WorkspaceImeTarget::HostPackageSearch,
+                HostToolsTextInput::ContainerSearch => WorkspaceImeTarget::HostContainerSearch,
+                HostToolsTextInput::ContainerDialog => WorkspaceImeTarget::HostContainerDialog,
+                HostToolsTextInput::RedisPassword => WorkspaceImeTarget::HostRedisPassword,
+                HostToolsTextInput::RedisRename => WorkspaceImeTarget::HostRedisRename,
+                HostToolsTextInput::RedisSetValue => WorkspaceImeTarget::HostRedisSetValue,
+                HostToolsTextInput::RedisSetValueField => {
+                    WorkspaceImeTarget::HostRedisSetValueField
+                }
+                HostToolsTextInput::RedisCreateKeyName => {
+                    WorkspaceImeTarget::HostRedisCreateKeyName
+                }
+                HostToolsTextInput::RedisCreateKeyValue => {
+                    WorkspaceImeTarget::HostRedisCreateKeyValue
+                }
+                HostToolsTextInput::RedisCreateKeyField => {
+                    WorkspaceImeTarget::HostRedisCreateKeyField
+                }
+                HostToolsTextInput::RedisCreateKeyTtl => WorkspaceImeTarget::HostRedisCreateKeyTtl,
             });
         }
 
@@ -2321,6 +2381,12 @@ impl WorkspaceApp {
                 .ui
                 .input_value(HostToolsTextInput::DockerSearch)
                 .map(str::to_string),
+            WorkspaceImeTarget::HostPodmanSearch => self
+                .host_tools
+                .read(cx)
+                .ui
+                .input_value(HostToolsTextInput::PodmanSearch)
+                .map(str::to_string),
             WorkspaceImeTarget::HostServiceSearch => self
                 .host_tools
                 .read(cx)
@@ -2345,6 +2411,12 @@ impl WorkspaceApp {
                 .ui
                 .input_value(HostToolsTextInput::TmuxDialog)
                 .map(|value| ime_text_snapshot(target, value)),
+            WorkspaceImeTarget::HostPodmanDialog => self
+                .host_tools
+                .read(cx)
+                .ui
+                .input_value(HostToolsTextInput::PodmanDialog)
+                .map(|value| ime_text_snapshot(target, value)),
             WorkspaceImeTarget::HostPortSearch => self
                 .host_tools
                 .read(cx)
@@ -2368,6 +2440,66 @@ impl WorkspaceApp {
                 .read(cx)
                 .ui
                 .input_value(HostToolsTextInput::PackageSearch)
+                .map(str::to_string),
+            WorkspaceImeTarget::HostContainerSearch => self
+                .host_tools
+                .read(cx)
+                .ui
+                .input_value(HostToolsTextInput::ContainerSearch)
+                .map(str::to_string),
+            WorkspaceImeTarget::HostContainerDialog => self
+                .host_tools
+                .read(cx)
+                .ui
+                .input_value(HostToolsTextInput::ContainerDialog)
+                .map(str::to_string),
+            WorkspaceImeTarget::HostRedisPassword => self
+                .host_tools
+                .read(cx)
+                .ui
+                .input_value(HostToolsTextInput::RedisPassword)
+                .map(|value| ime_text_snapshot(target, value)),
+            WorkspaceImeTarget::HostRedisRename => self
+                .host_tools
+                .read(cx)
+                .ui
+                .input_value(HostToolsTextInput::RedisRename)
+                .map(|value| ime_text_snapshot(target, value)),
+            WorkspaceImeTarget::HostRedisSetValue => self
+                .host_tools
+                .read(cx)
+                .ui
+                .input_value(HostToolsTextInput::RedisSetValue)
+                .map(|value| ime_text_snapshot(target, value)),
+            WorkspaceImeTarget::HostRedisSetValueField => self
+                .host_tools
+                .read(cx)
+                .ui
+                .input_value(HostToolsTextInput::RedisSetValueField)
+                .map(str::to_string),
+            WorkspaceImeTarget::HostRedisCreateKeyName => self
+                .host_tools
+                .read(cx)
+                .ui
+                .input_value(HostToolsTextInput::RedisCreateKeyName)
+                .map(str::to_string),
+            WorkspaceImeTarget::HostRedisCreateKeyValue => self
+                .host_tools
+                .read(cx)
+                .ui
+                .input_value(HostToolsTextInput::RedisCreateKeyValue)
+                .map(str::to_string),
+            WorkspaceImeTarget::HostRedisCreateKeyField => self
+                .host_tools
+                .read(cx)
+                .ui
+                .input_value(HostToolsTextInput::RedisCreateKeyField)
+                .map(str::to_string),
+            WorkspaceImeTarget::HostRedisCreateKeyTtl => self
+                .host_tools
+                .read(cx)
+                .ui
+                .input_value(HostToolsTextInput::RedisCreateKeyTtl)
                 .map(str::to_string),
             WorkspaceImeTarget::QuickCommand(input) => self.quick_command_input_value(input, cx),
             WorkspaceImeTarget::Settings(input) => {
@@ -3327,6 +3459,14 @@ impl WorkspaceApp {
                     cx,
                 );
             }
+            WorkspaceImeTarget::HostPodmanSearch => {
+                self.replace_host_tools_text_input(
+                    HostToolsTextInput::PodmanSearch,
+                    replacement_range,
+                    text,
+                    cx,
+                );
+            }
             WorkspaceImeTarget::HostServiceSearch => {
                 self.replace_host_tools_text_input(
                     HostToolsTextInput::ServiceSearch,
@@ -3359,6 +3499,14 @@ impl WorkspaceApp {
                     cx,
                 );
             }
+            WorkspaceImeTarget::HostPodmanDialog => {
+                self.replace_host_tools_text_input(
+                    HostToolsTextInput::PodmanDialog,
+                    replacement_range,
+                    text,
+                    cx,
+                );
+            }
             WorkspaceImeTarget::HostPortSearch => {
                 self.replace_host_tools_text_input(
                     HostToolsTextInput::PortSearch,
@@ -3386,6 +3534,86 @@ impl WorkspaceApp {
             WorkspaceImeTarget::HostPackageSearch => {
                 self.replace_host_tools_text_input(
                     HostToolsTextInput::PackageSearch,
+                    replacement_range,
+                    text,
+                    cx,
+                );
+            }
+            WorkspaceImeTarget::HostContainerSearch => {
+                self.replace_host_tools_text_input(
+                    HostToolsTextInput::ContainerSearch,
+                    replacement_range,
+                    text,
+                    cx,
+                );
+            }
+            WorkspaceImeTarget::HostContainerDialog => {
+                self.replace_host_tools_text_input(
+                    HostToolsTextInput::ContainerDialog,
+                    replacement_range,
+                    text,
+                    cx,
+                );
+            }
+            WorkspaceImeTarget::HostRedisPassword => {
+                self.replace_host_tools_text_input(
+                    HostToolsTextInput::RedisPassword,
+                    replacement_range,
+                    text,
+                    cx,
+                );
+            }
+            WorkspaceImeTarget::HostRedisRename => {
+                self.replace_host_tools_text_input(
+                    HostToolsTextInput::RedisRename,
+                    replacement_range,
+                    text,
+                    cx,
+                );
+            }
+            WorkspaceImeTarget::HostRedisSetValue => {
+                self.replace_host_tools_text_input(
+                    HostToolsTextInput::RedisSetValue,
+                    replacement_range,
+                    text,
+                    cx,
+                );
+            }
+            WorkspaceImeTarget::HostRedisSetValueField => {
+                self.replace_host_tools_text_input(
+                    HostToolsTextInput::RedisSetValueField,
+                    replacement_range,
+                    text,
+                    cx,
+                );
+            }
+            WorkspaceImeTarget::HostRedisCreateKeyName => {
+                self.replace_host_tools_text_input(
+                    HostToolsTextInput::RedisCreateKeyName,
+                    replacement_range,
+                    text,
+                    cx,
+                );
+            }
+            WorkspaceImeTarget::HostRedisCreateKeyValue => {
+                self.replace_host_tools_text_input(
+                    HostToolsTextInput::RedisCreateKeyValue,
+                    replacement_range,
+                    text,
+                    cx,
+                );
+            }
+            WorkspaceImeTarget::HostRedisCreateKeyField => {
+                self.replace_host_tools_text_input(
+                    HostToolsTextInput::RedisCreateKeyField,
+                    replacement_range,
+                    text,
+                    cx,
+                );
+            }
+            WorkspaceImeTarget::HostRedisCreateKeyTtl => {
+                self.replace_host_tools_text_input(
+                    HostToolsTextInput::RedisCreateKeyTtl,
                     replacement_range,
                     text,
                     cx,
@@ -3945,6 +4173,7 @@ fn ime_target_is_secret(target: WorkspaceImeTarget) -> bool {
                 | NewConnectionField::JumpPassphrase
         ) | WorkspaceImeTarget::KeyboardInteractive(_)
             | WorkspaceImeTarget::HostTmuxDialogInput
+            | WorkspaceImeTarget::HostRedisPassword
     ) || matches!(target, WorkspaceImeTarget::Settings(input) if input.is_secret())
         || matches!(target, WorkspaceImeTarget::SessionManager(input) if input.is_secret())
         || matches!(
