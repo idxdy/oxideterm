@@ -25,6 +25,7 @@ impl ContextSidebarTool {
             Self::Processes => settings.processes_enabled,
             Self::Services => settings.services_enabled,
             Self::Logs => settings.logs_enabled,
+            Self::Ecapture => settings.ecapture_enabled,
             Self::Tmux => settings.tmux_enabled,
             Self::Docker => settings.docker_enabled,
             Self::Ports => settings.ports_enabled,
@@ -46,6 +47,7 @@ impl ContextSidebarTool {
             Self::Processes => settings.processes_enabled = enabled,
             Self::Services => settings.services_enabled = enabled,
             Self::Logs => settings.logs_enabled = enabled,
+            Self::Ecapture => settings.ecapture_enabled = enabled,
             Self::Tmux => settings.tmux_enabled = enabled,
             Self::Docker => settings.docker_enabled = enabled,
             Self::Ports => settings.ports_enabled = enabled,
@@ -228,6 +230,8 @@ impl HostToolsEntity {
 // Each Host Tools module owns its complete UI and request lifecycle.
 #[path = "health/docker.rs"]
 mod docker;
+#[path = "health/ecapture.rs"]
+mod ecapture;
 #[path = "health/filesystems.rs"]
 mod filesystems;
 #[path = "health/gpu.rs"]
@@ -328,6 +332,7 @@ impl WorkspaceApp {
                 ContextSidebarTool::Processes => self.render_host_processes_panel(cx),
                 ContextSidebarTool::Services => self.render_host_services_panel(cx),
                 ContextSidebarTool::Logs => self.render_host_logs_panel(cx),
+                ContextSidebarTool::Ecapture => self.render_host_ecapture_panel(cx),
                 ContextSidebarTool::Tmux => self.render_host_tmux_panel(cx),
                 ContextSidebarTool::Docker => self.render_host_docker_panel(cx),
                 ContextSidebarTool::Ports => self.render_host_ports_panel(cx),

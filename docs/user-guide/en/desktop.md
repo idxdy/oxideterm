@@ -12,7 +12,7 @@ Use the activity bars and connection entries to reach app surfaces:
 
 - Sessions: create, open, group, and monitor SSH work.
 - File manager and SFTP: browse files and manage transfers.
-- Connection pool, monitor, and Host Tools: inspect connection runtime state, resource snapshots, processes, containers, services, tmux, logs, ports, and metrics.
+- Connection pool, monitor, and Host Tools: inspect connection runtime state, resource snapshots, processes, containers, services, tmux, eCapture, logs, ports, and metrics.
 - Remote desktop: install and enable the RDP or VNC plugin, then open a profile from New Connection or Session Manager. For WSL Graphics on Windows, use New Connection → WSL Graphics.
 - Plugins: manage installed plugins and plugin settings.
 - Cloud sync: inspect sync status and run sync actions.

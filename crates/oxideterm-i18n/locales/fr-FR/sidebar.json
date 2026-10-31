@@ -71,6 +71,7 @@
       "processes": "Processus",
       "services": "Services",
       "logs": "Journaux",
+      "ecapture": "eCapture",
       "tmux": "tmux",
       "docker": "Docker",
       "tmux_management": "Gestion de tmux",
@@ -360,6 +361,109 @@
         "follow_opened": "Suivi des journaux {{preset}}.",
         "partial_support": "Les journaux de l’hôte sont partiels sur {{os}}.",
         "unknown_error": "Erreur inconnue"
+      }
+    },
+    "host_ecapture": {
+      "search_placeholder": "Rechercher des événements...",
+      "events": "événements",
+      "dropped": "ignorés",
+      "skipped": "omis",
+      "unavailable": "eCapture n'est pas disponible sur cet hôte.",
+      "unavailable_hint": "Installez eCapture et autorisez sudo sans mot de passe pour capturer le texte TLS.",
+      "waiting": "En attente de trafic TLS...",
+      "empty": "Aucun événement capturé ne correspond",
+      "empty_idle": "Choisissez un modèle et démarrez une capture.",
+      "truncated": "tronqué",
+      "status": {
+        "checking": "Vérification de l'hôte...",
+        "running": "En cours",
+        "stopped": "Arrêté",
+        "probe_failed": "Échec de la vérification"
+      },
+      "capability": {
+        "full": "Prêt",
+        "partial": "Root requis",
+        "unknown": "Inconnu"
+      },
+      "templates": {
+        "libssl": "libssl",
+        "node": "Node.js",
+        "gotls": "Go",
+        "docker": "Docker"
+      },
+      "fields": {
+        "libssl_path": "Chemin libssl",
+        "libssl_placeholder": "Détection automatique (facultatif)",
+        "node_path": "Binaire Node ou libssl",
+        "node_placeholder": "/usr/local/bin/node",
+        "go_binary": "Binaire Go",
+        "go_placeholder": "/opt/app/server",
+        "container": "Conteneur",
+        "container_placeholder": "api-gateway",
+        "pid": "Filtre PID",
+        "pid_placeholder": "Tous les processus"
+      },
+      "actions": {
+        "start": "Démarrer",
+        "stop": "Arrêter",
+        "clear": "Effacer",
+        "refresh": "Actualiser eCapture"
+      },
+      "filters": {
+        "all": "Tout",
+        "requests": "Requêtes",
+        "responses": "Réponses"
+      },
+      "direction": {
+        "read": "reçu",
+        "write": "envoyé",
+        "unknown": "données"
+      },
+      "kinds": {
+        "data": "Données",
+        "request": "Requête",
+        "response": "Réponse"
+      },
+      "columns": {
+        "direction": "Sens",
+        "event": "Événement",
+        "pid": "PID",
+        "length": "Longueur",
+        "time": "Heure",
+        "connection": "Connexion",
+        "fd": "FD"
+      },
+      "validation": {
+        "target_required": "Saisissez une cible pour ce modèle.",
+        "target_too_long": "Le chemin cible est trop long.",
+        "target_invalid": "La cible contient des caractères non pris en charge.",
+        "pid_invalid": "Le PID doit être un nombre.",
+        "privilege_required": "eCapture nécessite root ou sudo sans mot de passe sur l'hôte.",
+        "binary_missing": "Installez eCapture sur l'hôte avant de démarrer une capture.",
+        "probe_pending": "Attendez la fin de la vérification de l'hôte."
+      },
+      "confirm": {
+        "start_title": "Démarrer eCapture",
+        "start_desc": "eCapture attache des sondes eBPF aux bibliothèques TLS et lit le trafic en clair. Il s'exécute en root et écrit les données capturées dans un fichier temporaire sur l'hôte.",
+        "start_action": "Démarrer la capture",
+        "clear_title": "Effacer les données de capture",
+        "clear_desc": "Supprimer les événements stockés sur cet hôte ? La capture doit d'abord être arrêtée.",
+        "clear_action": "Supprimer les données",
+        "cancel": "Annuler"
+      },
+      "toast": {
+        "busy": "Une tâche eCapture est déjà en cours.",
+        "connection_missing": "La connexion sélectionnée n'est plus disponible.",
+        "probe_failed": "Impossible de vérifier eCapture sur cet hôte.",
+        "snapshot_failed": "Impossible de lire les événements eCapture.",
+        "started": "Capture eCapture démarrée.",
+        "start_failed": "eCapture n'a pas pu démarrer.",
+        "stopped": "Capture eCapture arrêtée.",
+        "stop_failed": "eCapture ne s'est pas arrêté.",
+        "cleared": "Événements capturés supprimés.",
+        "clear_failed": "Impossible de supprimer les événements capturés.",
+        "stream_limit": "Capture arrêtée après la limite de 64 MiB.",
+        "unknown_error": "Erreur eCapture inconnue"
       }
     },
     "host_tmux": {

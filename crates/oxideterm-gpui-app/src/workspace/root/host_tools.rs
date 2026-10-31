@@ -564,6 +564,65 @@ impl WorkspaceApp {
                     )
                 }
             }
+            HostToolsNotice::EcaptureBusy => (
+                self.i18n.t("sidebar.host_ecapture.toast.busy"),
+                TerminalNoticeVariant::Warning,
+            ),
+            HostToolsNotice::EcaptureConnectionMissing => (
+                self.i18n
+                    .t("sidebar.host_ecapture.toast.connection_missing"),
+                TerminalNoticeVariant::Error,
+            ),
+            HostToolsNotice::EcaptureUnavailable => (
+                self.i18n.t("sidebar.host_ecapture.unavailable"),
+                TerminalNoticeVariant::Error,
+            ),
+            HostToolsNotice::EcaptureProbeFailed => (
+                self.i18n.t("sidebar.host_ecapture.toast.probe_failed"),
+                TerminalNoticeVariant::Error,
+            ),
+            HostToolsNotice::EcaptureSnapshotFailed => (
+                self.i18n.t("sidebar.host_ecapture.toast.snapshot_failed"),
+                TerminalNoticeVariant::Error,
+            ),
+            HostToolsNotice::EcaptureStarted => (
+                self.i18n.t("sidebar.host_ecapture.toast.started"),
+                TerminalNoticeVariant::Success,
+            ),
+            HostToolsNotice::EcaptureStartFailed => (
+                self.i18n.t("sidebar.host_ecapture.toast.start_failed"),
+                TerminalNoticeVariant::Error,
+            ),
+            HostToolsNotice::EcaptureStopped { succeeded } => {
+                if succeeded {
+                    (
+                        self.i18n.t("sidebar.host_ecapture.toast.stopped"),
+                        TerminalNoticeVariant::Success,
+                    )
+                } else {
+                    (
+                        self.i18n.t("sidebar.host_ecapture.toast.stop_failed"),
+                        TerminalNoticeVariant::Error,
+                    )
+                }
+            }
+            HostToolsNotice::EcaptureCleared { succeeded } => {
+                if succeeded {
+                    (
+                        self.i18n.t("sidebar.host_ecapture.toast.cleared"),
+                        TerminalNoticeVariant::Success,
+                    )
+                } else {
+                    (
+                        self.i18n.t("sidebar.host_ecapture.toast.clear_failed"),
+                        TerminalNoticeVariant::Error,
+                    )
+                }
+            }
+            HostToolsNotice::EcaptureStreamLimit => (
+                self.i18n.t("sidebar.host_ecapture.toast.stream_limit"),
+                TerminalNoticeVariant::Warning,
+            ),
         };
         self.push_workspace_notice(
             TerminalNotice {

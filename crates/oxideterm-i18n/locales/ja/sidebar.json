@@ -71,6 +71,7 @@
       "processes": "プロセス",
       "services": "サービス",
       "logs": "ログ",
+      "ecapture": "eCapture",
       "tmux": "tmux",
       "docker": "Docker",
       "tmux_management": "tmux 管理",
@@ -360,6 +361,109 @@
         "follow_opened": "{{preset}} ログを追跡しています。",
         "partial_support": "{{os}} でのホストログは一部対応です。",
         "unknown_error": "不明なエラー"
+      }
+    },
+    "host_ecapture": {
+      "search_placeholder": "イベントを検索...",
+      "events": "イベント",
+      "dropped": "破棄",
+      "skipped": "スキップ",
+      "unavailable": "このホストでは eCapture を利用できません。",
+      "unavailable_hint": "eCapture をインストールし、パスワードなしの sudo を許可すると TLS 平文を取得できます。",
+      "waiting": "TLS 通信を待機中...",
+      "empty": "一致する取得イベントはありません",
+      "empty_idle": "テンプレートを選んで取得を開始してください。",
+      "truncated": "切り詰め",
+      "status": {
+        "checking": "ホストを確認中...",
+        "running": "実行中",
+        "stopped": "停止",
+        "probe_failed": "確認に失敗"
+      },
+      "capability": {
+        "full": "準備完了",
+        "partial": "root が必要",
+        "unknown": "不明"
+      },
+      "templates": {
+        "libssl": "libssl",
+        "node": "Node.js",
+        "gotls": "Go",
+        "docker": "Docker"
+      },
+      "fields": {
+        "libssl_path": "libssl パス",
+        "libssl_placeholder": "自動検出（任意）",
+        "node_path": "Node バイナリまたは libssl",
+        "node_placeholder": "/usr/local/bin/node",
+        "go_binary": "Go バイナリ",
+        "go_placeholder": "/opt/app/server",
+        "container": "コンテナ",
+        "container_placeholder": "api-gateway",
+        "pid": "PID フィルタ",
+        "pid_placeholder": "すべてのプロセス"
+      },
+      "actions": {
+        "start": "開始",
+        "stop": "停止",
+        "clear": "削除",
+        "refresh": "eCapture を更新"
+      },
+      "filters": {
+        "all": "すべて",
+        "requests": "リクエスト",
+        "responses": "レスポンス"
+      },
+      "direction": {
+        "read": "受信",
+        "write": "送信",
+        "unknown": "データ"
+      },
+      "kinds": {
+        "data": "データ",
+        "request": "リクエスト",
+        "response": "レスポンス"
+      },
+      "columns": {
+        "direction": "方向",
+        "event": "イベント",
+        "pid": "PID",
+        "length": "長さ",
+        "time": "時刻",
+        "connection": "接続",
+        "fd": "FD"
+      },
+      "validation": {
+        "target_required": "このテンプレートの対象を入力してください。",
+        "target_too_long": "対象パスが長すぎます。",
+        "target_invalid": "対象に使用できない文字が含まれています。",
+        "pid_invalid": "PID は数値で入力してください。",
+        "privilege_required": "eCapture にはホストの root またはパスワードなしの sudo が必要です。",
+        "binary_missing": "取得を開始する前にホストへ eCapture をインストールしてください。",
+        "probe_pending": "ホストの確認が終わるまでお待ちください。"
+      },
+      "confirm": {
+        "start_title": "eCapture を開始",
+        "start_desc": "eCapture は TLS ライブラリに eBPF プローブを接続し、平文通信を読み取ります。root で実行され、取得データはホストの一時ファイルに書き込まれます。",
+        "start_action": "取得を開始",
+        "clear_title": "取得データを削除",
+        "clear_desc": "このホストに保存されたイベントを削除しますか？取得を先に停止する必要があります。",
+        "clear_action": "データを削除",
+        "cancel": "キャンセル"
+      },
+      "toast": {
+        "busy": "eCapture の処理がすでに実行中です。",
+        "connection_missing": "選択した接続は利用できません。",
+        "probe_failed": "このホストで eCapture を確認できませんでした。",
+        "snapshot_failed": "eCapture イベントを読み取れませんでした。",
+        "started": "eCapture の取得を開始しました。",
+        "start_failed": "eCapture を開始できませんでした。",
+        "stopped": "eCapture の取得を停止しました。",
+        "stop_failed": "eCapture が停止しませんでした。",
+        "cleared": "取得イベントを削除しました。",
+        "clear_failed": "取得イベントを削除できませんでした。",
+        "stream_limit": "64 MiB の上限に達したため取得を停止しました。",
+        "unknown_error": "不明な eCapture エラー"
       }
     },
     "host_tmux": {
