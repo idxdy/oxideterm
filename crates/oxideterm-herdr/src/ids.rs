@@ -35,3 +35,20 @@ pub(crate) fn validated_name(name: &str) -> Result<String, String> {
     }
     Ok(name.to_string())
 }
+
+/// Herdr itself only accepts session names made of ASCII letters, numbers,
+/// '.', '_' and '-'. Attach lines are typed into a terminal whose shell is
+/// unknown (cmd.exe, PowerShell, or POSIX sh), so the name travels unquoted
+/// and the restricted grammar keeps it safe for every one of them.
+pub(crate) fn validated_session_name(name: &str) -> Result<String, String> {
+    let name = name.trim();
+    if name.is_empty()
+        || name.len() > HERDR_NAME_MAX_LEN
+        || !name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+    {
+        return Err("Invalid herdr session name.".to_string());
+    }
+    Ok(name.to_string())
+}

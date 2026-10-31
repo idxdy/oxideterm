@@ -1384,13 +1384,7 @@ impl HostToolsEntity {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(os_type) = self.connection_os_type(&connection_id) else {
-            cx.emit(HostToolsEvent::ShowNotice(
-                HostToolsNotice::HerdrConnectionMissing,
-            ));
-            return;
-        };
-        let command = match build_herdr_attach_command(&os_type, &target) {
+        let command = match build_herdr_attach_command(&target) {
             Ok(command) => command,
             Err(_) => {
                 cx.emit(HostToolsEvent::ShowNotice(
