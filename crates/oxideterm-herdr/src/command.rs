@@ -6,7 +6,7 @@
 //! PowerShell on Windows, POSIX sh elsewhere.
 
 use crate::HERDR_READ_LINES;
-use crate::ids::{validated_id, validated_name};
+use crate::ids::{validated_id, validated_name, validated_session_name};
 use crate::quote::{posix_shell_command, powershell_quote, shell_quote, windows_command};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -165,41 +165,24 @@ pub fn build_herdr_read_command(
     Ok(HerdrCaptureCommand { command })
 }
 
-pub fn build_herdr_attach_command(
-    os_type: &str,
-    target: &HerdrAttachTarget,
-) -> Result<String, String> {
-    // The attach line is typed into the target terminal, so the session name
-    // is remote-authored and must be quoted for that terminal's shell.
-    let windows = is_windows_os(os_type);
+pub fn build_herdr_attach_command(target: &HerdrAttachTarget) -> Result<String, String> {
+    // The attach line is typed into the target terminal, whose shell is not
+    // known here (cmd.exe, PowerShell, or POSIX sh). Herdr's own grammar keeps
+    // session names and pane ids free of quoting-sensitive characters, so the
+    // line carries them unquoted and parses the same in every shell.
     Ok(match target {
         HerdrAttachTarget::Default => "herdr".to_string(),
         HerdrAttachTarget::Session { name } => {
-            let name = validated_name(name)?;
-            let name = if windows {
-                powershell_quote(&name)
-            } else {
-                shell_quote(&name)
-            };
+            let name = validated_session_name(name)?;
             format!("herdr session attach {name}")
         }
         HerdrAttachTarget::NewSession { name } => {
-            let name = validated_name(name)?;
-            let name = if windows {
-                powershell_quote(&name)
-            } else {
-                shell_quote(&name)
-            };
+            let name = validated_session_name(name)?;
             format!("herdr --session {name}")
         }
         HerdrAttachTarget::Agent { session, pane_id } => {
             let pane_id = validated_id(pane_id)?;
-            let session = validated_name(session)?;
-            let session = if windows {
-                powershell_quote(&session)
-            } else {
-                shell_quote(&session)
-            };
+            let session = validated_session_name(session)?;
             format!("herdr --session {session} agent attach {pane_id}")
         }
     })
@@ -420,60 +403,42 @@ mod tests {
             .is_err()
         );
 
-        let attach = build_herdr_attach_command(
-            "Linux",
-            &HerdrAttachTarget::Agent {
-                session: "default".to_string(),
-                pane_id: "wA:pC".to_string(),
-            },
-        )
+        let attach = build_herdr_attach_command(&HerdrAttachTarget::Agent {
+            session: "default".to_string(),
+            pane_id: "wA:pC".to_string(),
+        })
         .unwrap();
-        assert_eq!(attach, "herdr --session 'default' agent attach wA:pC");
+        assert_eq!(attach, "herdr --session default agent attach wA:pC");
         assert!(
-            build_herdr_attach_command(
-                "Linux",
-                &HerdrAttachTarget::Agent {
-                    session: "default".to_string(),
-                    pane_id: "wA; rm".to_string()
-                }
-            )
+            build_herdr_attach_command(&HerdrAttachTarget::Agent {
+                session: "default".to_string(),
+                pane_id: "wA; rm".to_string()
+            })
             .is_err()
         );
 
-        // Session names are remote-authored and typed into a terminal.
-        let session = build_herdr_attach_command(
-            "Linux",
-            &HerdrAttachTarget::Session {
-                name: "work space".to_string(),
-            },
-        )
+        // Herdr restricts session names to letters, numbers, '.', '_' and '-',
+        // so the attach line carries them unquoted and parses in cmd.exe,
+        // PowerShell, and POSIX shells alike.
+        let session = build_herdr_attach_command(&HerdrAttachTarget::Session {
+            name: "work-2".to_string(),
+        })
         .unwrap();
-        assert_eq!(session, "herdr session attach 'work space'");
-        let windows_session = build_herdr_attach_command(
-            "Windows",
-            &HerdrAttachTarget::Session {
-                name: "it's work".to_string(),
-            },
-        )
+        assert_eq!(session, "herdr session attach work-2");
+        let created = build_herdr_attach_command(&HerdrAttachTarget::NewSession {
+            name: "my_work.1".to_string(),
+        })
         .unwrap();
-        assert_eq!(windows_session, "herdr session attach 'it''s work'");
-        let created = build_herdr_attach_command(
-            "Linux",
-            &HerdrAttachTarget::NewSession {
-                name: "my work".to_string(),
-            },
-        )
-        .unwrap();
-        assert_eq!(created, "herdr --session 'my work'");
-        assert!(
-            build_herdr_attach_command(
-                "Linux",
-                &HerdrAttachTarget::Session {
-                    name: "line\nbreak".to_string()
-                }
-            )
-            .is_err()
-        );
+        assert_eq!(created, "herdr --session my_work.1");
+        for invalid in ["work space", "it's work", "line\nbreak", ""] {
+            assert!(
+                build_herdr_attach_command(&HerdrAttachTarget::Session {
+                    name: invalid.to_string()
+                })
+                .is_err(),
+                "{invalid:?} must not reach an attach line"
+            );
+        }
 
         let stop = action(
             "default",

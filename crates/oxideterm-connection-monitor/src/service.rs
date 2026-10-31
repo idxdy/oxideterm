@@ -170,14 +170,19 @@ const SERVICE_SAMPLE_COMMAND_BSD: &str = concat!(
 );
 
 const SERVICE_SAMPLE_COMMAND_WINDOWS: &str = concat!(
+    // Service descriptions are localized; the capture decodes UTF-8, so the
+    // console writer must emit UTF-8 instead of the OEM code page.
+    "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;$OutputEncoding=[System.Text.Encoding]::UTF8;",
     "Write-Output '===SERVICES===';",
     "Write-Output ('__OXIDE_SERVICE_CAPABILITY__'+[char]9+'partial'+[char]9+'windows_powershell');",
     "try{",
     "Get-CimInstance Win32_Service|ForEach-Object{",
-    "$pid=if($_.ProcessId -and $_.ProcessId -ne 0){[string]$_.ProcessId}else{''};",
+    // `$PID` is a read-only automatic variable, so the service PID needs its
+    // own name; assigning to `$PID` aborts the pipeline.
+    "$procId=if($_.ProcessId -and $_.ProcessId -ne 0){[string]$_.ProcessId}else{''};",
     "$enabled=if($_.StartMode){[string]$_.StartMode}else{'unknown'};",
     "$desc=if($_.DisplayName){[string]$_.DisplayName}else{[string]$_.Name};",
-    "Write-Output ('ROW'+[char]9+$_.Name+[char]9+''+[char]9+$_.State+[char]9+$_.Status+[char]9+$enabled+[char]9+$pid+[char]9+$desc)",
+    "Write-Output ('ROW'+[char]9+$_.Name+[char]9+''+[char]9+$_.State+[char]9+$_.Status+[char]9+$enabled+[char]9+$procId+[char]9+$desc)",
     "}",
     "}catch{Write-Output ('__OXIDE_SERVICE_ERROR__'+[char]9+$_.Exception.Message)};",
     "Write-Output '===SERVICES_END===';"
@@ -725,9 +730,13 @@ fn build_windows_service_logs_command(service_id: &str, follow: bool) -> String 
     let needle = powershell_quote(service_id);
     let body = "Get-WinEvent -LogName System -MaxEvents 200 -ErrorAction SilentlyContinue | Where-Object { $_.ProviderName -like ('*' + $name + '*') -or $_.Message -like ('*' + $name + '*') } | Select-Object -First 200 | ForEach-Object { $_.TimeCreated.ToString('s') + ' ' + $_.ProviderName + ' ' + $_.Message }";
     let script = if follow {
-        format!("$name={needle}; while($true){{ {body}; Start-Sleep -Seconds 2 }}")
+        format!(
+            "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;$OutputEncoding=[System.Text.Encoding]::UTF8;$name={needle}; while($true){{ {body}; Start-Sleep -Seconds 2 }}"
+        )
     } else {
-        format!("$name={needle}; {body}")
+        format!(
+            "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;$OutputEncoding=[System.Text.Encoding]::UTF8;$name={needle}; {body}"
+        )
     };
     format!(
         "powershell -NoProfile -ExecutionPolicy Bypass -Command \"{}\"",

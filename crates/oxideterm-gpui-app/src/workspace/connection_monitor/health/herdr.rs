@@ -59,8 +59,7 @@ impl WorkspaceApp {
                 .map(|connection| connection.connection_id.as_str())
         });
         let terminal_available = selected_connection_id
-            .and_then(|connection_id| self.node_router.node_id_for_connection(connection_id))
-            .is_some_and(|node_id| self.ssh_nodes.contains_key(&node_id));
+            .is_some_and(|connection_id| self.host_tools_terminal_available(connection_id));
         let search_ime = self
             .host_tools_plain_text_ime_frame(HostToolsTextInput::HerdrSearch, cx)
             .expect("herdr search is a non-secret Host Tools input");
@@ -1384,13 +1383,7 @@ impl HostToolsEntity {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(os_type) = self.connection_os_type(&connection_id) else {
-            cx.emit(HostToolsEvent::ShowNotice(
-                HostToolsNotice::HerdrConnectionMissing,
-            ));
-            return;
-        };
-        let command = match build_herdr_attach_command(&os_type, &target) {
+        let command = match build_herdr_attach_command(&target) {
             Ok(command) => command,
             Err(_) => {
                 cx.emit(HostToolsEvent::ShowNotice(

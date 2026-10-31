@@ -106,6 +106,9 @@
     "active_session_count": "Phiên đang hoạt động: {{count}}",
     "no_sessions": "Không có phiên",
     "add_new_connection": "Nhấn + để thêm kết nối",
+    "host_connection": {
+      "local_machine": "Máy này"
+    },
     "host_gpu": {
       "count_suffix": "bộ tăng tốc",
       "refresh_interval": "Cập nhật mỗi 2 giây",
@@ -787,7 +790,8 @@
         "dnf": "dnf",
         "yum": "yum",
         "pacman": "pacman",
-        "brew": "Homebrew"
+        "brew": "Homebrew",
+        "winget": "winget"
       },
       "columns": {
         "package": "Gói",

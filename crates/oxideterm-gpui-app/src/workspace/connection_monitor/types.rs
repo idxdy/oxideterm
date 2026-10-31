@@ -220,6 +220,8 @@ pub(super) struct MonitorConnectionOption {
     pub(super) host: String,
     pub(super) port: u16,
     pub(super) username: String,
+    // The local target has no endpoint, so it carries its localized label.
+    pub(super) label: Option<String>,
 }
 
 impl MonitorConnectionOption {
@@ -229,6 +231,7 @@ impl MonitorConnectionOption {
             host: connection.host,
             port: connection.port,
             username: connection.username,
+            label: None,
         }
     }
 
@@ -238,6 +241,17 @@ impl MonitorConnectionOption {
             host: summary.host.clone(),
             port: summary.port,
             username: summary.username.clone(),
+            label: None,
+        }
+    }
+
+    pub(super) fn local(label: String) -> Self {
+        Self {
+            connection_id: LOCAL_HOST_CONNECTION_ID.to_string(),
+            host: String::new(),
+            port: 0,
+            username: String::new(),
+            label: Some(label),
         }
     }
 }
@@ -1042,6 +1056,7 @@ pub(in crate::workspace) struct HostToolsMessages {
     pub(super) tmux_unknown_error: String,
     pub(super) tmux_unavailable: String,
     pub(super) herdr_unknown_error: String,
+    pub(super) local_connection_label: String,
 }
 
 impl HostToolsMessages {
@@ -1057,6 +1072,7 @@ impl HostToolsMessages {
             tmux_unknown_error: i18n.t("sidebar.host_tmux.toast.unknown_error"),
             tmux_unavailable: i18n.t("sidebar.host_tmux.unavailable"),
             herdr_unknown_error: i18n.t("sidebar.host_herdr.toast.unknown_error"),
+            local_connection_label: i18n.t("sidebar.host_connection.local_machine"),
         }
     }
 }
