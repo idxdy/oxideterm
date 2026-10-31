@@ -105,6 +105,9 @@
     "active_session_count": "Active sessions: {{count}}",
     "no_sessions": "No Sessions",
     "add_new_connection": "Click + to add a new connection",
+    "host_connection": {
+      "local_machine": "This machine"
+    },
     "host_gpu": {
       "count_suffix": "accelerators",
       "refresh_interval": "Updates every 2 seconds",
@@ -705,7 +708,8 @@
         "dnf": "dnf",
         "yum": "yum",
         "pacman": "pacman",
-        "brew": "Homebrew"
+        "brew": "Homebrew",
+        "winget": "winget"
       },
       "columns": {
         "package": "Package",

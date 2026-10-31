@@ -23,7 +23,9 @@ use crate::{
 };
 
 pub const RESOURCE_SAMPLE_INTERVAL: Duration = Duration::from_secs(10);
-pub const RESOURCE_SAMPLE_TIMEOUT: Duration = Duration::from_secs(5);
+// A full Windows sample (CIM system info, GPU counters, process table) takes
+// about four seconds on a warm machine; the timeout only bounds hung reads.
+pub const RESOURCE_SAMPLE_TIMEOUT: Duration = Duration::from_secs(10);
 pub const RESOURCE_CHANNEL_OPEN_TIMEOUT: Duration = Duration::from_secs(10);
 // Host Tools samples include process and Docker tables. Keep enough room for
 // normal inventories so SSH capture truncation does not look like a parser failure.
@@ -598,7 +600,11 @@ fn build_windows_sample_command(
     config: ResourceSamplingConfig,
     include_system_info: bool,
 ) -> String {
-    let mut script = String::from("$ErrorActionPreference='SilentlyContinue';");
+    let mut script = String::from(
+        // Metric text (OS name, process names) is localized; the capture and
+        // the SSH channel decode UTF-8, so the console writer must emit UTF-8.
+        "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;$OutputEncoding=[System.Text.Encoding]::UTF8;$ErrorActionPreference='SilentlyContinue';",
+    );
     if config.system || config.processes {
         script.push_str("$os=Get-CimInstance Win32_OperatingSystem;");
     }
@@ -618,8 +624,11 @@ fn build_windows_sample_command(
     }
     if config.system {
         script.push_str(concat!(
+            // One Win32_Processor query feeds both the load average and the
+            // logical core count; each CIM call costs about a second.
+            "$cpuInfo=Get-CimInstance Win32_Processor;",
             "Write-Output '===CPU_DIRECT===';",
-            "$cpu=(Get-CimInstance Win32_Processor|Measure-Object -Property LoadPercentage -Average).Average;",
+            "$cpu=($cpuInfo|Measure-Object -Property LoadPercentage -Average).Average;",
             "if($cpu -ne $null){[Math]::Round($cpu,1)};",
             "Write-Output '===MEMINFO===';",
             "if($os){",
@@ -631,7 +640,7 @@ fn build_windows_sample_command(
             "Write-Output ('SwapFree: '+$sf+' kB');",
             "};",
             "Write-Output '===NPROC===';",
-            "$cores=(Get-CimInstance Win32_Processor|Measure-Object -Property NumberOfLogicalProcessors -Sum).Sum;",
+            "$cores=($cpuInfo|Measure-Object -Property NumberOfLogicalProcessors -Sum).Sum;",
             "if($cores){$cores};",
             "Write-Output '===DISKS===';",
             "Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3'|ForEach-Object{",
@@ -650,22 +659,15 @@ fn build_windows_sample_command(
             "Write-Output '===GPUS===';",
             "$gpuControllers=@(Get-CimInstance Win32_VideoController);",
             "$gpuUtil=@{};$gpuMem=@{};",
+            // Both counter sets travel in one Get-Counter pass; each pass costs
+            // more than a second on Windows.
             "try{",
-            "$samples=(Get-Counter '\\GPU Engine(*)\\Utilization Percentage').CounterSamples;",
+            "$samples=(Get-Counter @('\\GPU Engine(*)\\Utilization Percentage','\\GPU Adapter Memory(*)\\Dedicated Usage')).CounterSamples;",
             "foreach($sample in $samples){",
             "$instance=$sample.InstanceName;",
             "$phys=0;",
             "if($instance -match 'phys_([0-9]+)'){$phys=[int]$matches[1]};",
-            "$gpuUtil[$phys]=[double]($gpuUtil[$phys])+[double]$sample.CookedValue",
-            "}",
-            "}catch{};",
-            "try{",
-            "$memSamples=(Get-Counter '\\GPU Adapter Memory(*)\\Dedicated Usage').CounterSamples;",
-            "foreach($sample in $memSamples){",
-            "$instance=$sample.InstanceName;",
-            "$phys=0;",
-            "if($instance -match 'phys_([0-9]+)'){$phys=[int]$matches[1]};",
-            "$gpuMem[$phys]=[double]($gpuMem[$phys])+[double]$sample.CookedValue",
+            "if($sample.Path -like '*GPU Adapter Memory*'){$gpuMem[$phys]=[double]($gpuMem[$phys])+[double]$sample.CookedValue}else{$gpuUtil[$phys]=[double]($gpuUtil[$phys])+[double]$sample.CookedValue}",
             "}",
             "}catch{};",
             "for($i=0;$i -lt $gpuControllers.Count;$i++){",
@@ -674,7 +676,7 @@ fn build_windows_sample_command(
             "$total=if($gpu.AdapterRAM){[Math]::Round(([double]$gpu.AdapterRAM)/1MB)}else{''};",
             "$used=if($gpuMem.ContainsKey($i)){[Math]::Round(([double]$gpuMem[$i])/1MB)}else{''};",
             "$util=if($gpuUtil.ContainsKey($i)){[Math]::Min(100,[Math]::Round([double]$gpuUtil[$i],1))}else{''};",
-            "Write-Output ($i+','+$name+','+$util+','+$used+','+$total)",
+            "Write-Output (''+$i+','+$name+','+$util+','+$used+','+$total)",
             "};"
         ));
     }
@@ -682,12 +684,24 @@ fn build_windows_sample_command(
         script.push_str(concat!(
             "Write-Output '===TOPPROCS===';",
             "$memTotal=if($os){[double]$os.TotalVisibleMemorySize*1024}else{0};",
+            // `Get-Process` exposes total CPU seconds, not a rate. Sample each
+            // process twice and report the delta over the measured window as a
+            // percentage of one core, matching `ps %cpu` (multi-core sums can
+            // exceed 100).
+            "$cpuStart=Get-Date;$cpuFirst=@{};",
+            "Get-Process|ForEach-Object{if($null -ne $_.CPU){$cpuFirst[[string]$_.Id]=$_.CPU}};",
+            "Start-Sleep -Milliseconds 300;",
+            "$cpuSpan=[Math]::Max(1,((Get-Date)-$cpuStart).TotalMilliseconds);",
             "Get-Process|Sort-Object WorkingSet64 -Descending|Select-Object -First 200|ForEach-Object{",
             "$pct=if($memTotal -gt 0){[Math]::Round(($_.WorkingSet64*100)/$memTotal,1)}else{0};",
-            "$cpu=if($_.CPU -ne $null){[Math]::Round($_.CPU,1)}else{0};",
+            "$cpuPrev=$cpuFirst[[string]$_.Id];",
+            "$cpuDelta=if($null -ne $cpuPrev -and $null -ne $_.CPU){($_.CPU-$cpuPrev)*1000}else{0};",
+            "$cpu=if($cpuDelta -gt 0){[Math]::Round($cpuDelta/$cpuSpan*100,1)}else{0};",
             "$rss=[UInt64]$_.WorkingSet64;$vsz=[UInt64]$_.VirtualMemorySize64;",
             "$elapsed=if($_.StartTime){((Get-Date)-$_.StartTime).ToString()}else{''};",
-            "Write-Output ($_.Id+[char]9+''+[char]9+''+[char]9+''+[char]9+$cpu+[char]9+$pct+[char]9+[Math]::Round($rss/1024)+[char]9+[Math]::Round($vsz/1024)+[char]9+$elapsed+[char]9+$_.ProcessName+[char]9+$_.Path)",
+            // A numeric first operand keeps the whole `+` chain numeric in
+            // PowerShell, so the row must start as a string.
+            "Write-Output (''+$_.Id+[char]9+''+[char]9+''+[char]9+''+[char]9+$cpu+[char]9+$pct+[char]9+[Math]::Round($rss/1024)+[char]9+[Math]::Round($vsz/1024)+[char]9+$elapsed+[char]9+$_.ProcessName+[char]9+$_.Path)",
             "};"
         ));
     }

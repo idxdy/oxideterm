@@ -376,7 +376,10 @@ fn windows_log_script(preset: LogPreset, limit: usize, follow: bool) -> String {
         )
     };
     format!(
-        "Write-Output '===HOST_LOGS===';Write-Output ('__OXIDE_LOG_CAPABILITY__'+[char]9+'partial'+[char]9+'windows_powershell');{body}Write-Output '===HOST_LOGS_END===';"
+        // PowerShell 5.1 writes redirected output in the console OEM code page
+        // (936 on Chinese Windows), but the capture decodes UTF-8. Force UTF-8
+        // before any event text reaches stdout or the follow terminal.
+        "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;$OutputEncoding=[System.Text.Encoding]::UTF8;Write-Output '===HOST_LOGS===';Write-Output ('__OXIDE_LOG_CAPABILITY__'+[char]9+'partial'+[char]9+'windows_powershell');{body}Write-Output '===HOST_LOGS_END===';"
     )
 }
 
