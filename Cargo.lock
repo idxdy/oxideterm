@@ -7224,6 +7224,7 @@ name = "oxideterm-connection-monitor"
 version = "2.2.6"
 dependencies = [
  "chrono",
+ "oxideterm-herdr",
  "serde",
  "serde_json",
  "tokio",
@@ -7680,6 +7681,15 @@ version = "2.2.6"
 dependencies = [
  "gpui-pre",
  "oxideterm-theme",
+]
+
+[[package]]
+name = "oxideterm-herdr"
+version = "2.2.6"
+dependencies = [
+ "base64 0.22.1",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

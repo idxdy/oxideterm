@@ -72,6 +72,7 @@
       "services": "サービス",
       "logs": "ログ",
       "tmux": "tmux",
+      "herdr": "Herdr",
       "docker": "Docker",
       "tmux_management": "tmux 管理",
       "docker_management": "Docker 管理",
@@ -435,6 +436,87 @@
         "rename_session_placeholder": "セッション名",
         "rename_window_placeholder": "ウィンドウ名",
         "send_command_placeholder": "送信するコマンド"
+      }
+    },
+    "host_herdr": {
+      "unavailable": "このホストに herdr が見つかりません。",
+      "server_not_running": "herdr サーバーが実行されていません。アタッチボタンで起動してください。",
+      "sampling": "herdr の space を取得中...",
+      "empty": "herdr セッションがありません",
+      "workspace_empty": "このセッションに space はありません",
+      "error": "herdr コマンドが失敗しました: {{error}}",
+      "last_refreshed": "更新",
+      "panes_suffix": "pane",
+      "tabs_suffix": "tab",
+      "focused": "フォーカス",
+      "restore_error": "復元エラー",
+      "orphan_agent": "未リンクのエージェント",
+      "attach_title": "herdr",
+      "sessions_title": "セッション",
+      "row_space": "space",
+      "row_tab": "tab",
+      "row_pane": "pane",
+      "search_placeholder": "セッションを検索...",
+      "search_empty": "一致する項目はありません",
+      "status": {
+        "working": "実行中",
+        "blocked": "ブロック中",
+        "idle": "待機",
+        "done": "完了",
+        "unknown": "不明"
+      },
+      "actions": {
+        "refresh": "更新",
+        "attach": "herdr を起動 / アタッチ",
+        "agent_attach": "エージェントにアタッチ",
+        "session_attach": "セッションにアタッチ",
+        "session_stop": "セッションを停止",
+        "session_delete": "セッションを削除",
+        "new_session": "新規セッション",
+        "new_workspace": "新規 space",
+        "rename": "名前変更",
+        "close": "閉じる",
+        "send": "コマンドを実行",
+        "read": "出力を読む"
+      },
+      "confirm": {
+        "title": "herdr 操作の確認",
+        "cancel": "キャンセル",
+        "run": "確認",
+        "close_workspace": "space {{name}} を閉じますか？内部のすべての tab と pane が停止します。",
+        "close_pane": "pane {{name}} を閉じますか？実行中の処理が停止します。",
+        "close_tab": "tab {{name}} を閉じますか？内部のすべての pane が停止します。",
+        "stop_session": "セッション {{name}} を停止しますか？セッション内のすべての space とエージェントが停止します。",
+        "delete_session": "停止中のセッション {{name}} を削除しますか？保存された状態が削除されます。"
+      },
+      "inputs": {
+        "new_session": "新規セッション",
+        "new_session_hint": "セッション名",
+        "new_workspace": "新規 space",
+        "new_workspace_hint": "名前 [/リモートパス]",
+        "rename_workspace": "space 名を変更",
+        "rename_tab": "tab 名を変更",
+        "rename_pane": "pane 名を変更",
+        "rename_hint": "新しい名前",
+        "run_pane": "pane でコマンドを実行",
+        "run_pane_hint": "pane に入力するコマンド"
+      },
+      "read": {
+        "title": "出力: {{pane}}",
+        "loading": "出力を読み込み中...",
+        "empty": "出力はありません。",
+        "close": "閉じる"
+      },
+      "toast": {
+        "snapshot_already_running": "herdr スナップショットはすでに読み込み中です。",
+        "connection_missing": "選択した接続は利用できなくなりました。",
+        "action_already_running": "herdr 操作が既に実行中です。",
+        "action_failed": "herdr 操作に失敗しました。",
+        "action_succeeded": "herdr 操作が完了しました: {{target}}。",
+        "read_already_running": "ペイン出力はすでに読み込み中です。",
+        "read_failed": "ペイン出力の読み込みに失敗しました。",
+        "attach_opened": "ターミナルで herdr を開きました。",
+        "unknown_error": "不明なエラー"
       }
     },
     "host_schedules": {
