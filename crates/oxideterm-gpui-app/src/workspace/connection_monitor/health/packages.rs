@@ -79,7 +79,7 @@ impl HostToolsEntity {
                         cx,
                     ))
                     .child(self.render_host_package_search(&search_ime, tokens, i18n, cx))
-                    .child(self.render_host_package_filter_row(tokens, i18n, cx))
+                    .child(self.render_host_package_filter_row(snapshot, tokens, i18n, cx))
                     .child(self.render_host_package_status_row(
                         rows.len(),
                         selected_id.to_string(),
@@ -156,6 +156,7 @@ impl HostToolsEntity {
 
     fn render_host_package_filter_row(
         &self,
+        snapshot: Option<&ResourcePackageSnapshot>,
         tokens: &ThemeTokens,
         i18n: &I18n,
         cx: &mut Context<Self>,
@@ -166,17 +167,12 @@ impl HostToolsEntity {
             .items_center()
             .gap_1()
             .overflow_x_scroll();
-        for filter in [
-            PackageFilter::All,
-            PackageFilter::Upgradable,
-            PackageFilter::Installed,
-            PackageFilter::Services,
-            PackageFilter::Apt,
-            PackageFilter::Dnf,
-            PackageFilter::Yum,
-            PackageFilter::Pacman,
-            PackageFilter::Brew,
-        ] {
+        // Manager chips follow what the selected host reports, so the rail
+        // shows winget on Windows and apt/dnf/pacman/brew elsewhere.
+        let managers = snapshot
+            .map(|snapshot| snapshot.managers.as_slice())
+            .unwrap_or(&[]);
+        for filter in package_filter_options(managers) {
             row = row.child(self.render_host_package_filter_chip(filter, tokens, i18n, cx));
         }
         row.into_any_element()
@@ -630,7 +626,14 @@ impl HostToolsEntity {
         let package_name = entry.name.clone();
         let inspect_connection_id = connection_id.to_string();
         let inspect_manager = entry.manager.clone();
-        let inspect_package_name = entry.name.clone();
+        // Winget stores the package identifier in the repository column; the
+        // display name alone may match several packages or none.
+        let inspect_package_name =
+            if entry.manager == "winget" && !entry.repository.trim().is_empty() {
+                entry.repository.clone()
+            } else {
+                entry.name.clone()
+            };
         let inspect_title = format!(
             "{}: {}",
             i18n.t("sidebar.host_packages.inspect_title"),
@@ -1125,6 +1128,19 @@ impl HostToolsEntity {
                     ));
                 }
             }
+        }
+        // A manager filter only exists while the host reports that manager;
+        // otherwise the list would be empty with no chip to switch back.
+        let filter_manager = package_filter_manager(self.host_packages.filter);
+        let manager_present = filter_manager.is_some_and(|manager| {
+            self.host_packages
+                .snapshot
+                .as_ref()
+                .is_some_and(|snapshot| snapshot.managers.iter().any(|entry| entry.name == manager))
+        });
+        if filter_manager.is_some() && !manager_present {
+            self.host_packages.filter = PackageFilter::All;
+            self.host_packages.expanded_index = None;
         }
         cx.notify();
     }

@@ -105,6 +105,9 @@
     "active_session_count": "활성 세션: {{count}}",
     "no_sessions": "세션 없음",
     "add_new_connection": "+를 클릭하여 새 연결 추가",
+    "host_connection": {
+      "local_machine": "이 컴퓨터"
+    },
     "host_gpu": {
       "count_suffix": "가속기",
       "refresh_interval": "2초마다 업데이트",
@@ -705,7 +708,8 @@
         "dnf": "dnf",
         "yum": "yum",
         "pacman": "pacman",
-        "brew": "Homebrew"
+        "brew": "Homebrew",
+        "winget": "winget"
       },
       "columns": {
         "package": "패키지",

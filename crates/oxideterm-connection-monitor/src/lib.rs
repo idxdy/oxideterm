@@ -70,7 +70,8 @@ pub use package::{
     PackageCaptureCommand, PackageCommandCapability, PackageFilter, PackageInspectCommand,
     ResourcePackageEntry, ResourcePackageManager, ResourcePackageSnapshot, ResourcePackageStatus,
     build_package_inspect_command, build_package_snapshot_command, package_filter_label_key,
-    package_row_signature, package_status_label_key, parse_package_snapshot, visible_package_rows,
+    package_filter_manager, package_filter_options, package_row_signature,
+    package_status_label_key, parse_package_snapshot, visible_package_rows,
 };
 pub use port::{
     PortCaptureCommand, PortCommandCapability, PortFilter, ResourcePortEntry, ResourcePortSnapshot,
