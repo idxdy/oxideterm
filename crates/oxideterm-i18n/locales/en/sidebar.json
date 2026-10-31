@@ -72,6 +72,7 @@
       "services": "Services",
       "logs": "Logs",
       "tmux": "tmux",
+      "herdr": "Herdr",
       "docker": "Docker",
       "tmux_management": "tmux Management",
       "docker_management": "Docker Management",
@@ -105,6 +106,9 @@
     "active_session_count": "Active sessions: {{count}}",
     "no_sessions": "No Sessions",
     "add_new_connection": "Click + to add a new connection",
+    "host_connection": {
+      "local_machine": "This machine"
+    },
     "host_gpu": {
       "count_suffix": "accelerators",
       "refresh_interval": "Updates every 2 seconds",
@@ -437,6 +441,87 @@
         "send_command_placeholder": "Command to send"
       }
     },
+    "host_herdr": {
+      "unavailable": "herdr was not found on this host.",
+      "server_not_running": "The herdr server is not running. Use the attach button to launch it.",
+      "sampling": "Sampling herdr spaces...",
+      "empty": "No herdr sessions",
+      "workspace_empty": "No spaces in this session",
+      "error": "herdr command failed: {{error}}",
+      "last_refreshed": "Updated",
+      "panes_suffix": "pane",
+      "tabs_suffix": "tab",
+      "focused": "focused",
+      "restore_error": "restore error",
+      "orphan_agent": "unlinked agent",
+      "attach_title": "herdr",
+      "sessions_title": "Sessions",
+      "row_space": "space",
+      "row_tab": "tab",
+      "row_pane": "pane",
+      "search_placeholder": "Search sessions...",
+      "search_empty": "No matches",
+      "status": {
+        "working": "working",
+        "blocked": "blocked",
+        "idle": "idle",
+        "done": "done",
+        "unknown": "unknown"
+      },
+      "actions": {
+        "refresh": "Refresh",
+        "attach": "Launch / attach herdr",
+        "agent_attach": "Attach to agent",
+        "session_attach": "Attach to session",
+        "session_stop": "Stop session",
+        "session_delete": "Delete session",
+        "new_session": "New session",
+        "new_workspace": "New space",
+        "rename": "Rename",
+        "close": "Close",
+        "send": "Run command",
+        "read": "Read output"
+      },
+      "confirm": {
+        "title": "Confirm herdr action",
+        "cancel": "Cancel",
+        "run": "Confirm",
+        "close_workspace": "Close space {{name}}? Every tab and pane inside stops.",
+        "close_pane": "Close pane {{name}}? Work inside it stops.",
+        "close_tab": "Close tab {{name}}? Every pane in it stops.",
+        "stop_session": "Stop session {{name}}? Every space and agent in the session stops.",
+        "delete_session": "Delete stopped session {{name}}? Its saved state is removed."
+      },
+      "inputs": {
+        "new_session": "New session",
+        "new_session_hint": "Session name",
+        "new_workspace": "New space",
+        "new_workspace_hint": "name [/remote/path]",
+        "rename_workspace": "Rename space",
+        "rename_tab": "Rename tab",
+        "rename_pane": "Rename pane",
+        "rename_hint": "New name",
+        "run_pane": "Run command in pane",
+        "run_pane_hint": "Command to type into the pane"
+      },
+      "read": {
+        "title": "Output: {{pane}}",
+        "loading": "Loading output...",
+        "empty": "No output.",
+        "close": "Close"
+      },
+      "toast": {
+        "snapshot_already_running": "A herdr snapshot is already loading.",
+        "connection_missing": "The selected connection is no longer available.",
+        "action_already_running": "A herdr action is already running.",
+        "action_failed": "herdr action failed.",
+        "action_succeeded": "herdr action completed for {{target}}.",
+        "read_already_running": "Pane output is already loading.",
+        "read_failed": "Failed to read pane output.",
+        "attach_opened": "Opened herdr in a terminal window.",
+        "unknown_error": "Unknown error"
+      }
+    },
     "host_schedules": {
       "search_placeholder": "Search schedules...",
       "count_suffix": "tasks",
@@ -705,7 +790,8 @@
         "dnf": "dnf",
         "yum": "yum",
         "pacman": "pacman",
-        "brew": "Homebrew"
+        "brew": "Homebrew",
+        "winget": "winget"
       },
       "columns": {
         "package": "Package",

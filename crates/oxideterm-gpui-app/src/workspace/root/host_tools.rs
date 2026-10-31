@@ -1,5 +1,16 @@
 use super::super::*;
-use crate::workspace::connection_monitor::{HostToolsNotice, ScheduleActionNoticeKind};
+use crate::workspace::connection_monitor::{
+    HostToolsNotice, LOCAL_HOST_CONNECTION_ID, ScheduleActionNoticeKind,
+};
+
+/// Pane identity herdr exports into every process of a managed pane.
+const HERDR_PANE_ENV_VARS: [&str; 5] = [
+    "HERDR_ENV",
+    "HERDR_PANE_ID",
+    "HERDR_TAB_ID",
+    "HERDR_WORKSPACE_ID",
+    "HERDR_SOCKET_PATH",
+];
 
 impl WorkspaceApp {
     /// Handles the one-shot window work that must remain with workspace-owned nodes and tabs.
@@ -20,6 +31,18 @@ impl WorkspaceApp {
                 opened_notice,
                 missing_notice,
             } => {
+                if connection_id == LOCAL_HOST_CONNECTION_ID {
+                    self.open_local_host_tool_terminal(
+                        &command,
+                        title,
+                        opened_notice,
+                        missing_notice,
+                        window,
+                        cx,
+                    );
+                    cx.notify();
+                    return;
+                }
                 let Some(node_id) = self.node_router.node_id_for_connection(&connection_id) else {
                     self.push_host_tools_window_notice(
                         missing_notice,
@@ -62,8 +85,8 @@ impl WorkspaceApp {
             }
             HostToolsWindowIntent::BeginPlainTextImeSelection { input, event } => {
                 let Some(target) = workspace_ime_target_for_plain_host_tools_input(input) else {
-                    // Secret-bearing tmux dialog input never crosses this
-                    // plain-text frame boundary.
+                    // Secret-bearing dialog input never crosses this plain-text
+                    // frame boundary.
                     return;
                 };
                 self.ime_marked_text = None;
@@ -83,9 +106,56 @@ impl WorkspaceApp {
                 self.reset_standard_confirm_focus();
                 cx.notify();
             }
+            HostToolsWindowIntent::PrepareHerdrInputDialog => {
+                // Only focus state crosses this boundary; the zeroizing input stays in the Entity.
+                self.ime_marked_text = None;
+                self.clear_ime_selection();
+                self.show_active_input_caret(cx);
+                window.focus(&self.focus_handle, cx);
+                cx.notify();
+            }
             HostToolsWindowIntent::SetMonitoringEnabled { tool, enabled } => {
                 self.set_host_tool_monitoring_enabled(tool, enabled, cx);
             }
+        }
+    }
+
+    /// Runs a Host Tools attach line in a fresh local terminal tab. The PTY is
+    /// spawned with the tab, so the line queues immediately and executes once
+    /// the shell starts.
+    fn open_local_host_tool_terminal(
+        &mut self,
+        command: &str,
+        title: String,
+        opened_notice: String,
+        missing_notice: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let mut config = self.local_terminal_config();
+        // Herdr exports its pane identity into every process of a managed
+        // pane. A terminal created here is not that pane, and carrying the
+        // outer identity makes herdr reject the attach as a nested launch.
+        config.remove_env = HERDR_PANE_ENV_VARS
+            .iter()
+            .map(|name| (*name).to_string())
+            .collect();
+        let opened =
+            match self.create_local_terminal_tab_with_owned_session(config, title, window, cx) {
+                Ok((_session_id, session)) => {
+                    let mut line = command
+                        .trim_end_matches(['\r', '\n'])
+                        .replace("\r\n", "\r")
+                        .replace('\n', "\r");
+                    line.push('\r');
+                    session.lock().write_text(&line).is_ok()
+                }
+                Err(_) => false,
+            };
+        if opened {
+            self.push_host_tools_window_notice(opened_notice, TerminalNoticeVariant::Success, cx);
+        } else {
+            self.push_host_tools_window_notice(missing_notice, TerminalNoticeVariant::Error, cx);
         }
     }
 
@@ -298,6 +368,51 @@ impl WorkspaceApp {
                 } else {
                     (
                         self.i18n.t("sidebar.host_tmux.toast.action_failed"),
+                        TerminalNoticeVariant::Error,
+                    )
+                }
+            }
+            HostToolsNotice::HerdrSnapshotAlreadyRunning => (
+                self.i18n
+                    .t("sidebar.host_herdr.toast.snapshot_already_running"),
+                TerminalNoticeVariant::Warning,
+            ),
+            HostToolsNotice::HerdrConnectionMissing => (
+                self.i18n.t("sidebar.host_herdr.toast.connection_missing"),
+                TerminalNoticeVariant::Error,
+            ),
+            HostToolsNotice::HerdrActionAlreadyRunning => (
+                self.i18n
+                    .t("sidebar.host_herdr.toast.action_already_running"),
+                TerminalNoticeVariant::Warning,
+            ),
+            HostToolsNotice::HerdrActionFailed => (
+                self.i18n.t("sidebar.host_herdr.toast.action_failed"),
+                TerminalNoticeVariant::Error,
+            ),
+            HostToolsNotice::HerdrReadAlreadyRunning => (
+                self.i18n.t("sidebar.host_herdr.toast.read_already_running"),
+                TerminalNoticeVariant::Warning,
+            ),
+            HostToolsNotice::HerdrReadFailed => (
+                self.i18n.t("sidebar.host_herdr.toast.read_failed"),
+                TerminalNoticeVariant::Error,
+            ),
+            HostToolsNotice::HerdrActionFinished {
+                target_label,
+                succeeded,
+            } => {
+                if succeeded {
+                    (
+                        self.i18n_replace(
+                            "sidebar.host_herdr.toast.action_succeeded",
+                            &[("target", target_label)],
+                        ),
+                        TerminalNoticeVariant::Success,
+                    )
+                } else {
+                    (
+                        self.i18n.t("sidebar.host_herdr.toast.action_failed"),
                         TerminalNoticeVariant::Error,
                     )
                 }

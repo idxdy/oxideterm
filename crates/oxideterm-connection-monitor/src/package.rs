@@ -74,6 +74,7 @@ pub enum PackageFilter {
     Yum,
     Pacman,
     Brew,
+    Winget,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -108,7 +109,7 @@ pub fn build_package_snapshot_command(os_type: &str) -> PackageCaptureCommand {
         ),
         PackageOs::Windows => (
             build_windows_package_snapshot_command(),
-            PackageCommandCapability::Unknown,
+            PackageCommandCapability::Partial,
         ),
     };
     PackageCaptureCommand {
@@ -148,6 +149,18 @@ pub fn build_package_inspect_command(
             format!("pacman -Qi {quoted}"),
             PackageCommandCapability::Partial,
         ),
+        (PackageOs::Windows, "winget") => {
+            // The inspect line is typed into a terminal whose shell is unknown
+            // (cmd.exe, PowerShell, or POSIX sh); double quotes parse in all
+            // three, and winget's display names never need inner quoting.
+            if package_name.chars().any(|ch| ch == '"' || ch.is_control()) {
+                return Err("Invalid winget package name.".to_string());
+            }
+            (
+                format!("winget show \"{package_name}\" --accept-source-agreements"),
+                PackageCommandCapability::Partial,
+            )
+        }
         _ => {
             return Err(format!(
                 "Package inspection is not supported for manager '{}'.",
@@ -258,7 +271,59 @@ pub fn package_filter_label_key(filter: PackageFilter) -> &'static str {
         PackageFilter::Yum => "sidebar.host_packages.filters.yum",
         PackageFilter::Pacman => "sidebar.host_packages.filters.pacman",
         PackageFilter::Brew => "sidebar.host_packages.filters.brew",
+        PackageFilter::Winget => "sidebar.host_packages.filters.winget",
     }
+}
+
+/// The package manager a manager-specific filter selects, if any.
+pub fn package_filter_manager(filter: PackageFilter) -> Option<&'static str> {
+    match filter {
+        PackageFilter::Apt => Some("apt"),
+        PackageFilter::Dnf => Some("dnf"),
+        PackageFilter::Yum => Some("yum"),
+        PackageFilter::Pacman => Some("pacman"),
+        PackageFilter::Brew => Some("brew"),
+        PackageFilter::Winget => Some("winget"),
+        PackageFilter::All
+        | PackageFilter::Upgradable
+        | PackageFilter::Installed
+        | PackageFilter::Services => None,
+    }
+}
+
+/// The manager filter for a manager name reported by a snapshot.
+pub fn package_filter_for_manager(manager: &str) -> Option<PackageFilter> {
+    let manager = manager.trim();
+    [
+        PackageFilter::Apt,
+        PackageFilter::Dnf,
+        PackageFilter::Yum,
+        PackageFilter::Pacman,
+        PackageFilter::Brew,
+        PackageFilter::Winget,
+    ]
+    .into_iter()
+    .find(|filter| package_filter_manager(*filter) == Some(manager))
+}
+
+/// Base filters are always offered; manager filters follow the managers the
+/// selected host reports, so a Linux host never shows `winget` and a Windows
+/// host never shows `apt`.
+pub fn package_filter_options(managers: &[ResourcePackageManager]) -> Vec<PackageFilter> {
+    let mut filters = vec![
+        PackageFilter::All,
+        PackageFilter::Upgradable,
+        PackageFilter::Installed,
+        PackageFilter::Services,
+    ];
+    for manager in managers {
+        if let Some(filter) = package_filter_for_manager(&manager.name)
+            && !filters.contains(&filter)
+        {
+            filters.push(filter);
+        }
+    }
+    filters
 }
 
 pub fn package_status_label_key(status: &str) -> &'static str {
@@ -325,11 +390,34 @@ fn build_bsd_package_snapshot_command() -> String {
 }
 
 fn build_windows_package_snapshot_command() -> String {
+    // `winget list` prints a localized fixed-width table with no JSON output.
+    // The separator is one dash run, so column starts come from the header
+    // labels, measured in display columns: winget pads CJK names by glyph
+    // width, and slicing by .NET character index would split the next column.
     concat!(
         "powershell -NoProfile -ExecutionPolicy Bypass -Command \"",
+        "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;",
         "Write-Output '===PACKAGES===';",
-        "Write-Output ('__OXIDE_PACKAGE_CAPABILITY__'+[char]9+'unknown'+[char]9+'windows_unsupported');",
-        "Write-Output '__OXIDE_PACKAGE_UNAVAILABLE__';",
+        "function Oxide-W([int]$c){if(($c -ge 0x1100 -and $c -le 0x115F) -or ($c -ge 0x2E80 -and $c -le 0x303E) -or ($c -ge 0x3041 -and $c -le 0x33FF) -or ($c -ge 0x3400 -and $c -le 0x4DBF) -or ($c -ge 0x4E00 -and $c -le 0x9FFF) -or ($c -ge 0xA000 -and $c -le 0xA4CF) -or ($c -ge 0xAC00 -and $c -le 0xD7A3) -or ($c -ge 0xF900 -and $c -le 0xFAFF) -or ($c -ge 0xFE30 -and $c -le 0xFE4F) -or ($c -ge 0xFF00 -and $c -le 0xFF60) -or ($c -ge 0xFFE0 -and $c -le 0xFFE6)){2}else{1}};",
+        "function Oxide-S([string]$s,[int]$a,[int]$w){$p=0;$o='';foreach($ch in $s.ToCharArray()){$cw=Oxide-W([int]$ch);if($p -ge $a -and ($p+$cw) -le ($a+$w)){$o+=$ch};$p+=$cw;if($p -ge ($a+$w)){break}};$o.Trim()};",
+        "if(-not (Get-Command winget -ErrorAction SilentlyContinue)){Write-Output '__OXIDE_PACKAGE_UNAVAILABLE__';}else{",
+        "Write-Output ('__OXIDE_PACKAGE_CAPABILITY__'+[char]9+'partial'+[char]9+'windows_winget');",
+        "Write-Output ('MANAGER'+[char]9+'winget'+[char]9+'true'+[char]9+'winget');",
+        "$lines=@(& winget list --accept-source-agreements --disable-interactivity 2>$null);",
+        "$sep=-1;for($i=0;$i -lt $lines.Count;$i++){if($lines[$i] -match '^-{20,}\\s*$'){$sep=$i;break}};",
+        "if($sep -gt 0){",
+        "$header=$lines[$sep-1];$starts=@();$p=0;$tok=$false;",
+        "foreach($ch in $header.ToCharArray()){if($ch -ne ' '){if(-not $tok){$starts+=$p;$tok=$true}}else{$tok=$false};$p+=Oxide-W([int]$ch)};",
+        "if($starts.Count -ge 4){",
+        "for($i=$sep+1;$i -lt $lines.Count;$i++){",
+        "$line=$lines[$i];if($line.Trim().Length -eq 0){continue};",
+        "$cells=@();",
+        "for($c=0;$c -lt $starts.Count;$c++){$a=$starts[$c];$w=if($c+1 -lt $starts.Count){$starts[$c+1]-$a}else{1000};$cells+=Oxide-S $line $a $w};",
+        "$name=$cells[0];$id=$cells[1];$version=$cells[2];$available='';if($cells.Count -ge 4){$available=$cells[3]};",
+        "$status='installed';if($available.Length -gt 0){$status='upgradable'};",
+        "Write-Output ('ROW'+[char]9+$name+[char]9+'winget'+[char]9+$version+[char]9+$available+[char]9+''+[char]9+$id+[char]9+$status+[char]9+''+[char]9+''+[char]9+''+[char]9+'windows_winget')",
+        "}}else{Write-Output ('__OXIDE_PACKAGE_ERROR__'+[char]9+'winget_list_unavailable')}",
+        "}else{Write-Output ('__OXIDE_PACKAGE_ERROR__'+[char]9+'winget_list_unavailable')}};",
         "Write-Output '===PACKAGES_END==='",
         "\""
     )
@@ -507,6 +595,7 @@ fn package_matches_filter(entry: &ResourcePackageEntry, filter: PackageFilter) -
         PackageFilter::Yum => entry.manager == "yum",
         PackageFilter::Pacman => entry.manager == "pacman",
         PackageFilter::Brew => entry.manager == "brew",
+        PackageFilter::Winget => entry.manager == "winget",
     }
 }
 
@@ -695,6 +784,23 @@ mod tests {
                     ),
                 ],
             ),
+            (
+                "windows_winget",
+                "winget",
+                concat!(
+                    "===PACKAGES===\n",
+                    "__OXIDE_PACKAGE_CAPABILITY__\tpartial\twindows_winget\n",
+                    "MANAGER\twinget\ttrue\twinget\n",
+                    "ROW\tCMake\twinget\t4.4.4\t\t\tKitware.CMake\tinstalled\t\t\t\twindows_winget\n",
+                    "ROW\tPowerShell\twinget\t7.6.8.0\t7.6.9.0\t\tMicrosoft.PowerShell\tupgradable\t\t\t\twindows_winget\n",
+                    "===PACKAGES_END===\n"
+                ),
+                vec![
+                    ("PowerShell", "upgradable", "7.6.9.0", "", vec![]),
+                    ("CMake", "installed", "", "", vec![]),
+                ],
+                vec![("powershell", PackageFilter::Winget, vec!["PowerShell"])],
+            ),
         ] {
             let snapshot = parse_package_snapshot(output);
             assert_eq!(
@@ -764,16 +870,59 @@ mod tests {
         assert!(!mac.command.contains("brew update"));
         assert!(bsd.command.contains("pkg version -v"));
         assert!(!bsd.command.contains("pkg query"));
-        assert!(windows.command.contains("__OXIDE_PACKAGE_UNAVAILABLE__"));
+        assert!(windows.command.contains("winget list"));
+        assert!(!windows.command.contains("winget upgrade"));
+        assert!(!windows.command.contains("winget uninstall"));
+        assert!(!windows.command.contains("winget install"));
+    }
+
+    #[test]
+    fn package_filter_options_follow_reported_managers() {
+        let managers = |names: &[&str]| {
+            names
+                .iter()
+                .map(|name| ResourcePackageManager {
+                    name: (*name).to_string(),
+                    available: true,
+                    source: (*name).to_string(),
+                })
+                .collect::<Vec<_>>()
+        };
+        let base = vec![
+            PackageFilter::All,
+            PackageFilter::Upgradable,
+            PackageFilter::Installed,
+            PackageFilter::Services,
+        ];
+        assert_eq!(package_filter_options(&managers(&[])), base);
+        assert_eq!(
+            package_filter_options(&managers(&["apt", "winget"])),
+            [
+                base.clone(),
+                vec![PackageFilter::Apt, PackageFilter::Winget]
+            ]
+            .concat()
+        );
+        assert_eq!(
+            package_filter_options(&managers(&["brew"])),
+            [base, vec![PackageFilter::Brew]].concat()
+        );
     }
 
     #[test]
     fn inspect_commands_quote_package_names() {
         let apt = build_package_inspect_command("Linux", "apt", "weird'name").unwrap();
         let brew = build_package_inspect_command("macOS", "brew", "openssl@3").unwrap();
+        let winget =
+            build_package_inspect_command("Windows", "winget", "Microsoft.PowerShell").unwrap();
 
         assert!(apt.command.contains("'weird'\"'\"'name'"));
         assert!(brew.command.contains("HOMEBREW_NO_AUTO_UPDATE=1 brew info"));
+        assert_eq!(
+            winget.command,
+            "winget show \"Microsoft.PowerShell\" --accept-source-agreements"
+        );
+        assert!(build_package_inspect_command("Windows", "winget", "bad\"name").is_err());
         assert!(build_package_inspect_command("Linux", "apt", " ").is_err());
     }
 }

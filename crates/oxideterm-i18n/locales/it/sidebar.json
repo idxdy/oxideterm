@@ -72,6 +72,7 @@
       "services": "Servizi",
       "logs": "Log",
       "tmux": "tmux",
+      "herdr": "Herdr",
       "docker": "Docker",
       "tmux_management": "Gestione tmux",
       "docker_management": "Gestione Docker",
@@ -105,6 +106,9 @@
     "active_session_count": "Sessioni attive: {{count}}",
     "no_sessions": "Nessuna sessione",
     "add_new_connection": "Clicca + per aggiungere una connessione",
+    "host_connection": {
+      "local_machine": "Questo computer"
+    },
     "host_gpu": {
       "count_suffix": "acceleratori",
       "refresh_interval": "Aggiornamento ogni 2 secondi",
@@ -437,6 +441,87 @@
         "send_command_placeholder": "Comando da inviare"
       }
     },
+    "host_herdr": {
+      "unavailable": "herdr non trovato su questo host.",
+      "server_not_running": "Il server herdr non è in esecuzione. Avvialo con il pulsante di collegamento.",
+      "sampling": "Recupero degli space herdr...",
+      "empty": "Nessuna sessione herdr",
+      "workspace_empty": "Nessuno space in questa sessione",
+      "error": "Il comando herdr non è riuscito: {{error}}",
+      "last_refreshed": "Aggiornato",
+      "panes_suffix": "pane",
+      "tabs_suffix": "tab",
+      "focused": "attivo",
+      "restore_error": "errore di ripristino",
+      "orphan_agent": "agente non collegato",
+      "attach_title": "herdr",
+      "sessions_title": "Sessioni",
+      "row_space": "space",
+      "row_tab": "tab",
+      "row_pane": "pane",
+      "search_placeholder": "Cerca sessioni...",
+      "search_empty": "Nessuna corrispondenza",
+      "status": {
+        "working": "in lavoro",
+        "blocked": "bloccato",
+        "idle": "inattivo",
+        "done": "completato",
+        "unknown": "sconosciuto"
+      },
+      "actions": {
+        "refresh": "Aggiorna",
+        "attach": "Avvia / collega herdr",
+        "agent_attach": "Collegati all'agente",
+        "session_attach": "Collegati alla sessione",
+        "session_stop": "Fermare la sessione",
+        "session_delete": "Elimina la sessione",
+        "new_session": "Nuova sessione",
+        "new_workspace": "Nuovo space",
+        "rename": "Rinomina",
+        "close": "Chiudi",
+        "send": "Esegui comando",
+        "read": "Leggi output"
+      },
+      "confirm": {
+        "title": "Conferma azione herdr",
+        "cancel": "Annulla",
+        "run": "Conferma",
+        "close_workspace": "Chiudere lo space {{name}}? Tutti i tab e i pane al suo interno si fermano.",
+        "close_pane": "Chiudere il pane {{name}}? Il lavoro in corso si ferma.",
+        "close_tab": "Chiudere il tab {{name}}? Tutti i pane al suo interno si fermano.",
+        "stop_session": "Fermare la sessione {{name}}? Tutti gli space e gli agenti della sessione si fermano.",
+        "delete_session": "Eliminare la sessione ferma {{name}}? Il suo stato salvato viene rimosso."
+      },
+      "inputs": {
+        "new_session": "Nuova sessione",
+        "new_session_hint": "Nome della sessione",
+        "new_workspace": "Nuovo space",
+        "new_workspace_hint": "nome [/percorso/remoto]",
+        "rename_workspace": "Rinomina space",
+        "rename_tab": "Rinomina tab",
+        "rename_pane": "Rinomina pane",
+        "rename_hint": "Nuovo nome",
+        "run_pane": "Esegui comando nel pane",
+        "run_pane_hint": "Comando da inviare al pane"
+      },
+      "read": {
+        "title": "Output di {{pane}}",
+        "loading": "Caricamento output...",
+        "empty": "Nessun output.",
+        "close": "Chiudi"
+      },
+      "toast": {
+        "snapshot_already_running": "Uno snapshot herdr è già in caricamento.",
+        "connection_missing": "La connessione selezionata non è più disponibile.",
+        "action_already_running": "Un'azione herdr è già in corso.",
+        "action_failed": "Azione herdr non riuscita.",
+        "action_succeeded": "Azione herdr completata per {{target}}.",
+        "read_already_running": "L'output del pannello è già in caricamento.",
+        "read_failed": "Impossibile leggere l'output del pannello.",
+        "attach_opened": "herdr aperto in una finestra di terminale.",
+        "unknown_error": "Errore sconosciuto"
+      }
+    },
     "host_schedules": {
       "search_placeholder": "Search attività pianificatas...",
       "count_suffix": "tasks",
@@ -705,7 +790,8 @@
         "dnf": "dnf",
         "yum": "yum",
         "pacman": "pacman",
-        "brew": "Homebrew"
+        "brew": "Homebrew",
+        "winget": "winget"
       },
       "columns": {
         "package": "Pacchetto",

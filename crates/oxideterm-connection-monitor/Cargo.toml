@@ -9,6 +9,7 @@ version.workspace = true
 
 [dependencies]
 chrono.workspace = true
+oxideterm-herdr = { path = "../oxideterm-herdr" }
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

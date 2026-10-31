@@ -21,11 +21,11 @@ impl WorkspaceApp {
     ) {
         let mut pending_text: Option<PendingAiStreamText> = None;
         for delivery in deliveries {
-            if !self
-                .ai_entity
-                .read(cx)
-                .chat_stream_matches(delivery.generation, &delivery.conversation_id, &delivery.assistant_id)
-            {
+            if !self.ai_entity.read(cx).chat_stream_matches(
+                delivery.generation,
+                &delivery.conversation_id,
+                &delivery.assistant_id,
+            ) {
                 // Dropping a stale delivery also drops any retained approval
                 // sender, matching the old generation-scoped receiver.
                 continue;
@@ -51,29 +51,68 @@ impl WorkspaceApp {
                         ai.persist_chat_state();
                     });
                 }
-                AiStreamDeliveryEvent::ToolResourcesRequested { tool_session_id, name, args, sender } => {
-                    let result = self.ai_tool_resource_keys(delivery.generation, &tool_session_id, &name, &args, cx);
+                AiStreamDeliveryEvent::ToolResourcesRequested {
+                    tool_session_id,
+                    name,
+                    args,
+                    sender,
+                } => {
+                    let result = self.ai_tool_resource_keys(
+                        delivery.generation,
+                        &tool_session_id,
+                        &name,
+                        &args,
+                        cx,
+                    );
                     let _ = sender.send(result);
                 }
-                AiStreamDeliveryEvent::AgentCommandRequested { dispatch, tool_session_id, call, sender } => {
-                    if dispatch.as_ref().is_some_and(|guard| guard.check().is_err()) {
+                AiStreamDeliveryEvent::AgentCommandRequested {
+                    dispatch,
+                    tool_session_id,
+                    call,
+                    sender,
+                } => {
+                    if dispatch
+                        .as_ref()
+                        .is_some_and(|guard| guard.check().is_err())
+                    {
                         let _ = sender.send(ai_direction_changed_result(&call));
                         continue;
                     }
                     self.flush_pending_ai_stream_text(&mut pending_text, cx);
-                    self.handle_ai_agent_command(delivery.generation, &tool_session_id, call, sender, cx);
+                    self.handle_ai_agent_command(
+                        delivery.generation,
+                        &tool_session_id,
+                        call,
+                        sender,
+                        cx,
+                    );
                 }
                 AiStreamDeliveryEvent::HistoryBarrier(sender) => {
                     self.flush_pending_ai_stream_text(&mut pending_text, cx);
-                    self.ai_entity.update(cx, |ai, _| { ai.persist_chat_state(); ai.history_barrier(sender); });
+                    self.ai_entity.update(cx, |ai, _| {
+                        ai.persist_chat_state();
+                        ai.history_barrier(sender);
+                    });
                 }
                 AiStreamDeliveryEvent::Checkpoint(checkpoint) => {
                     self.flush_pending_ai_stream_text(&mut pending_text, cx);
                     self.ai_entity.update(cx, |ai, _| {
-                        if ai.chat_stream_matches(delivery.generation, &delivery.conversation_id, &delivery.assistant_id) {
-                            ai.update_chat_message(&delivery.conversation_id, &delivery.assistant_id, |message| {
-                                oxideterm_ai::agent::set_message_checkpoint(message, &checkpoint);
-                            });
+                        if ai.chat_stream_matches(
+                            delivery.generation,
+                            &delivery.conversation_id,
+                            &delivery.assistant_id,
+                        ) {
+                            ai.update_chat_message(
+                                &delivery.conversation_id,
+                                &delivery.assistant_id,
+                                |message| {
+                                    oxideterm_ai::agent::set_message_checkpoint(
+                                        message,
+                                        &checkpoint,
+                                    );
+                                },
+                            );
                             ai.persist_chat_state();
                         }
                     });
@@ -85,17 +124,16 @@ impl WorkspaceApp {
                     breakdown,
                     max_tokens,
                 } => {
-                    if self.ai_entity.read(cx).is_child_stream(delivery.generation) { continue; }
+                    if self.ai_entity.read(cx).is_child_stream(delivery.generation) {
+                        continue;
+                    }
                     self.flush_pending_ai_stream_text(&mut pending_text, cx);
                     let usage = AiPreparedPromptUsage {
                         conversation_id: delivery.conversation_id,
                         last_user_message_id,
                         provider_id,
                         model,
-                        breakdown: ai_context_token_breakdown_from_prompt(
-                            breakdown,
-                            max_tokens,
-                        ),
+                        breakdown: ai_context_token_breakdown_from_prompt(breakdown, max_tokens),
                     };
                     self.ai_entity
                         .update(cx, |ai, _cx| ai.set_prepared_prompt_usage(usage));
@@ -134,30 +172,64 @@ impl WorkspaceApp {
                 }
                 AiStreamDeliveryEvent::AcpClientEvent { agent_id, event } => {
                     match event {
-                        oxideterm_ai::AcpClientEvent::CursorRequest { request, response_tx } => {
+                        oxideterm_ai::AcpClientEvent::CursorRequest {
+                            request,
+                            response_tx,
+                        } => {
                             self.flush_pending_ai_stream_text(&mut pending_text, cx);
-                            if !request.valid() || !self.ai_entity.read(cx).is_chat_stream_generation(delivery.generation) {
-                                let _ = response_tx.send(Ok(oxideterm_ai::CursorRequest::cancelled_response()));
+                            if !request.valid()
+                                || !self
+                                    .ai_entity
+                                    .read(cx)
+                                    .is_chat_stream_generation(delivery.generation)
+                            {
+                                let _ = response_tx
+                                    .send(Ok(oxideterm_ai::CursorRequest::cancelled_response()));
                                 continue;
                             }
                             let id = request.tool_call_id().to_owned();
                             let method = request.method();
                             // The complete question/plan stays in transient state, not tool history.
-                            self.apply_ai_tool_status(delivery.generation, &delivery.conversation_id,
-                                &delivery.assistant_id, &id, method, "{}", "waiting_user", None,
-                                Some("read".into()), Some(self.i18n.t("ai.questions.waiting")), false,
-                                None, None, None, cx);
-                            self.notify_ai_agent_attention(&delivery.conversation_id, &delivery.assistant_id, "ai.questions.waiting", cx);
+                            self.apply_ai_tool_status(
+                                delivery.generation,
+                                &delivery.conversation_id,
+                                &delivery.assistant_id,
+                                &id,
+                                method,
+                                "{}",
+                                "waiting_user",
+                                None,
+                                Some("read".into()),
+                                Some(self.i18n.t("ai.questions.waiting")),
+                                false,
+                                None,
+                                None,
+                                None,
+                                cx,
+                            );
+                            self.notify_ai_agent_attention(
+                                &delivery.conversation_id,
+                                &delivery.assistant_id,
+                                "ai.questions.waiting",
+                                cx,
+                            );
                             let selections = match &request {
-                                oxideterm_ai::CursorRequest::Questions(request) => vec![Vec::new(); request.questions.len()],
+                                oxideterm_ai::CursorRequest::Questions(request) => {
+                                    vec![Vec::new(); request.questions.len()]
+                                }
                                 oxideterm_ai::CursorRequest::Plan(_) => Vec::new(),
                             };
                             self.ai_entity.update(cx, |ai, _| {
-                                ai.pending_cursor_requests.insert((delivery.generation, id), crate::workspace::ai_state::AiPendingCursorRequest {
-                                    conversation_id: delivery.conversation_id,
-                                    assistant_id: delivery.assistant_id,
-                                    request, selections, response_tx: Some(response_tx),
-                                });
+                                ai.pending_cursor_requests.insert(
+                                    (delivery.generation, id),
+                                    crate::workspace::ai_state::AiPendingCursorRequest {
+                                        conversation_id: delivery.conversation_id,
+                                        assistant_id: delivery.assistant_id,
+                                        request,
+                                        selections,
+                                        response_tx: Some(response_tx),
+                                    },
+                                );
                             });
                         }
                         oxideterm_ai::AcpClientEvent::RequestPermission {
@@ -165,7 +237,10 @@ impl WorkspaceApp {
                             response_tx,
                         } => {
                             self.flush_pending_ai_stream_text(&mut pending_text, cx);
-                            if !self.ai_entity.read(cx).is_chat_stream_generation(delivery.generation)
+                            if !self
+                                .ai_entity
+                                .read(cx)
+                                .is_chat_stream_generation(delivery.generation)
                             {
                                 let _ = response_tx
                                     .send(Ok(oxideterm_ai::acp_permission_cancelled_response()));
@@ -226,10 +301,10 @@ impl WorkspaceApp {
                             response_tx,
                         } => {
                             let owner_session_id = request.session_id.to_string();
-                            let Some((workspace_root, policy)) =
-                                self.acp_entity
-                                    .read(cx)
-                                    .session_context(&agent_id, &owner_session_id)
+                            let Some((workspace_root, policy)) = self
+                                .acp_entity
+                                .read(cx)
+                                .session_context(&agent_id, &owner_session_id)
                             else {
                                 let _ = response_tx.send(Err(oxideterm_ai::acp_internal_error(
                                     "ACP session context is unavailable",
@@ -243,12 +318,11 @@ impl WorkspaceApp {
                                 continue;
                             }
                             cx.spawn(async move |_weak, _cx| {
-                                let response =
-                                    oxideterm_ai::resolve_acp_read_text_file_request(
-                                        &workspace_root,
-                                        &request,
-                                    )
-                                    .await;
+                                let response = oxideterm_ai::resolve_acp_read_text_file_request(
+                                    &workspace_root,
+                                    &request,
+                                )
+                                .await;
                                 let _ = response_tx.send(response);
                             })
                             .detach();
@@ -259,10 +333,10 @@ impl WorkspaceApp {
                         } => {
                             self.flush_pending_ai_stream_text(&mut pending_text, cx);
                             let owner_session_id = request.session_id.to_string();
-                            let Some((workspace_root, policy)) =
-                                self.acp_entity
-                                    .read(cx)
-                                    .session_context(&agent_id, &owner_session_id)
+                            let Some((workspace_root, policy)) = self
+                                .acp_entity
+                                .read(cx)
+                                .session_context(&agent_id, &owner_session_id)
                             else {
                                 let _ = response_tx.send(Err(oxideterm_ai::acp_internal_error(
                                     "ACP session context is unavailable",
@@ -444,10 +518,10 @@ impl WorkspaceApp {
                         } => {
                             self.flush_pending_ai_stream_text(&mut pending_text, cx);
                             let owner_session_id = request.session_id.to_string();
-                            let Some((workspace_root, policy)) =
-                                self.acp_entity
-                                    .read(cx)
-                                    .session_context(&agent_id, &owner_session_id)
+                            let Some((workspace_root, policy)) = self
+                                .acp_entity
+                                .read(cx)
+                                .session_context(&agent_id, &owner_session_id)
                             else {
                                 let _ = response_tx.send(Err(oxideterm_ai::acp_internal_error(
                                     "ACP session context is unavailable",
@@ -505,6 +579,7 @@ impl WorkspaceApp {
                                             shell: Some(shell),
                                             cwd: Some(resolved_cwd),
                                             env,
+                                            remove_env: Vec::new(),
                                             load_profile: false,
                                             current_directory_shell_integration: false,
                                             oh_my_posh_enabled: false,
@@ -513,24 +588,18 @@ impl WorkspaceApp {
                                         let terminal_id = oxideterm_ai::next_acp_terminal_id();
                                         match workspace
                                             .create_local_terminal_tab_with_owned_session(
-                                                config,
-                                                title,
-                                                window,
-                                                cx,
+                                                config, title, window, cx,
                                             ) {
                                             Ok((_workspace_session_id, session)) => {
-                                                workspace.acp_entity.update(
-                                                    cx,
-                                                    |entity, _cx| {
-                                                        entity.register_terminal(
-                                                            terminal_id.clone(),
-                                                            agent_id,
-                                                            owner_session_id,
-                                                            session,
-                                                            terminal_spec.output_byte_limit,
-                                                        );
-                                                    },
-                                                );
+                                                workspace.acp_entity.update(cx, |entity, _cx| {
+                                                    entity.register_terminal(
+                                                        terminal_id.clone(),
+                                                        agent_id,
+                                                        owner_session_id,
+                                                        session,
+                                                        terminal_spec.output_byte_limit,
+                                                    );
+                                                });
                                                 let _ = response_tx.send(Ok(
                                                     oxideterm_ai::acp_terminal_created_response(
                                                         &terminal_id,
@@ -557,10 +626,11 @@ impl WorkspaceApp {
                             let owner_session_id = request.session_id.to_string();
                             let terminal_id =
                                 oxideterm_ai::acp_terminal_output_request_id(&request);
-                            let terminal = self
-                                .acp_entity
-                                .read(cx)
-                                .terminal(&terminal_id, &agent_id, &owner_session_id);
+                            let terminal = self.acp_entity.read(cx).terminal(
+                                &terminal_id,
+                                &agent_id,
+                                &owner_session_id,
+                            );
                             let Some(terminal) = terminal else {
                                 let _ = response_tx
                                     .send(Err(oxideterm_ai::acp_terminal_not_found_error()));
@@ -575,13 +645,12 @@ impl WorkspaceApp {
                                 TerminalLifecycle::Closed => None,
                             };
                             drop(session);
-                            let _ = response_tx.send(Ok(
-                                oxideterm_ai::acp_terminal_output_response(
+                            let _ =
+                                response_tx.send(Ok(oxideterm_ai::acp_terminal_output_response(
                                     output,
                                     terminal.output_byte_limit,
                                     exit_code,
-                                ),
-                            ));
+                                )));
                         }
                         oxideterm_ai::AcpClientEvent::ReleaseTerminal {
                             request,
@@ -591,11 +660,7 @@ impl WorkspaceApp {
                             let terminal_id =
                                 oxideterm_ai::acp_release_terminal_request_id(&request);
                             let terminal = self.acp_entity.update(cx, |entity, _cx| {
-                                entity.release_terminal(
-                                    &terminal_id,
-                                    &agent_id,
-                                    &owner_session_id,
-                                )
+                                entity.release_terminal(&terminal_id, &agent_id, &owner_session_id)
                             });
                             let Some(terminal) = terminal else {
                                 let _ = response_tx
@@ -603,20 +668,20 @@ impl WorkspaceApp {
                                 continue;
                             };
                             terminal.session.lock().shutdown();
-                            let _ = response_tx
-                                .send(Ok(oxideterm_ai::acp_release_terminal_response()));
+                            let _ =
+                                response_tx.send(Ok(oxideterm_ai::acp_release_terminal_response()));
                         }
                         oxideterm_ai::AcpClientEvent::KillTerminal {
                             request,
                             response_tx,
                         } => {
                             let owner_session_id = request.session_id.to_string();
-                            let terminal_id =
-                                oxideterm_ai::acp_kill_terminal_request_id(&request);
-                            let terminal = self
-                                .acp_entity
-                                .read(cx)
-                                .terminal(&terminal_id, &agent_id, &owner_session_id);
+                            let terminal_id = oxideterm_ai::acp_kill_terminal_request_id(&request);
+                            let terminal = self.acp_entity.read(cx).terminal(
+                                &terminal_id,
+                                &agent_id,
+                                &owner_session_id,
+                            );
                             let Some(terminal) = terminal else {
                                 let _ = response_tx
                                     .send(Err(oxideterm_ai::acp_terminal_not_found_error()));
@@ -631,12 +696,12 @@ impl WorkspaceApp {
                             response_tx,
                         } => {
                             let owner_session_id = request.session_id.to_string();
-                            let terminal_id =
-                                oxideterm_ai::acp_wait_terminal_request_id(&request);
-                            let terminal = self
-                                .acp_entity
-                                .read(cx)
-                                .terminal(&terminal_id, &agent_id, &owner_session_id);
+                            let terminal_id = oxideterm_ai::acp_wait_terminal_request_id(&request);
+                            let terminal = self.acp_entity.read(cx).terminal(
+                                &terminal_id,
+                                &agent_id,
+                                &owner_session_id,
+                            );
                             let Some(terminal) = terminal else {
                                 let _ = response_tx
                                     .send(Err(oxideterm_ai::acp_terminal_not_found_error()));
@@ -656,9 +721,7 @@ impl WorkspaceApp {
                                         }
                                         TerminalLifecycle::Exited(exit_code) => {
                                             let _ = response_tx.send(Ok(
-                                                oxideterm_ai::acp_wait_terminal_response(
-                                                    exit_code,
-                                                ),
+                                                oxideterm_ai::acp_wait_terminal_response(exit_code),
                                             ));
                                             break;
                                         }
@@ -849,18 +912,53 @@ impl WorkspaceApp {
                         cx,
                     );
                 }
-                AiStreamDeliveryEvent::UserQuestionRequested { call, dispatch, sender } => {
-                    if sender.is_closed() || dispatch.as_ref().is_some_and(|guard| guard.check().is_err()) { continue; }
+                AiStreamDeliveryEvent::UserQuestionRequested {
+                    call,
+                    dispatch,
+                    sender,
+                } => {
+                    if sender.is_closed()
+                        || dispatch
+                            .as_ref()
+                            .is_some_and(|guard| guard.check().is_err())
+                    {
+                        continue;
+                    }
                     self.flush_pending_ai_stream_text(&mut pending_text, cx);
-                    let question = serde_json::from_str::<serde_json::Value>(&call.arguments).unwrap_or_default();
-                    self.apply_ai_tool_status(delivery.generation, &delivery.conversation_id, &delivery.assistant_id,
-                        &call.id, &call.name, &call.arguments, "waiting_user", Some(question), Some("read".into()),
-                        Some(self.i18n.t("ai.questions.waiting")), false, None, None, None, cx);
-                    self.notify_ai_agent_attention(&delivery.conversation_id, &delivery.assistant_id, "ai.questions.waiting", cx);
+                    let question = serde_json::from_str::<serde_json::Value>(&call.arguments)
+                        .unwrap_or_default();
+                    self.apply_ai_tool_status(
+                        delivery.generation,
+                        &delivery.conversation_id,
+                        &delivery.assistant_id,
+                        &call.id,
+                        &call.name,
+                        &call.arguments,
+                        "waiting_user",
+                        Some(question),
+                        Some("read".into()),
+                        Some(self.i18n.t("ai.questions.waiting")),
+                        false,
+                        None,
+                        None,
+                        None,
+                        cx,
+                    );
+                    self.notify_ai_agent_attention(
+                        &delivery.conversation_id,
+                        &delivery.assistant_id,
+                        "ai.questions.waiting",
+                        cx,
+                    );
                     self.ai_entity.update(cx, |ai, _| {
-                        ai.pending_user_questions.insert((delivery.generation, call.id), crate::workspace::ai_state::AiPendingUserQuestion {
-                            conversation_id: delivery.conversation_id.clone(), dispatch, sender,
-                        });
+                        ai.pending_user_questions.insert(
+                            (delivery.generation, call.id),
+                            crate::workspace::ai_state::AiPendingUserQuestion {
+                                conversation_id: delivery.conversation_id.clone(),
+                                dispatch,
+                                sender,
+                            },
+                        );
                     });
                 }
                 AiStreamDeliveryEvent::ToolApprovalRequested {
@@ -935,7 +1033,9 @@ impl WorkspaceApp {
                             sender,
                         );
                     });
-                    if self.ai_entity.read(cx).chat_stream_generation() == delivery.generation { window.focus(&self.focus_handle, cx); }
+                    if self.ai_entity.read(cx).chat_stream_generation() == delivery.generation {
+                        window.focus(&self.focus_handle, cx);
+                    }
                     cx.notify();
                 }
                 AiStreamDeliveryEvent::ToolPreflightRequested {
@@ -946,10 +1046,10 @@ impl WorkspaceApp {
                     sender,
                 } => {
                     self.flush_pending_ai_stream_text(&mut pending_text, cx);
-                    let session_is_active = self.ai_runtime_context.read(cx).is_active_tool_session(
-                        delivery.generation,
-                        &tool_session_id,
-                    );
+                    let session_is_active = self
+                        .ai_runtime_context
+                        .read(cx)
+                        .is_active_tool_session(delivery.generation, &tool_session_id);
                     let rejection = if !session_is_active {
                         Some(rejected_ai_tool_result(
                             tool_call_id,
@@ -958,30 +1058,25 @@ impl WorkspaceApp {
                             "The AI tool session is no longer active.",
                         ))
                     } else {
-                        self.preflight_ai_ui_orchestrator_tool(
-                            &tool_session_id,
-                            &name,
-                            &args,
-                            cx,
-                        )
-                        .err()
-                        .map(|error| {
-                            let snapshot = self.ai_orchestrator_snapshot_for_tool_session(
-                                Some(&tool_session_id),
-                                cx,
-                            );
-                            snapshot.to_executed_tool_result(
-                                tool_call_id,
-                                name,
-                                snapshot.fail(
-                                    "Runtime target is unavailable.",
-                                    error.public_code(),
-                                    "Rediscover the current terminal target before retrying.",
-                                    "interactive",
-                                ),
-                                0,
-                            )
-                        })
+                        self.preflight_ai_ui_orchestrator_tool(&tool_session_id, &name, &args, cx)
+                            .err()
+                            .map(|error| {
+                                let snapshot = self.ai_orchestrator_snapshot_for_tool_session(
+                                    Some(&tool_session_id),
+                                    cx,
+                                );
+                                snapshot.to_executed_tool_result(
+                                    tool_call_id,
+                                    name,
+                                    snapshot.fail(
+                                        "Runtime target is unavailable.",
+                                        error.public_code(),
+                                        "Rediscover the current terminal target before retrying.",
+                                        "interactive",
+                                    ),
+                                    0,
+                                )
+                            })
                     };
                     let _ = sender.send(rejection);
                 }
@@ -989,13 +1084,12 @@ impl WorkspaceApp {
                     tool_session_id,
                     sender,
                 } => {
-                    let session_is_active = self.ai_runtime_context.read(cx).is_active_tool_session(
-                        delivery.generation,
-                        &tool_session_id,
-                    );
-                    let context = session_is_active.then(|| {
-                        self.ai_runtime_context_prompt(&tool_session_id, cx)
-                    });
+                    let session_is_active = self
+                        .ai_runtime_context
+                        .read(cx)
+                        .is_active_tool_session(delivery.generation, &tool_session_id);
+                    let context = session_is_active
+                        .then(|| self.ai_runtime_context_prompt(&tool_session_id, cx));
                     let _ = sender.send(context);
                 }
                 AiStreamDeliveryEvent::ToolExecutionRequested {
@@ -1011,15 +1105,30 @@ impl WorkspaceApp {
                     sender,
                 } => {
                     self.flush_pending_ai_stream_text(&mut pending_text, cx);
-                    if dispatch.as_ref().is_some_and(|guard| guard.check().is_err()) {
-                        let _ = sender.send(rejected_ai_tool_result(tool_call_id, name, "agent_direction_changed", "Task direction changed before dispatch."));
+                    if dispatch
+                        .as_ref()
+                        .is_some_and(|guard| guard.check().is_err())
+                    {
+                        let _ = sender.send(rejected_ai_tool_result(
+                            tool_call_id,
+                            name,
+                            "agent_direction_changed",
+                            "Task direction changed before dispatch.",
+                        ));
                         continue;
                     }
-                    let session_is_active = self.ai_runtime_context.read(cx).is_active_tool_session(
-                        delivery.generation,
-                        &tool_session_id,
-                    );
-                    if !session_is_active || !self.ai_entity.read(cx).run_accepts_tools(delivery.generation) || leases.iter().any(|lease| !lease.is_current()) || sender.is_closed() {
+                    let session_is_active = self
+                        .ai_runtime_context
+                        .read(cx)
+                        .is_active_tool_session(delivery.generation, &tool_session_id);
+                    if !session_is_active
+                        || !self
+                            .ai_entity
+                            .read(cx)
+                            .run_accepts_tools(delivery.generation)
+                        || leases.iter().any(|lease| !lease.is_current())
+                        || sender.is_closed()
+                    {
                         let _ = sender.send(rejected_ai_tool_result(
                             tool_call_id,
                             name,
@@ -1028,33 +1137,44 @@ impl WorkspaceApp {
                         ));
                         continue;
                     }
-                    if name != "run_command" { for lease in &leases { lease.dispatched(); } }
+                    if name != "run_command" {
+                        for lease in &leases {
+                            lease.dispatched();
+                        }
+                    }
                     if !leases.is_empty() {
-                        self.ai_entity.update(cx, |ai, _cx| { ai.agents.tool_leases.insert((tool_session_id.clone(), tool_call_id.clone()), leases); });
+                        self.ai_entity.update(cx, |ai, _cx| {
+                            ai.agents
+                                .tool_leases
+                                .insert((tool_session_id.clone(), tool_call_id.clone()), leases);
+                        });
                     }
                     let raw_arguments = zeroize::Zeroizing::new(args.to_string());
-                    oxideterm_audit::AuditContext::with_sync_request(audit_context.as_ref(), || {
-                        self.start_ai_ui_orchestrator_tool_execution(
-                            AiToolRunContext {
-                                arguments: zeroize::Zeroizing::new(
-                                    sanitize_ai_tool_arguments_for_approval(&raw_arguments),
-                                ),
-                                generation: delivery.generation,
-                                conversation_id: delivery.conversation_id.clone(),
-                                assistant_id: delivery.assistant_id.clone(),
-                                dispatch,
-                            },
-                            tool_session_id,
-                            tool_call_id,
-                            name,
-                            args,
-                            post_user_approval,
-                            dangerous_command_approved,
-                            sender,
-                            window,
-                            cx,
-                        );
-                    });
+                    oxideterm_audit::AuditContext::with_sync_request(
+                        audit_context.as_ref(),
+                        || {
+                            self.start_ai_ui_orchestrator_tool_execution(
+                                AiToolRunContext {
+                                    arguments: zeroize::Zeroizing::new(
+                                        sanitize_ai_tool_arguments_for_approval(&raw_arguments),
+                                    ),
+                                    generation: delivery.generation,
+                                    conversation_id: delivery.conversation_id.clone(),
+                                    assistant_id: delivery.assistant_id.clone(),
+                                    dispatch,
+                                },
+                                tool_session_id,
+                                tool_call_id,
+                                name,
+                                args,
+                                post_user_approval,
+                                dangerous_command_approved,
+                                sender,
+                                window,
+                                cx,
+                            );
+                        },
+                    );
                 }
             }
         }
@@ -1121,7 +1241,16 @@ impl WorkspaceApp {
         cx: &mut Context<Self>,
     ) {
         for delivery in deliveries {
-            if self.ai_entity.read(cx).history.compaction_runs.get(&delivery.conversation_id).is_none_or(|(generation, _)| *generation != delivery.generation) { continue; }
+            if self
+                .ai_entity
+                .read(cx)
+                .history
+                .compaction_runs
+                .get(&delivery.conversation_id)
+                .is_none_or(|(generation, _)| *generation != delivery.generation)
+            {
+                continue;
+            }
             match delivery.kind {
                 AiCompactionDeliveryKind::Compact => {
                     if let Some(plan) = delivery.plan {

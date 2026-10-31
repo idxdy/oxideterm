@@ -66,11 +66,22 @@ pub use metrics::{
     parse_resource_metrics, parse_system_info, parse_top_processes, previous_sample_from_metrics,
     push_history,
 };
+pub use oxideterm_herdr::{
+    HERDR_READ_LINES, HERDR_SNAPSHOT_MAX_OUTPUT_SIZE, HERDR_SNAPSHOT_TIMEOUT, HerdrActionCommand,
+    HerdrActionKind, HerdrAgent, HerdrAttachTarget, HerdrCaptureCommand, HerdrPane, HerdrSession,
+    HerdrSessionDetail, HerdrSnapshot, HerdrStatus, HerdrTab, HerdrWorkspace,
+    build_herdr_action_command, build_herdr_attach_command, build_herdr_read_command,
+    build_herdr_session_detail_command, build_herdr_snapshot_command, herdr_action_outcome,
+    herdr_agent_matches_query, herdr_pane_matches_query, herdr_session_matches_query,
+    herdr_status_label_key, herdr_tab_matches_query, herdr_workspace_matches_query,
+    parse_herdr_session_detail, parse_herdr_snapshot,
+};
 pub use package::{
     PackageCaptureCommand, PackageCommandCapability, PackageFilter, PackageInspectCommand,
     ResourcePackageEntry, ResourcePackageManager, ResourcePackageSnapshot, ResourcePackageStatus,
     build_package_inspect_command, build_package_snapshot_command, package_filter_label_key,
-    package_row_signature, package_status_label_key, parse_package_snapshot, visible_package_rows,
+    package_filter_manager, package_filter_options, package_row_signature,
+    package_status_label_key, parse_package_snapshot, visible_package_rows,
 };
 pub use port::{
     PortCaptureCommand, PortCommandCapability, PortFilter, ResourcePortEntry, ResourcePortSnapshot,

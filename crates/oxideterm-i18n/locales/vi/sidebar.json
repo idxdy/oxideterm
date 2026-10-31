@@ -72,6 +72,7 @@
       "services": "Dịch vụ",
       "logs": "Nhật ký",
       "tmux": "tmux",
+      "herdr": "Herdr",
       "docker": "Docker",
       "tmux_management": "Quản lý tmux",
       "docker_management": "Quản lý Docker",
@@ -105,6 +106,9 @@
     "active_session_count": "Phiên đang hoạt động: {{count}}",
     "no_sessions": "Không có phiên",
     "add_new_connection": "Nhấn + để thêm kết nối",
+    "host_connection": {
+      "local_machine": "Máy này"
+    },
     "host_gpu": {
       "count_suffix": "bộ tăng tốc",
       "refresh_interval": "Cập nhật mỗi 2 giây",
@@ -437,6 +441,87 @@
         "send_command_placeholder": "Lệnh cần gửi"
       }
     },
+    "host_herdr": {
+      "unavailable": "Không tìm thấy herdr trên máy này.",
+      "server_not_running": "Máy chủ herdr chưa chạy. Dùng nút kết nối để khởi động.",
+      "sampling": "Đang lấy space của herdr...",
+      "empty": "Không có phiên herdr",
+      "workspace_empty": "Không có space trong phiên này",
+      "error": "Lệnh herdr thất bại: {{error}}",
+      "last_refreshed": "Cập nhật",
+      "panes_suffix": "pane",
+      "tabs_suffix": "tab",
+      "focused": "đang chọn",
+      "restore_error": "lỗi khôi phục",
+      "orphan_agent": "tác tử chưa liên kết",
+      "attach_title": "herdr",
+      "sessions_title": "Phiên",
+      "row_space": "space",
+      "row_tab": "tab",
+      "row_pane": "pane",
+      "search_placeholder": "Tìm phiên...",
+      "search_empty": "Không có kết quả",
+      "status": {
+        "working": "đang chạy",
+        "blocked": "bị chặn",
+        "idle": "rảnh",
+        "done": "xong",
+        "unknown": "không rõ"
+      },
+      "actions": {
+        "refresh": "Làm mới",
+        "attach": "Khởi động / kết nối herdr",
+        "agent_attach": "Kết nối tới tác tử",
+        "session_attach": "Kết nối tới phiên",
+        "session_stop": "Dừng phiên",
+        "session_delete": "Xóa phiên",
+        "new_session": "Phiên mới",
+        "new_workspace": "Space mới",
+        "rename": "Đổi tên",
+        "close": "Đóng",
+        "send": "Chạy lệnh",
+        "read": "Đọc đầu ra"
+      },
+      "confirm": {
+        "title": "Xác nhận hành động herdr",
+        "cancel": "Hủy",
+        "run": "Xác nhận",
+        "close_workspace": "Đóng space {{name}}? Mọi tab và pane bên trong sẽ dừng.",
+        "close_pane": "Đóng pane {{name}}? Công việc đang chạy sẽ dừng.",
+        "close_tab": "Đóng tab {{name}}? Mọi pane bên trong sẽ dừng.",
+        "stop_session": "Dừng phiên {{name}}? Mọi space và tác tử trong phiên sẽ dừng.",
+        "delete_session": "Xóa phiên đã dừng {{name}}? Trạng thái đã lưu sẽ bị xóa."
+      },
+      "inputs": {
+        "new_session": "Phiên mới",
+        "new_session_hint": "Tên phiên",
+        "new_workspace": "Space mới",
+        "new_workspace_hint": "tên [/đường/dẫn/xa]",
+        "rename_workspace": "Đổi tên space",
+        "rename_tab": "Đổi tên tab",
+        "rename_pane": "Đổi tên pane",
+        "rename_hint": "Tên mới",
+        "run_pane": "Chạy lệnh trong pane",
+        "run_pane_hint": "Lệnh sẽ nhập vào pane"
+      },
+      "read": {
+        "title": "Đầu ra: {{pane}}",
+        "loading": "Đang tải đầu ra...",
+        "empty": "Không có đầu ra.",
+        "close": "Đóng"
+      },
+      "toast": {
+        "snapshot_already_running": "Một ảnh chụp herdr đang được tải.",
+        "connection_missing": "Kết nối đã chọn không còn khả dụng.",
+        "action_already_running": "Một hành động herdr đang chạy.",
+        "action_failed": "Hành động herdr thất bại.",
+        "action_succeeded": "Hành động herdr hoàn tất cho {{target}}.",
+        "read_already_running": "Đầu ra của pane đang được tải.",
+        "read_failed": "Không thể đọc đầu ra của pane.",
+        "attach_opened": "Đã mở herdr trong cửa sổ terminal.",
+        "unknown_error": "Lỗi không rõ"
+      }
+    },
     "host_schedules": {
       "search_placeholder": "Search tác vụ đã lên lịchs...",
       "count_suffix": "tasks",
@@ -705,7 +790,8 @@
         "dnf": "dnf",
         "yum": "yum",
         "pacman": "pacman",
-        "brew": "Homebrew"
+        "brew": "Homebrew",
+        "winget": "winget"
       },
       "columns": {
         "package": "Gói",

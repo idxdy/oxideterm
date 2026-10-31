@@ -72,6 +72,7 @@
       "services": "Serviços",
       "logs": "Logs",
       "tmux": "tmux",
+      "herdr": "Herdr",
       "docker": "Docker",
       "tmux_management": "Gerenciamento do tmux",
       "docker_management": "Gerenciamento do Docker",
@@ -105,6 +106,9 @@
     "active_session_count": "Sessões ativas: {{count}}",
     "no_sessions": "Nenhuma sessão",
     "add_new_connection": "Clique em + para adicionar uma conexão",
+    "host_connection": {
+      "local_machine": "Este computador"
+    },
     "host_gpu": {
       "count_suffix": "aceleradores",
       "refresh_interval": "Atualiza a cada 2 segundos",
@@ -437,6 +441,87 @@
         "send_command_placeholder": "Comando a enviar"
       }
     },
+    "host_herdr": {
+      "unavailable": "herdr não foi encontrado neste host.",
+      "server_not_running": "O servidor herdr não está em execução. Use o botão de anexar para iniciá-lo.",
+      "sampling": "Obtendo spaces do herdr...",
+      "empty": "Nenhuma sessão do herdr",
+      "workspace_empty": "Nenhum space nesta sessão",
+      "error": "O comando herdr falhou: {{error}}",
+      "last_refreshed": "Atualizado",
+      "panes_suffix": "pane",
+      "tabs_suffix": "tab",
+      "focused": "foco",
+      "restore_error": "erro de restauração",
+      "orphan_agent": "agente não vinculado",
+      "attach_title": "herdr",
+      "sessions_title": "Sessões",
+      "row_space": "space",
+      "row_tab": "tab",
+      "row_pane": "pane",
+      "search_placeholder": "Pesquisar sessões...",
+      "search_empty": "Nenhuma correspondência",
+      "status": {
+        "working": "trabalhando",
+        "blocked": "bloqueado",
+        "idle": "ocioso",
+        "done": "concluído",
+        "unknown": "desconhecido"
+      },
+      "actions": {
+        "refresh": "Atualizar",
+        "attach": "Iniciar / anexar herdr",
+        "agent_attach": "Anexar ao agente",
+        "session_attach": "Anexar à sessão",
+        "session_stop": "Parar a sessão",
+        "session_delete": "Excluir a sessão",
+        "new_session": "Nova sessão",
+        "new_workspace": "Novo space",
+        "rename": "Renomear",
+        "close": "Fechar",
+        "send": "Executar comando",
+        "read": "Ler saída"
+      },
+      "confirm": {
+        "title": "Confirmar ação do herdr",
+        "cancel": "Cancelar",
+        "run": "Confirmar",
+        "close_workspace": "Fechar o space {{name}}? Todos os tab e pane dentro dele param.",
+        "close_pane": "Fechar o pane {{name}}? O trabalho em andamento para.",
+        "close_tab": "Fechar o tab {{name}}? Todos os pane nele param.",
+        "stop_session": "Parar a sessão {{name}}? Todos os space e agentes da sessão param.",
+        "delete_session": "Excluir a sessão parada {{name}}? O estado salvo é removido."
+      },
+      "inputs": {
+        "new_session": "Nova sessão",
+        "new_session_hint": "Nome da sessão",
+        "new_workspace": "Novo space",
+        "new_workspace_hint": "nome [/caminho/remoto]",
+        "rename_workspace": "Renomear space",
+        "rename_tab": "Renomear tab",
+        "rename_pane": "Renomear pane",
+        "rename_hint": "Novo nome",
+        "run_pane": "Executar comando no pane",
+        "run_pane_hint": "Comando a digitar no pane"
+      },
+      "read": {
+        "title": "Saída: {{pane}}",
+        "loading": "Carregando saída...",
+        "empty": "Sem saída.",
+        "close": "Fechar"
+      },
+      "toast": {
+        "snapshot_already_running": "Um snapshot do herdr já está carregando.",
+        "connection_missing": "A conexão selecionada não está mais disponível.",
+        "action_already_running": "Uma ação do herdr já está em execução.",
+        "action_failed": "A ação do herdr falhou.",
+        "action_succeeded": "Ação do herdr concluída para {{target}}.",
+        "read_already_running": "A saída do painel já está carregando.",
+        "read_failed": "Falha ao ler a saída do painel.",
+        "attach_opened": "herdr aberto em uma janela de terminal.",
+        "unknown_error": "Erro desconhecido"
+      }
+    },
     "host_schedules": {
       "search_placeholder": "Search tarefa agendadas...",
       "count_suffix": "tasks",
@@ -705,7 +790,8 @@
         "dnf": "dnf",
         "yum": "yum",
         "pacman": "pacman",
-        "brew": "Homebrew"
+        "brew": "Homebrew",
+        "winget": "winget"
       },
       "columns": {
         "package": "Pacote",

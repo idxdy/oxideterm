@@ -72,6 +72,7 @@
       "services": "服務",
       "logs": "日誌",
       "tmux": "tmux",
+      "herdr": "Herdr",
       "docker": "Docker",
       "tmux_management": "tmux 管理",
       "docker_management": "Docker 管理",
@@ -105,6 +106,9 @@
     "active_session_count": "{{count}} 個作用中工作階段",
     "no_sessions": "無工作階段",
     "add_new_connection": "按 + 新增連線",
+    "host_connection": {
+      "local_machine": "本機"
+    },
     "host_gpu": {
       "count_suffix": "個加速裝置",
       "refresh_interval": "每 2 秒更新",
@@ -437,6 +441,87 @@
         "send_command_placeholder": "要傳送的命令"
       }
     },
+    "host_herdr": {
+      "unavailable": "此主機上找不到 herdr。",
+      "server_not_running": "herdr 伺服器未執行。點擊附加按鈕啟動它。",
+      "sampling": "正在取樣 herdr space...",
+      "empty": "沒有 herdr 工作階段",
+      "workspace_empty": "該工作階段中沒有 space",
+      "error": "herdr 指令失敗：{{error}}",
+      "last_refreshed": "更新於",
+      "panes_suffix": "pane",
+      "tabs_suffix": "tab",
+      "focused": "焦點",
+      "restore_error": "還原錯誤",
+      "orphan_agent": "未關聯代理",
+      "attach_title": "herdr",
+      "sessions_title": "工作階段",
+      "row_space": "space",
+      "row_tab": "tab",
+      "row_pane": "pane",
+      "search_placeholder": "搜尋工作階段...",
+      "search_empty": "無符合項目",
+      "status": {
+        "working": "執行中",
+        "blocked": "已封鎖",
+        "idle": "閒置",
+        "done": "已完成",
+        "unknown": "未知"
+      },
+      "actions": {
+        "refresh": "重新整理",
+        "attach": "啟動 / 附加 herdr",
+        "agent_attach": "附加到代理",
+        "session_attach": "附加到工作階段",
+        "session_stop": "停止工作階段",
+        "session_delete": "刪除工作階段",
+        "new_session": "新增工作階段",
+        "new_workspace": "新增 space",
+        "rename": "重新命名",
+        "close": "關閉",
+        "send": "執行指令",
+        "read": "讀取輸出"
+      },
+      "confirm": {
+        "title": "確認 herdr 操作",
+        "cancel": "取消",
+        "run": "確認",
+        "close_workspace": "關閉 space {{name}}？其中的所有 tab 與 pane 都會停止。",
+        "close_pane": "關閉 pane {{name}}？其中執行中的工作會停止。",
+        "close_tab": "關閉 tab {{name}}？其中的所有 pane 都會停止。",
+        "stop_session": "停止工作階段 {{name}}？該工作階段內所有 space 與代理都會停止。",
+        "delete_session": "刪除已停止的工作階段 {{name}}？該工作階段的已儲存狀態會被移除。"
+      },
+      "inputs": {
+        "new_session": "新增工作階段",
+        "new_session_hint": "工作階段名稱",
+        "new_workspace": "新增 space",
+        "new_workspace_hint": "名稱 [/遠端路徑]",
+        "rename_workspace": "重新命名 space",
+        "rename_tab": "重新命名 tab",
+        "rename_pane": "重新命名 pane",
+        "rename_hint": "新名稱",
+        "run_pane": "在 pane 執行指令",
+        "run_pane_hint": "要輸入 pane 的指令"
+      },
+      "read": {
+        "title": "輸出：{{pane}}",
+        "loading": "正在載入輸出...",
+        "empty": "目前沒有輸出。",
+        "close": "關閉"
+      },
+      "toast": {
+        "snapshot_already_running": "已有 herdr 快照正在載入。",
+        "connection_missing": "所選連線已無法使用。",
+        "action_already_running": "已有 herdr 操作正在執行。",
+        "action_failed": "herdr 操作失敗。",
+        "action_succeeded": "herdr 操作已完成：{{target}}。",
+        "read_already_running": "已有窗格輸出正在載入。",
+        "read_failed": "讀取窗格輸出失敗。",
+        "attach_opened": "已在終端機視窗開啟 herdr。",
+        "unknown_error": "未知錯誤"
+      }
+    },
     "host_schedules": {
       "search_placeholder": "搜尋排程任務...",
       "count_suffix": "個任務",
@@ -705,7 +790,8 @@
         "dnf": "dnf",
         "yum": "yum",
         "pacman": "pacman",
-        "brew": "Homebrew"
+        "brew": "Homebrew",
+        "winget": "winget"
       },
       "columns": {
         "package": "套件",

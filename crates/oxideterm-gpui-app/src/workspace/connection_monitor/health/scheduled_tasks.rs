@@ -2083,10 +2083,8 @@ impl WorkspaceApp {
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let dialog = self.host_tools.read(cx).schedule_logs_dialog()?;
-        let follow_terminal_available = self
-            .node_router
-            .node_id_for_connection(&dialog.request.connection_id)
-            .is_some_and(|node_id| self.ssh_nodes.contains_key(&node_id));
+        let follow_terminal_available =
+            self.host_tools_terminal_available(&dialog.request.connection_id);
         let tokens = self.tokens;
         let i18n = &self.i18n;
         let mono_font_family = settings_mono_font_family(self.settings_store.settings());

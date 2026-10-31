@@ -27,6 +27,7 @@ impl ContextSidebarTool {
             Self::Logs => settings.logs_enabled,
             Self::Tmux => settings.tmux_enabled,
             Self::Docker => settings.docker_enabled,
+            Self::Herdr => settings.herdr_enabled,
             Self::Ports => settings.ports_enabled,
             Self::Schedules => settings.schedules_enabled,
             Self::Filesystems => settings.filesystems_enabled,
@@ -48,6 +49,7 @@ impl ContextSidebarTool {
             Self::Logs => settings.logs_enabled = enabled,
             Self::Tmux => settings.tmux_enabled = enabled,
             Self::Docker => settings.docker_enabled = enabled,
+            Self::Herdr => settings.herdr_enabled = enabled,
             Self::Ports => settings.ports_enabled = enabled,
             Self::Schedules => settings.schedules_enabled = enabled,
             Self::Filesystems => settings.filesystems_enabled = enabled,
@@ -232,6 +234,8 @@ mod docker;
 mod filesystems;
 #[path = "health/gpu.rs"]
 mod gpu;
+#[path = "health/herdr.rs"]
+mod herdr;
 #[path = "health/logs.rs"]
 mod logs;
 #[path = "health/monitor.rs"]
@@ -250,6 +254,17 @@ mod services;
 mod tmux;
 
 impl WorkspaceApp {
+    /// Host Tools attach actions need a terminal target: an SSH node consumer
+    /// or, for the local machine, a local terminal tab.
+    pub(super) fn host_tools_terminal_available(&self, connection_id: &str) -> bool {
+        if connection_id == LOCAL_HOST_CONNECTION_ID {
+            return true;
+        }
+        self.node_router
+            .node_id_for_connection(connection_id)
+            .is_some_and(|node_id| self.ssh_nodes.contains_key(&node_id))
+    }
+
     fn host_tool_monitoring_enabled(&self, tool: ContextSidebarTool) -> bool {
         tool.monitoring_enabled(&self.settings_store.settings().host_tools)
     }
@@ -330,6 +345,7 @@ impl WorkspaceApp {
                 ContextSidebarTool::Logs => self.render_host_logs_panel(cx),
                 ContextSidebarTool::Tmux => self.render_host_tmux_panel(cx),
                 ContextSidebarTool::Docker => self.render_host_docker_panel(cx),
+                ContextSidebarTool::Herdr => self.render_host_herdr_panel(cx),
                 ContextSidebarTool::Ports => self.render_host_ports_panel(cx),
                 ContextSidebarTool::Schedules => self.render_host_schedules_panel(cx),
                 ContextSidebarTool::Filesystems => self.render_host_filesystems_panel(cx),

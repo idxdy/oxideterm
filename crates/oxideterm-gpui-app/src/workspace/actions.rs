@@ -1373,6 +1373,7 @@ impl WorkspaceApp {
                     | ContextSidebarTool::Services
                     | ContextSidebarTool::Logs
                     | ContextSidebarTool::Tmux
+                    | ContextSidebarTool::Herdr
                     | ContextSidebarTool::Docker
                     | ContextSidebarTool::Ports
                     | ContextSidebarTool::Schedules
@@ -1398,6 +1399,9 @@ impl WorkspaceApp {
         if self.handle_host_tmux_search_key(event, cx) {
             return;
         }
+        if self.handle_host_herdr_search_key(event, cx) {
+            return;
+        }
         if self.handle_host_port_search_key(event, cx) {
             return;
         }
@@ -1411,6 +1415,9 @@ impl WorkspaceApp {
             return;
         }
         if self.handle_host_tmux_input_dialog_key(event, cx) {
+            return;
+        }
+        if self.handle_host_herdr_input_dialog_key(event, window, cx) {
             return;
         }
 
