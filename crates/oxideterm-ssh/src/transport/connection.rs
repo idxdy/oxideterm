@@ -466,7 +466,40 @@ impl SshConnectionHandle {
             ));
         }
 
-        Self::capture_exec_on(&pooled, command, timeout, max_output_size, pty_size).await
+        Self::capture_exec_on(&pooled, command, timeout, max_output_size, pty_size, None).await
+    }
+
+    /// Runs a command on a clean exec channel and writes `stdin` into it.
+    ///
+    /// The payload never becomes part of the command line, so credentials stay
+    /// out of `ps` and the remote shell history. Both streams keep zeroizing
+    /// owners because a command can echo what it reads.
+    pub async fn run_command_capture_with_stdin(
+        &self,
+        command: &str,
+        stdin: Zeroizing<Vec<u8>>,
+        timeout: Duration,
+        max_output_size: usize,
+    ) -> Result<SshSecretCommandOutput, SshTransportError> {
+        let Some(pooled) = self.physical::<PooledSshConnection>() else {
+            return Err(SshTransportError::ConnectionFailed(
+                "no active SSH connection is available for remote command execution".to_string(),
+            ));
+        };
+        if pooled.is_closed().await {
+            return Err(SshTransportError::ConnectionFailed(
+                "SSH connection is closed and cannot execute remote commands".to_string(),
+            ));
+        }
+        let output =
+            Self::capture_exec_on(&pooled, command, timeout, max_output_size, None, Some(stdin))
+                .await?;
+        Ok(SshSecretCommandOutput {
+            stdout: Zeroizing::new(output.stdout),
+            stderr: Zeroizing::new(output.stderr),
+            exit_code: output.exit_code,
+            truncated: output.truncated,
+        })
     }
 
     async fn capture_exec_on(
@@ -475,13 +508,18 @@ impl SshConnectionHandle {
         timeout: Duration,
         max_output_size: usize,
         pty_size: Option<(u32, u32)>,
+        stdin: Option<Zeroizing<Vec<u8>>>,
     ) -> Result<SshCommandCaptureBytes, SshTransportError> {
         let mut channel = tokio::time::timeout(timeout, pooled.target.channel_open_session())
             .await
             .map_err(|_| SshTransportError::Timeout)?
             .map_err(|error| SshTransportError::Channel(error.to_string()))?;
-        let mut stdout = Vec::new();
-        let mut stderr = Vec::new();
+        // Zeroizing from the first byte: an aborted, timed-out, or rejected
+        // command can still have echoed a secret into either stream, and every
+        // early return must wipe what was captured. Successful callers take the
+        // buffers out, so the plain-output path pays no wipe.
+        let mut stdout = Zeroizing::new(Vec::new());
+        let mut stderr = Zeroizing::new(Vec::new());
         let mut exit_status = None;
         let mut total_output_size = 0;
         let mut truncated = false;
@@ -505,6 +543,18 @@ impl SshConnectionHandle {
                 .exec(true, command)
                 .await
                 .map_err(|error| SshTransportError::Channel(error.to_string()))?;
+            // Bounded payloads are written before the read loop: the request
+            // never waits on the remote process to consume its input first.
+            if let Some(stdin) = stdin {
+                channel
+                    .data(stdin.as_slice())
+                    .await
+                    .map_err(|error| SshTransportError::Channel(error.to_string()))?;
+                channel
+                    .eof()
+                    .await
+                    .map_err(|error| SshTransportError::Channel(error.to_string()))?;
+            }
 
             while let Some(message) = channel.wait().await {
                 match message {
@@ -554,8 +604,8 @@ impl SshConnectionHandle {
         }
 
         Ok(SshCommandCaptureBytes {
-            stdout,
-            stderr,
+            stdout: std::mem::take(&mut *stdout),
+            stderr: std::mem::take(&mut *stderr),
             exit_code: exit_status.and_then(|status| i32::try_from(status).ok()),
             truncated,
         })

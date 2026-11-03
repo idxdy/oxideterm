@@ -25,6 +25,27 @@ pub(super) fn host_tools_tooltip_icon_button(
     flex_none: bool,
     listener: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
 ) -> AnyElement {
+    // The action prefix plus its tooltip identifies a panel-level control.
+    let element_id: gpui::ElementId =
+        (gpui::ElementId::from(element_id_prefix), tooltip.clone()).into();
+    host_tools_scoped_tooltip_icon_button(
+        tokens, icon, icon_size, icon_color, options, tooltip, element_id, flex_none, listener,
+    )
+}
+
+/// Same button with an explicit element id, so a virtualized row can scope the
+/// control to the resource it belongs to instead of a recycled slot.
+pub(super) fn host_tools_scoped_tooltip_icon_button(
+    tokens: &ThemeTokens,
+    icon: LucideIcon,
+    icon_size: f32,
+    icon_color: Rgba,
+    options: oxideterm_gpui_ui::button::IconButtonOptions,
+    tooltip: String,
+    element_id: gpui::ElementId,
+    flex_none: bool,
+    listener: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
+) -> AnyElement {
     let actionable = !(options.disabled || options.loading);
     let tooltip_label = tooltip.clone();
     let tooltip_tokens = *tokens;
@@ -40,7 +61,7 @@ pub(super) fn host_tools_tooltip_icon_button(
             .into_any_element(),
         options,
     )
-    .id((gpui::ElementId::from(element_id_prefix), tooltip))
+    .id(element_id)
     .tooltip(move |_window, cx| {
         oxideterm_gpui_ui::tooltip::tooltip_view(tooltip_tokens, tooltip_label.clone(), None, cx)
     })
