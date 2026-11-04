@@ -71,6 +71,7 @@
       "processes": "Prozesse",
       "services": "Dienste",
       "logs": "Protokolle",
+      "ecapture": "eCapture",
       "tmux": "tmux",
       "docker": "Docker",
       "tmux_management": "tmux-Verwaltung",
@@ -105,6 +106,9 @@
     "active_session_count": "Aktive Sitzungen: {{count}}",
     "no_sessions": "Keine Sitzungen",
     "add_new_connection": "Klicken Sie + um eine neue Verbindung hinzuzufügen",
+    "host_connection": {
+      "local_machine": "Dieser Rechner"
+    },
     "host_gpu": {
       "count_suffix": "Beschleuniger",
       "refresh_interval": "Aktualisierung alle 2 Sekunden",
@@ -364,6 +368,110 @@
         "unknown_error": "Unbekannter Fehler"
       }
     },
+    "host_ecapture": {
+      "search_placeholder": "Ereignisse durchsuchen...",
+      "events": "Ereignisse",
+      "dropped": "verworfen",
+      "skipped": "übersprungen",
+      "unavailable": "eCapture ist auf diesem Host nicht verfügbar.",
+      "unavailable_hint": "Installieren Sie eCapture und erlauben Sie passwortloses sudo, um TLS-Klartext zu erfassen.",
+      "waiting": "Warte auf TLS-Datenverkehr...",
+      "empty": "Keine passenden Ereignisse",
+      "empty_idle": "Vorlage wählen und Erfassung starten.",
+      "truncated": "gekürzt",
+      "status": {
+        "checking": "Host wird geprüft...",
+        "running": "Läuft",
+        "stopped": "Gestoppt",
+        "probe_failed": "Prüfung fehlgeschlagen"
+      },
+      "capability": {
+        "full": "Bereit",
+        "partial": "Root nötig",
+        "unknown": "Unbekannt"
+      },
+      "templates": {
+        "libssl": "libssl",
+        "node": "Node.js",
+        "gotls": "Go",
+        "docker": "Docker"
+      },
+      "fields": {
+        "libssl_path": "libssl-Pfad",
+        "libssl_placeholder": "Automatisch erkennen (optional)",
+        "node_path": "Node-Binärdatei oder libssl",
+        "node_placeholder": "/usr/local/bin/node",
+        "go_binary": "Go-Binärdatei",
+        "go_placeholder": "/opt/app/server",
+        "container": "Container",
+        "container_placeholder": "api-gateway",
+        "pid": "PID-Filter",
+        "pid_placeholder": "Alle Prozesse"
+      },
+      "actions": {
+        "start": "Starten",
+        "stop": "Stoppen",
+        "clear": "Löschen",
+        "refresh": "eCapture aktualisieren"
+      },
+      "filters": {
+        "all": "Alle",
+        "requests": "Anfragen",
+        "responses": "Antworten"
+      },
+      "direction": {
+        "read": "Empf.",
+        "write": "Gesendet",
+        "unknown": "Daten"
+      },
+      "kinds": {
+        "data": "Daten",
+        "request": "Anfrage",
+        "response": "Antwort"
+      },
+      "columns": {
+        "direction": "Richt.",
+        "event": "Ereignis",
+        "pid": "PID",
+        "length": "Länge",
+        "time": "Zeit",
+        "connection": "Verbindung",
+        "fd": "FD"
+      },
+      "validation": {
+        "target_required": "Geben Sie ein Ziel für diese Vorlage an.",
+        "target_too_long": "Der Zielpfad ist zu lang.",
+        "target_invalid": "Das Ziel enthält nicht unterstützte Zeichen.",
+        "target_not_absolute": "Verwenden Sie einen absoluten Pfad (beginnend mit /).",
+        "pid_invalid": "Die PID muss eine Zahl sein.",
+        "privilege_required": "eCapture benötigt Root oder passwortloses sudo auf dem Host.",
+        "binary_missing": "Installieren Sie eCapture auf dem Host, bevor Sie eine Erfassung starten.",
+        "probe_pending": "Warten Sie, bis die Host-Prüfung abgeschlossen ist."
+      },
+      "confirm": {
+        "start_title": "eCapture starten",
+        "start_desc": "eCapture hängt eBPF-Sonden an TLS-Bibliotheken und liest Klartext-Datenverkehr. Es läuft als Root und schreibt die erfassten Daten in eine temporäre Datei auf dem Host.",
+        "start_action": "Erfassung starten",
+        "clear_title": "Erfassungsdaten löschen",
+        "clear_desc": "Die auf diesem Host gespeicherten Ereignisse löschen? Die Erfassung muss zuerst gestoppt werden.",
+        "clear_action": "Daten löschen",
+        "cancel": "Abbrechen"
+      },
+      "toast": {
+        "busy": "Es läuft bereits eine eCapture-Aufgabe.",
+        "connection_missing": "Die ausgewählte Verbindung ist nicht mehr verfügbar.",
+        "probe_failed": "eCapture konnte auf diesem Host nicht geprüft werden.",
+        "snapshot_failed": "eCapture-Ereignisse konnten nicht gelesen werden.",
+        "started": "eCapture-Erfassung gestartet.",
+        "start_failed": "eCapture konnte nicht gestartet werden.",
+        "stopped": "eCapture-Erfassung gestoppt.",
+        "stop_failed": "eCapture wurde nicht gestoppt.",
+        "cleared": "Erfasste Ereignisse gelöscht.",
+        "clear_failed": "Erfasste Ereignisse konnten nicht gelöscht werden.",
+        "stream_limit": "Erfassung nach 64 MiB Ereignissen gestoppt.",
+        "unknown_error": "Unbekannter eCapture-Fehler"
+      }
+    },
     "host_tmux": {
       "search_placeholder": "tmux suchen...",
       "count_suffix": "Sitzungen",
@@ -584,6 +692,8 @@
       "actions": {
         "refresh": "Ports aktualisieren",
         "diagnostic": "Diagnose-Terminal öffnen",
+        "kill_process": "Prozess beenden",
+        "copy_kill_command": "Beenden-Befehl kopieren",
         "copy_endpoint": "Adresse kopieren",
         "jump_process": "Prozess finden"
       },
@@ -597,6 +707,7 @@
         "exec_terminal_missing": "Keine aktive SSH-Terminalroute für Diagnosen verfügbar.",
         "diagnostic_opened": "Port-Diagnose geöffnet.",
         "copied_endpoint": "{{endpoint}} kopiert.",
+        "kill_command_copied": "Kopiert: {{command}}",
         "partial_support": "Port-Prüfung wird unter {{os}} nur teilweise unterstützt.",
         "unknown_error": "Unbekannter Port-Scan-Fehler."
       }
@@ -707,7 +818,8 @@
         "dnf": "dnf",
         "yum": "yum",
         "pacman": "pacman",
-        "brew": "Homebrew"
+        "brew": "Homebrew",
+        "winget": "winget"
       },
       "columns": {
         "package": "Paket",
@@ -729,8 +841,16 @@
       },
       "actions": {
         "refresh": "Pakete aktualisieren",
+        "uninstall": "Paket deinstallieren",
+        "upgrade": "Paket aktualisieren",
         "inspect": "Paketdetails öffnen",
+        "copy_id": "Paket-ID kopieren",
         "copy_name": "Paketnamen kopieren"
+      },
+      "confirm": {
+        "uninstall_title": "Paket deinstallieren",
+        "uninstall_description": "{{name}} deinstallieren? winget entfernt es von diesem Host.",
+        "uninstall": "Deinstallieren"
       },
       "inspect_title": "Paketdetails",
       "toast": {
@@ -743,6 +863,11 @@
         "inspect_unsupported": "Paketdetails werden für {{manager}} noch nicht unterstützt.",
         "inspect_opened": "Details für {{name}} geöffnet.",
         "copied_name": "{{name}} kopiert.",
+        "copied_id": "{{id}} kopiert.",
+        "uninstall_opened": "{{name}} wird in einem Terminal deinstalliert.",
+        "uninstall_unsupported": "Deinstallieren über {{manager}} wird nicht unterstützt.",
+        "upgrade_opened": "{{name}} wird aktualisiert.",
+        "upgrade_unsupported": "Das Aktualisieren von {{manager}}-Paketen wird noch nicht unterstützt.",
         "partial_support": "Paketprüfung ist auf {{os}} nur lesend unterstützt.",
         "unknown_error": "Unbekannter Paket-Scan-Fehler."
       }

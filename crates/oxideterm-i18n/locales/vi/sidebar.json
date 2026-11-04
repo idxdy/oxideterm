@@ -71,6 +71,7 @@
       "processes": "Tiến trình",
       "services": "Dịch vụ",
       "logs": "Nhật ký",
+      "ecapture": "eCapture",
       "tmux": "tmux",
       "docker": "Docker",
       "tmux_management": "Quản lý tmux",
@@ -105,6 +106,9 @@
     "active_session_count": "Phiên đang hoạt động: {{count}}",
     "no_sessions": "Không có phiên",
     "add_new_connection": "Nhấn + để thêm kết nối",
+    "host_connection": {
+      "local_machine": "Máy này"
+    },
     "host_gpu": {
       "count_suffix": "bộ tăng tốc",
       "refresh_interval": "Cập nhật mỗi 2 giây",
@@ -364,6 +368,110 @@
         "unknown_error": "Lỗi không rõ"
       }
     },
+    "host_ecapture": {
+      "search_placeholder": "Tìm sự kiện...",
+      "events": "sự kiện",
+      "dropped": "bị bỏ",
+      "skipped": "bị bỏ qua",
+      "unavailable": "eCapture không khả dụng trên máy chủ này.",
+      "unavailable_hint": "Cài eCapture và cho phép sudo không mật khẩu để thu thập văn bản thuần của TLS.",
+      "waiting": "Đang chờ lưu lượng TLS...",
+      "empty": "Không có sự kiện đã thu thập phù hợp",
+      "empty_idle": "Chọn mẫu và bắt đầu thu thập.",
+      "truncated": "bị cắt",
+      "status": {
+        "checking": "Đang kiểm tra máy chủ...",
+        "running": "Đang chạy",
+        "stopped": "Đã dừng",
+        "probe_failed": "Kiểm tra thất bại"
+      },
+      "capability": {
+        "full": "Sẵn sàng",
+        "partial": "Cần root",
+        "unknown": "Không rõ"
+      },
+      "templates": {
+        "libssl": "libssl",
+        "node": "Node.js",
+        "gotls": "Go",
+        "docker": "Docker"
+      },
+      "fields": {
+        "libssl_path": "Đường dẫn libssl",
+        "libssl_placeholder": "Tự phát hiện (tùy chọn)",
+        "node_path": "Tệp Node hoặc libssl",
+        "node_placeholder": "/usr/local/bin/node",
+        "go_binary": "Tệp Go",
+        "go_placeholder": "/opt/app/server",
+        "container": "Container",
+        "container_placeholder": "api-gateway",
+        "pid": "Lọc PID",
+        "pid_placeholder": "Tất cả tiến trình"
+      },
+      "actions": {
+        "start": "Bắt đầu",
+        "stop": "Dừng",
+        "clear": "Xóa",
+        "refresh": "Làm mới eCapture"
+      },
+      "filters": {
+        "all": "Tất cả",
+        "requests": "Yêu cầu",
+        "responses": "Phản hồi"
+      },
+      "direction": {
+        "read": "nhận",
+        "write": "gửi",
+        "unknown": "dữ liệu"
+      },
+      "kinds": {
+        "data": "Dữ liệu",
+        "request": "Yêu cầu",
+        "response": "Phản hồi"
+      },
+      "columns": {
+        "direction": "Hướng",
+        "event": "Sự kiện",
+        "pid": "PID",
+        "length": "Độ dài",
+        "time": "Thời gian",
+        "connection": "Kết nối",
+        "fd": "FD"
+      },
+      "validation": {
+        "target_required": "Nhập đối tượng cho mẫu này.",
+        "target_too_long": "Đường dẫn đối tượng quá dài.",
+        "target_invalid": "Đối tượng chứa ký tự không được hỗ trợ.",
+        "target_not_absolute": "Hãy dùng đường dẫn tuyệt đối (bắt đầu bằng /).",
+        "pid_invalid": "PID phải là số.",
+        "privilege_required": "eCapture cần root hoặc sudo không mật khẩu trên máy chủ.",
+        "binary_missing": "Cài eCapture trên máy chủ trước khi bắt đầu thu thập.",
+        "probe_pending": "Chờ kiểm tra máy chủ hoàn tất."
+      },
+      "confirm": {
+        "start_title": "Bắt đầu eCapture",
+        "start_desc": "eCapture gắn đầu dò eBPF vào thư viện TLS và đọc lưu lượng văn bản thuần. Nó chạy bằng root và ghi dữ liệu đã thu thập vào tệp tạm trên máy chủ.",
+        "start_action": "Bắt đầu thu thập",
+        "clear_title": "Xóa dữ liệu đã thu thập",
+        "clear_desc": "Xóa các sự kiện đã lưu trên máy chủ này? Phải dừng thu thập trước.",
+        "clear_action": "Xóa dữ liệu",
+        "cancel": "Hủy"
+      },
+      "toast": {
+        "busy": "Đã có tác vụ eCapture đang chạy.",
+        "connection_missing": "Kết nối đã chọn không còn khả dụng.",
+        "probe_failed": "Không thể kiểm tra eCapture trên máy chủ này.",
+        "snapshot_failed": "Không thể đọc sự kiện eCapture.",
+        "started": "Đã bắt đầu thu thập eCapture.",
+        "start_failed": "eCapture không khởi động được.",
+        "stopped": "Đã dừng thu thập eCapture.",
+        "stop_failed": "eCapture không dừng.",
+        "cleared": "Đã xóa sự kiện đã thu thập.",
+        "clear_failed": "Không thể xóa sự kiện đã thu thập.",
+        "stream_limit": "Đã dừng thu thập khi đạt giới hạn 64 MiB.",
+        "unknown_error": "Lỗi eCapture không rõ"
+      }
+    },
     "host_tmux": {
       "search_placeholder": "Tìm tmux...",
       "count_suffix": "phiên",
@@ -584,6 +692,8 @@
       "actions": {
         "refresh": "Làm mới cổng",
         "diagnostic": "Mở terminal chẩn đoán",
+        "kill_process": "Dừng tiến trình",
+        "copy_kill_command": "Sao chép lệnh dừng",
         "copy_endpoint": "Sao chép địa chỉ",
         "jump_process": "Tìm tiến trình"
       },
@@ -597,6 +707,7 @@
         "exec_terminal_missing": "Không có tuyến terminal SSH đang hoạt động để chẩn đoán.",
         "diagnostic_opened": "Đã mở chẩn đoán cổng.",
         "copied_endpoint": "Đã sao chép {{endpoint}}.",
+        "kill_command_copied": "Đã sao chép: {{command}}",
         "partial_support": "Kiểm tra cổng chỉ được hỗ trợ một phần trên {{os}}.",
         "unknown_error": "Lỗi quét cổng không xác định."
       }
@@ -707,7 +818,8 @@
         "dnf": "dnf",
         "yum": "yum",
         "pacman": "pacman",
-        "brew": "Homebrew"
+        "brew": "Homebrew",
+        "winget": "winget"
       },
       "columns": {
         "package": "Gói",
@@ -729,8 +841,16 @@
       },
       "actions": {
         "refresh": "Làm mới gói",
+        "uninstall": "Gỡ cài đặt gói",
+        "upgrade": "Cập nhật gói",
         "inspect": "Mở chi tiết gói",
+        "copy_id": "Sao chép ID gói",
         "copy_name": "Sao chép tên gói"
+      },
+      "confirm": {
+        "uninstall_title": "Gỡ cài đặt gói",
+        "uninstall_description": "Gỡ cài đặt {{name}}? winget sẽ xóa gói này khỏi máy chủ.",
+        "uninstall": "Gỡ cài đặt"
       },
       "inspect_title": "Chi tiết gói",
       "toast": {
@@ -743,6 +863,11 @@
         "inspect_unsupported": "Chưa hỗ trợ chi tiết gói cho {{manager}}.",
         "inspect_opened": "Đã mở chi tiết cho {{name}}.",
         "copied_name": "Đã sao chép {{name}}.",
+        "copied_id": "Đã sao chép {{id}}.",
+        "uninstall_opened": "Đang gỡ cài đặt {{name}} trong terminal.",
+        "uninstall_unsupported": "Gỡ cài đặt qua {{manager}} không được hỗ trợ.",
+        "upgrade_opened": "Đang cập nhật {{name}}.",
+        "upgrade_unsupported": "Chưa hỗ trợ cập nhật gói {{manager}}.",
         "partial_support": "Kiểm tra gói trên {{os}} chỉ hỗ trợ đọc.",
         "unknown_error": "Lỗi quét gói không xác định."
       }

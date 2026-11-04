@@ -71,6 +71,7 @@
       "processes": "Processi",
       "services": "Servizi",
       "logs": "Log",
+      "ecapture": "eCapture",
       "tmux": "tmux",
       "docker": "Docker",
       "tmux_management": "Gestione tmux",
@@ -105,6 +106,9 @@
     "active_session_count": "Sessioni attive: {{count}}",
     "no_sessions": "Nessuna sessione",
     "add_new_connection": "Clicca + per aggiungere una connessione",
+    "host_connection": {
+      "local_machine": "Questo computer"
+    },
     "host_gpu": {
       "count_suffix": "acceleratori",
       "refresh_interval": "Aggiornamento ogni 2 secondi",
@@ -364,6 +368,110 @@
         "unknown_error": "Errore sconosciuto"
       }
     },
+    "host_ecapture": {
+      "search_placeholder": "Cerca eventi...",
+      "events": "eventi",
+      "dropped": "scartati",
+      "skipped": "saltati",
+      "unavailable": "eCapture non è disponibile su questo host.",
+      "unavailable_hint": "Installa eCapture e consenti sudo senza password per acquisire il testo TLS in chiaro.",
+      "waiting": "In attesa di traffico TLS...",
+      "empty": "Nessun evento acquisito corrisponde",
+      "empty_idle": "Scegli un modello e avvia un'acquisizione.",
+      "truncated": "troncato",
+      "status": {
+        "checking": "Verifica host...",
+        "running": "In esecuzione",
+        "stopped": "Fermo",
+        "probe_failed": "Verifica non riuscita"
+      },
+      "capability": {
+        "full": "Pronto",
+        "partial": "Richiede root",
+        "unknown": "Sconosciuto"
+      },
+      "templates": {
+        "libssl": "libssl",
+        "node": "Node.js",
+        "gotls": "Go",
+        "docker": "Docker"
+      },
+      "fields": {
+        "libssl_path": "Percorso libssl",
+        "libssl_placeholder": "Rilevamento automatico (opzionale)",
+        "node_path": "Binario Node o libssl",
+        "node_placeholder": "/usr/local/bin/node",
+        "go_binary": "Binario Go",
+        "go_placeholder": "/opt/app/server",
+        "container": "Container",
+        "container_placeholder": "api-gateway",
+        "pid": "Filtro PID",
+        "pid_placeholder": "Tutti i processi"
+      },
+      "actions": {
+        "start": "Avvia",
+        "stop": "Arresta",
+        "clear": "Cancella",
+        "refresh": "Aggiorna eCapture"
+      },
+      "filters": {
+        "all": "Tutti",
+        "requests": "Richieste",
+        "responses": "Risposte"
+      },
+      "direction": {
+        "read": "ricevuto",
+        "write": "inviato",
+        "unknown": "dati"
+      },
+      "kinds": {
+        "data": "Dati",
+        "request": "Richiesta",
+        "response": "Risposta"
+      },
+      "columns": {
+        "direction": "Dir.",
+        "event": "Evento",
+        "pid": "PID",
+        "length": "Lunghezza",
+        "time": "Ora",
+        "connection": "Connessione",
+        "fd": "FD"
+      },
+      "validation": {
+        "target_required": "Inserisci un target per questo modello.",
+        "target_too_long": "Il percorso del target è troppo lungo.",
+        "target_invalid": "Il target contiene caratteri non supportati.",
+        "target_not_absolute": "Usa un percorso assoluto (che inizia con /).",
+        "pid_invalid": "Il PID deve essere un numero.",
+        "privilege_required": "eCapture richiede root o sudo senza password sull'host.",
+        "binary_missing": "Installa eCapture sull'host prima di avviare un'acquisizione.",
+        "probe_pending": "Attendi il completamento della verifica dell'host."
+      },
+      "confirm": {
+        "start_title": "Avvia eCapture",
+        "start_desc": "eCapture collega sonde eBPF alle librerie TLS e legge il traffico in chiaro. Viene eseguito come root e scrive i dati acquisiti in un file temporaneo sull'host.",
+        "start_action": "Avvia acquisizione",
+        "clear_title": "Cancella dati acquisiti",
+        "clear_desc": "Eliminare gli eventi salvati su questo host? L'acquisizione deve essere prima arrestata.",
+        "clear_action": "Elimina dati",
+        "cancel": "Annulla"
+      },
+      "toast": {
+        "busy": "Un'attività eCapture è già in corso.",
+        "connection_missing": "La connessione selezionata non è più disponibile.",
+        "probe_failed": "Impossibile verificare eCapture su questo host.",
+        "snapshot_failed": "Impossibile leggere gli eventi eCapture.",
+        "started": "Acquisizione eCapture avviata.",
+        "start_failed": "eCapture non è stato avviato.",
+        "stopped": "Acquisizione eCapture arrestata.",
+        "stop_failed": "eCapture non si è arrestato.",
+        "cleared": "Eventi acquisiti eliminati.",
+        "clear_failed": "Impossibile eliminare gli eventi acquisiti.",
+        "stream_limit": "Acquisizione arrestata al limite di 64 MiB.",
+        "unknown_error": "Errore eCapture sconosciuto"
+      }
+    },
     "host_tmux": {
       "search_placeholder": "Cerca tmux...",
       "count_suffix": "sessioni",
@@ -584,6 +692,8 @@
       "actions": {
         "refresh": "Aggiorna porte",
         "diagnostic": "Apri terminale diagnostico",
+        "kill_process": "Termina processo",
+        "copy_kill_command": "Copia comando di arresto",
         "copy_endpoint": "Copia indirizzo",
         "jump_process": "Trova processo"
       },
@@ -597,6 +707,7 @@
         "exec_terminal_missing": "Nessuna route terminale SSH attiva per la diagnostica.",
         "diagnostic_opened": "Diagnostica porte aperta.",
         "copied_endpoint": "{{endpoint}} copiato.",
+        "kill_command_copied": "Copiato: {{command}}",
         "partial_support": "L’ispezione porte è parziale su {{os}}.",
         "unknown_error": "Errore sconosciuto nella scansione porte."
       }
@@ -707,7 +818,8 @@
         "dnf": "dnf",
         "yum": "yum",
         "pacman": "pacman",
-        "brew": "Homebrew"
+        "brew": "Homebrew",
+        "winget": "winget"
       },
       "columns": {
         "package": "Pacchetto",
@@ -729,8 +841,16 @@
       },
       "actions": {
         "refresh": "Aggiorna pacchetti",
+        "uninstall": "Disinstalla pacchetto",
+        "upgrade": "Aggiorna pacchetto",
         "inspect": "Apri dettagli pacchetto",
+        "copy_id": "Copia ID pacchetto",
         "copy_name": "Copia nome pacchetto"
+      },
+      "confirm": {
+        "uninstall_title": "Disinstalla pacchetto",
+        "uninstall_description": "Disinstallare {{name}}? winget lo rimuove da questo host.",
+        "uninstall": "Disinstalla"
       },
       "inspect_title": "Dettagli pacchetto",
       "toast": {
@@ -743,6 +863,11 @@
         "inspect_unsupported": "I dettagli dei pacchetti non sono ancora supportati per {{manager}}.",
         "inspect_opened": "Dettagli aperti per {{name}}.",
         "copied_name": "{{name}} copiato.",
+        "copied_id": "{{id}} copiato.",
+        "uninstall_opened": "Disinstallazione di {{name}} in un terminale.",
+        "uninstall_unsupported": "La disinstallazione tramite {{manager}} non è supportata.",
+        "upgrade_opened": "Aggiornamento di {{name}}.",
+        "upgrade_unsupported": "L’aggiornamento dei pacchetti {{manager}} non è ancora supportato.",
         "partial_support": "L'ispezione dei pacchetti su {{os}} è in sola lettura.",
         "unknown_error": "Errore sconosciuto durante la scansione dei pacchetti."
       }

@@ -47,7 +47,7 @@ For a guided tour, see the [documentation](https://oxideterm.app).
 | **Files and editing** | SFTP dual-pane manager, transfer queues with speed limits and ETA, bookmarks, a built-in remote editor with safe writes, conflict handling, and workspace restore |
 | **Networking** | Local, remote, and dynamic SOCKS5 forwarding, saved rules, remote port detection, connection topology, ad-hoc socket debugging |
 | **Remote desktop** | Install RDP or VNC from the plugin marketplace for the native viewer, clipboard and input support |
-| **Host operations** | Monitoring for processes, services, logs, ports, tasks, disks, packages, containers, and tmux |
+| **Host operations** | Monitoring for processes, services, logs, ports, tasks, disks, packages, containers, tmux, and eCapture TLS plaintext |
 | **AI and automation** | BYOK OxideSens, MCP, local RAG, Agent Skills, approved workspace actions, a standalone CLI |
 | **Review and audit** | Optional Notification & Audit workspace and encrypted session recordings (both off by default) |
 | **Sync and portability** | Encrypted cloud sync, portable `.oxide` bundles |

@@ -141,6 +141,10 @@ pub(in crate::workspace) enum HostToolsNotice {
     },
     PortUnavailable,
     PortSnapshotFailed,
+    /// Reports the force-stop command the user copied for one port owner.
+    PortKillCommandCopied {
+        command: String,
+    },
     /// Reports the endpoint that the user explicitly copied from the port table.
     PortEndpointCopied {
         endpoint: String,
@@ -174,6 +178,17 @@ pub(in crate::workspace) enum HostToolsNotice {
     PackageNameCopied {
         package_name: String,
     },
+    /// Reports the package identifier that the user explicitly copied.
+    PackageIdCopied {
+        package_id: String,
+    },
+    /// Reports the package manager whose upgrade command is not available.
+    PackageUninstallUnsupported {
+        manager: String,
+    },
+    PackageUpgradeUnsupported {
+        manager: String,
+    },
     ScheduleSnapshotAlreadyRunning,
     ScheduleConnectionMissing,
     SchedulePartialSupport {
@@ -193,6 +208,20 @@ pub(in crate::workspace) enum HostToolsNotice {
         task_name: String,
         succeeded: bool,
     },
+    EcaptureBusy,
+    EcaptureConnectionMissing,
+    EcaptureUnavailable,
+    EcaptureProbeFailed,
+    EcaptureSnapshotFailed,
+    EcaptureStarted,
+    EcaptureStartFailed,
+    EcaptureStopped {
+        succeeded: bool,
+    },
+    EcaptureCleared {
+        succeeded: bool,
+    },
+    EcaptureStreamLimit,
 }
 
 impl EventEmitter<HostToolsEvent> for HostToolsEntity {}

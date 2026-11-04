@@ -276,7 +276,7 @@ Examples:
 - Open an SSH node.
 - Start SFTP.
 - Create a forward.
-- Inspect host tools such as processes, Docker, services, tmux, packages, logs, ports, and filesystems.
+- Inspect host tools such as processes, Docker, services, tmux, eCapture, packages, logs, ports, and filesystems.
 - Open an IDE workspace.
 - Open a graphics/VNC session.
 - Confirm a terminal file-transfer prompt.
@@ -878,12 +878,15 @@ Host Tools cover:
 - Docker containers and logs.
 - Services.
 - tmux sessions, windows, and panes.
+- eCapture TLS plaintext captures on Linux hosts, driven over the existing SSH exec channel without extra ports or forwarding.
 - Package inventory.
 - System logs.
 - Listening ports and exposure hints.
 - Filesystem and disk usage.
 - Scheduled tasks.
 - CPU, memory, disk, GPU, and network metrics.
+
+eCapture is the most constrained entry in this set. It is Linux only: the probe and the start, stop, and clear commands all reject any other remote OS family. It also cannot run against the local target, because its commands are dispatched over the SSH exec channel rather than through a local command runner. The host must already provide an `ecapture` binary that the probe finds on `PATH`, and the session must be root or able to run `sudo -n`; the app never installs it. No listener or port forward is added: the detached capture writes TLS plaintext events to a per-connection directory under `/tmp`, which the panel polls incrementally over the same channel. That detachment is why hiding the panel or restarting the app leaves the capture running, and why `Clear` is refused while the process is alive before it removes the run directory.
 
 Architecture rules:
 
@@ -2090,6 +2093,7 @@ Implementation: [workspace](../../../crates/oxideterm-gpui-app/src/workspace.rs)
 | `process.rs` | Filter, sort, display, and build actions for processes | Process actions are explicit host-tool commands, not terminal keystrokes |
 | `docker.rs`, `service.rs`, `tmux.rs` | Model host managers and their actions | Manager-specific parsing stays in the monitor domain |
 | `package.rs`, `log.rs`, `port.rs`, `filesystem.rs`, `scheduled_task.rs` | Sample package inventory, logs, ports, filesystems, and scheduled tasks | Resource tools can fail independently without changing SSH node ownership |
+| `oxideterm-ecapture/src/*` | Build detached eCapture start/poll/stop scripts and parse the captured TLS event stream | Captures stay host-owned files polled over the SSH exec channel; no listener or forward is added |
 
 ### SFTP Domain Modules
 

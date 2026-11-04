@@ -71,6 +71,7 @@ pub(in crate::workspace) struct HostToolsEntity {
     pub(super) host_filesystems: HostFilesystemsState,
     pub(super) host_packages: HostPackagesState,
     pub(super) host_schedules: HostSchedulesState,
+    pub(super) host_ecapture: HostEcaptureState,
     pub(in crate::workspace) active_runtime_section: ConnectionRuntimeSection,
     pub(in crate::workspace) previous_runtime_section: ConnectionRuntimeSection,
     selected_connection_id: Option<String>,
@@ -534,6 +535,10 @@ impl HostToolsEntity {
             ))
         } else if self.ui.host_tmux_input_dialog.is_some() {
             Some(HostToolsWindowModalSnapshot::TmuxInput)
+        } else if let Some(confirm) = self.host_ecapture.pending_confirm.as_ref() {
+            Some(HostToolsWindowModalSnapshot::EcaptureConfirm(
+                confirm.presence.phase(),
+            ))
         } else if let Some(confirm) = self.host_tmux.pending_confirm.as_ref() {
             Some(HostToolsWindowModalSnapshot::TmuxConfirm(
                 confirm.presence.phase(),
@@ -548,6 +553,10 @@ impl HostToolsEntity {
             Some(HostToolsWindowModalSnapshot::DockerLogs)
         } else if let Some(confirm) = self.host_docker_operations.pending_confirm.as_ref() {
             Some(HostToolsWindowModalSnapshot::DockerConfirm(
+                confirm.presence.phase(),
+            ))
+        } else if let Some(confirm) = self.host_packages.pending_confirm.as_ref() {
+            Some(HostToolsWindowModalSnapshot::PackageConfirm(
                 confirm.presence.phase(),
             ))
         } else {
@@ -598,6 +607,7 @@ impl HostToolsEntity {
             host_filesystems: HostFilesystemsState::new(),
             host_packages: HostPackagesState::new(),
             host_schedules: HostSchedulesState::new(),
+            host_ecapture: HostEcaptureState::new(),
             active_runtime_section: ConnectionRuntimeSection::Overview,
             previous_runtime_section: ConnectionRuntimeSection::Overview,
             selected_connection_id: None,
@@ -675,6 +685,7 @@ impl HostToolsEntity {
             HostToolsTextInput::DockerSearch => self.ui.host_docker_expanded_id = None,
             HostToolsTextInput::ServiceSearch => self.ui.host_service_expanded_id = None,
             HostToolsTextInput::LogSearch => self.host_logs.expanded_index = None,
+            HostToolsTextInput::EcaptureSearch => self.host_ecapture.expanded_sequence = None,
             HostToolsTextInput::TmuxSearch => {
                 self.ui.host_tmux_expanded_session_id = None;
                 self.ui.host_tmux_expanded_window_id = None;
@@ -683,7 +694,10 @@ impl HostToolsEntity {
             HostToolsTextInput::ScheduleSearch => self.host_schedules.expanded_index = None,
             HostToolsTextInput::FilesystemSearch => self.host_filesystems.expanded_index = None,
             HostToolsTextInput::PackageSearch => self.host_packages.expanded_index = None,
-            HostToolsTextInput::ProcessRenice | HostToolsTextInput::TmuxDialog => {}
+            HostToolsTextInput::ProcessRenice
+            | HostToolsTextInput::TmuxDialog
+            | HostToolsTextInput::EcaptureTarget
+            | HostToolsTextInput::EcapturePid => {}
         }
         true
     }
@@ -720,34 +734,57 @@ impl HostToolsEntity {
     }
 
     pub(super) fn monitor_connections(&self) -> Vec<MonitorConnectionOption> {
-        if !self.pool_summaries.is_empty() {
-            return self
-                .pool_summaries
+        let mut connections = if !self.pool_summaries.is_empty() {
+            self.pool_summaries
                 .iter()
                 .filter(|summary| summary.is_displayed_in_pool())
                 .map(MonitorConnectionOption::from_pool_summary)
-                .collect();
+                .collect::<Vec<_>>()
+        } else {
+            let mut connections = self
+                .ssh_registry
+                .list()
+                .into_iter()
+                .map(MonitorConnectionOption::from_connection_info)
+                .collect::<Vec<_>>();
+            connections.sort_by(|left, right| {
+                monitor_connection_label(left).cmp(&monitor_connection_label(right))
+            });
+            connections
+        };
+        // The local target stays last so an existing SSH selection keeps its
+        // position. It appears once the localized label has been delivered.
+        if let Some(label) = self
+            .messages
+            .as_ref()
+            .map(|messages| messages.local_connection_label.clone())
+        {
+            connections.push(MonitorConnectionOption::local(label));
         }
-
-        let mut connections = self
-            .ssh_registry
-            .list()
-            .into_iter()
-            .map(MonitorConnectionOption::from_connection_info)
-            .collect::<Vec<_>>();
-        connections.sort_by(|left, right| {
-            monitor_connection_label(left).cmp(&monitor_connection_label(right))
-        });
         connections
     }
 
     pub(super) fn connection_os_type(&self, connection_id: &str) -> Option<String> {
+        if connection_id == LOCAL_HOST_CONNECTION_ID {
+            return Some(local_host_os_type().to_string());
+        }
         self.ssh_registry.get(connection_id).map(|handle| {
             handle
                 .remote_env()
                 .map(|environment| environment.os_type)
                 .unwrap_or_else(|| "Unknown".to_string())
         })
+    }
+
+    /// Resolves the execution target for one Host Tools connection. The local
+    /// target runs the same generated command lines without an SSH node.
+    fn host_command_target(&self, connection_id: &str) -> Option<HostCommandTarget> {
+        if connection_id == LOCAL_HOST_CONNECTION_ID {
+            return Some(HostCommandTarget::Local);
+        }
+        self.ssh_registry
+            .get(connection_id)
+            .map(HostCommandTarget::Ssh)
     }
 
     pub(super) fn remote_env_detection_running(&self, connection_id: &str) -> bool {
@@ -774,7 +811,7 @@ impl HostToolsEntity {
                 )),
             )
         });
-        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+        let Some(target) = self.host_command_target(&request.connection_id) else {
             if let Some(audit) = audit {
                 audit.finish(
                     oxideterm_audit::AuditOutcome::Failed,
@@ -787,9 +824,9 @@ impl HostToolsEntity {
         };
         let delivery_tx = self.reliable_delivery_tx.clone();
         // Only the generated log command crosses the task boundary. The
-        // registry-owned handle keeps credentials and node lifetime private.
+        // resolved target keeps credentials and node lifetime private.
         runtime.spawn(async move {
-            let result = handle
+            let result = target
                 .run_command_capture(&command, timeout, max_output_size)
                 .await
                 .map_err(|_| ());
@@ -815,7 +852,7 @@ impl HostToolsEntity {
             .feedback
             .should_toast()
             .then(|| self.host_tool_audit(&request.connection_id, "query_host_ports", None));
-        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+        let Some(target) = self.host_command_target(&request.connection_id) else {
             if let Some(audit) = audit {
                 audit.finish(
                     oxideterm_audit::AuditOutcome::Failed,
@@ -827,10 +864,10 @@ impl HostToolsEntity {
             return false;
         };
         let delivery_tx = self.reliable_delivery_tx.clone();
-        // The registry handle keeps authentication and node ownership inside
-        // the SSH runtime while the generated diagnostic command runs.
+        // The resolved target keeps authentication and node ownership inside
+        // its runtime while the generated diagnostic command runs.
         runtime.spawn(async move {
-            let result = handle
+            let result = target
                 .run_command_capture(&command, timeout, max_output_size)
                 .await
                 .map_err(|_| ());
@@ -856,7 +893,7 @@ impl HostToolsEntity {
             .feedback
             .should_toast()
             .then(|| self.host_tool_audit(&request.connection_id, "query_host_filesystems", None));
-        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+        let Some(target) = self.host_command_target(&request.connection_id) else {
             if let Some(audit) = audit {
                 audit.finish(
                     oxideterm_audit::AuditOutcome::Failed,
@@ -871,7 +908,7 @@ impl HostToolsEntity {
         // Filesystem capture uses the registry-owned transport without moving
         // credentials or node lifecycle control into the page task.
         runtime.spawn(async move {
-            let result = handle
+            let result = target
                 .run_command_capture(&command, timeout, max_output_size)
                 .await
                 .map_err(|_| ());
@@ -899,7 +936,7 @@ impl HostToolsEntity {
             .feedback
             .should_toast()
             .then(|| self.host_tool_audit(&request.connection_id, "query_host_packages", None));
-        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+        let Some(target) = self.host_command_target(&request.connection_id) else {
             if let Some(audit) = audit {
                 audit.finish(
                     oxideterm_audit::AuditOutcome::Failed,
@@ -914,7 +951,7 @@ impl HostToolsEntity {
         // Package inventory uses the registry-owned transport and cannot
         // release the shared node or inspect its authentication material.
         runtime.spawn(async move {
-            let result = handle
+            let result = target
                 .run_command_capture(&command, timeout, max_output_size)
                 .await
                 .map_err(|_| ());
@@ -940,7 +977,7 @@ impl HostToolsEntity {
             .feedback
             .should_toast()
             .then(|| self.host_tool_audit(&request.connection_id, "query_host_schedules", None));
-        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+        let Some(target) = self.host_command_target(&request.connection_id) else {
             if let Some(audit) = audit {
                 audit.finish(
                     oxideterm_audit::AuditOutcome::Failed,
@@ -955,7 +992,7 @@ impl HostToolsEntity {
         // Scheduled-task inventory runs on the registry-owned transport and
         // cannot acquire node release or authentication capabilities.
         runtime.spawn(async move {
-            let result = handle
+            let result = target
                 .run_command_capture(&command, timeout, max_output_size)
                 .await
                 .map_err(|_| ());
@@ -984,7 +1021,7 @@ impl HostToolsEntity {
             "query_scheduled_task_logs",
             Some(&format!("task_id={}", request.task_id)),
         );
-        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+        let Some(target) = self.host_command_target(&request.connection_id) else {
             audit.finish(
                 oxideterm_audit::AuditOutcome::Failed,
                 oxideterm_audit::AuditEvidence::Request,
@@ -996,7 +1033,7 @@ impl HostToolsEntity {
         let delivery_tx = self.reliable_delivery_tx.clone();
         // Raw log output stays inside the Entity delivery and dialog state.
         runtime.spawn(async move {
-            let result = handle
+            let result = target
                 .run_command_capture(&command, timeout, max_output_size)
                 .await
                 .map_err(|_| ());
@@ -1024,7 +1061,7 @@ impl HostToolsEntity {
                 request.task_id, request.action
             )),
         );
-        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+        let Some(target) = self.host_command_target(&request.connection_id) else {
             audit.finish(
                 oxideterm_audit::AuditOutcome::Failed,
                 oxideterm_audit::AuditEvidence::Request,
@@ -1037,7 +1074,7 @@ impl HostToolsEntity {
         // Action output is reduced to a success bit before it enters delivery.
         runtime.spawn(async move {
             let mut audit_exit_code = None;
-            let result = handle
+            let result = target
                 .run_command_capture(&command, timeout, max_output_size)
                 .await
                 .map(|mut output| {
@@ -1085,7 +1122,7 @@ impl HostToolsEntity {
             "process_action",
             Some(&format!("pid={} action={:?}", request.pid, request.action)),
         );
-        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+        let Some(target) = self.host_command_target(&request.connection_id) else {
             audit.finish(
                 oxideterm_audit::AuditOutcome::Failed,
                 oxideterm_audit::AuditEvidence::Request,
@@ -1099,7 +1136,7 @@ impl HostToolsEntity {
         // and clear both buffers before crossing the Entity delivery boundary.
         runtime.spawn(async move {
             let mut audit_exit_code = None;
-            let result = handle
+            let result = target
                 .run_command_capture(&command, timeout, max_output_size)
                 .await
                 .map(|mut output| {
@@ -1149,7 +1186,7 @@ impl HostToolsEntity {
                 request.container_id, request.action
             )),
         );
-        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+        let Some(target) = self.host_command_target(&request.connection_id) else {
             audit.finish(
                 oxideterm_audit::AuditOutcome::Failed,
                 oxideterm_audit::AuditEvidence::Request,
@@ -1162,7 +1199,7 @@ impl HostToolsEntity {
         // Docker action output is not product data. Clear it before delivery.
         runtime.spawn(async move {
             let mut audit_exit_code = None;
-            let result = handle
+            let result = target
                 .run_command_capture(&command, timeout, max_output_size)
                 .await
                 .map(|mut output| {
@@ -1209,7 +1246,7 @@ impl HostToolsEntity {
             "query_container_logs",
             Some(&format!("container_id={}", request.container_id)),
         );
-        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+        let Some(target) = self.host_command_target(&request.connection_id) else {
             audit.finish(
                 oxideterm_audit::AuditOutcome::Failed,
                 oxideterm_audit::AuditEvidence::Request,
@@ -1221,7 +1258,7 @@ impl HostToolsEntity {
         let delivery_tx = self.reliable_delivery_tx.clone();
         // Raw logs remain inside the Entity delivery and dialog state.
         runtime.spawn(async move {
-            let result = handle
+            let result = target
                 .run_command_capture(&command, timeout, max_output_size)
                 .await
                 .map_err(|_| ());
@@ -1241,13 +1278,13 @@ impl HostToolsEntity {
         max_output_size: usize,
         runtime: tokio::runtime::Handle,
     ) -> bool {
-        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+        let Some(target) = self.host_command_target(&request.connection_id) else {
             return false;
         };
         let delivery_tx = self.reliable_delivery_tx.clone();
         // Inventory output stays inside the Entity and is parsed before render.
         runtime.spawn(async move {
-            let result = handle
+            let result = target
                 .run_command_capture(&command, timeout, max_output_size)
                 .await
                 .map_err(|_| ());
@@ -1274,7 +1311,7 @@ impl HostToolsEntity {
                 request.service_id, request.action
             )),
         );
-        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+        let Some(target) = self.host_command_target(&request.connection_id) else {
             audit.finish(
                 oxideterm_audit::AuditOutcome::Failed,
                 oxideterm_audit::AuditEvidence::Request,
@@ -1287,7 +1324,7 @@ impl HostToolsEntity {
         // Service action output has no UI consumer and is cleared in the worker.
         runtime.spawn(async move {
             let mut audit_exit_code = None;
-            let result = handle
+            let result = target
                 .run_command_capture(&command, timeout, max_output_size)
                 .await
                 .map(|mut output| {
@@ -1334,7 +1371,7 @@ impl HostToolsEntity {
             "query_service_logs",
             Some(&format!("service_id={}", request.service_id)),
         );
-        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+        let Some(target) = self.host_command_target(&request.connection_id) else {
             audit.finish(
                 oxideterm_audit::AuditOutcome::Failed,
                 oxideterm_audit::AuditEvidence::Request,
@@ -1346,7 +1383,7 @@ impl HostToolsEntity {
         let delivery_tx = self.reliable_delivery_tx.clone();
         // Raw service logs never cross the typed workspace event boundary.
         runtime.spawn(async move {
-            let result = handle
+            let result = target
                 .run_command_capture(&command, timeout, max_output_size)
                 .await
                 .map_err(|_| ());
@@ -1370,7 +1407,7 @@ impl HostToolsEntity {
             .feedback
             .should_toast()
             .then(|| self.host_tool_audit(&request.connection_id, "query_host_tmux", None));
-        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+        let Some(target) = self.host_command_target(&request.connection_id) else {
             if let Some(audit) = audit {
                 audit.finish(
                     oxideterm_audit::AuditOutcome::Failed,
@@ -1384,7 +1421,7 @@ impl HostToolsEntity {
         let delivery_tx = self.reliable_delivery_tx.clone();
         // Raw tmux inventory stays inside the Entity delivery boundary.
         runtime.spawn(async move {
-            let result = handle
+            let result = target
                 .run_command_capture(&command, timeout, max_output_size)
                 .await
                 .map_err(|_| ());
@@ -1411,7 +1448,7 @@ impl HostToolsEntity {
             "tmux_action",
             Some(&format!("session={}", request.session_id)),
         );
-        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+        let Some(target) = self.host_command_target(&request.connection_id) else {
             audit.finish(
                 oxideterm_audit::AuditOutcome::Failed,
                 oxideterm_audit::AuditEvidence::Request,
@@ -1423,6 +1460,256 @@ impl HostToolsEntity {
         let delivery_tx = self.reliable_delivery_tx.clone();
         // The generated command is moved once into the worker. Captured output
         // is cleared before only a success bit crosses delivery.
+        runtime.spawn(async move {
+            let mut audit_exit_code = None;
+            let result = target
+                .run_command_capture(command.as_str(), timeout, max_output_size)
+                .await
+                .map(|mut output| {
+                    audit_exit_code = output.exit_code;
+                    let succeeded = output.exit_code.unwrap_or(0) == 0;
+                    zeroize::Zeroize::zeroize(&mut output.stdout);
+                    zeroize::Zeroize::zeroize(&mut output.stderr);
+                    succeeded
+                })
+                .map_err(|_| ());
+            let audit_outcome = match (&result, audit_exit_code) {
+                (Err(_), _) => oxideterm_audit::AuditOutcome::Failed,
+                (_, Some(0)) => oxideterm_audit::AuditOutcome::Succeeded,
+                (_, Some(_)) => oxideterm_audit::AuditOutcome::Failed,
+                (_, None) => oxideterm_audit::AuditOutcome::Unknown,
+            };
+            audit.finish(
+                audit_outcome,
+                if audit_exit_code.is_some() {
+                    oxideterm_audit::AuditEvidence::ExitCode
+                } else {
+                    oxideterm_audit::AuditEvidence::Protocol
+                },
+                audit_exit_code,
+                None,
+            );
+            let _ = delivery_tx.send(super::delivery::HostToolsReliableDelivery::TmuxAction(
+                HostTmuxActionDelivery { request, result },
+            ));
+        });
+        true
+    }
+
+    pub(super) fn spawn_ecapture_probe(
+        &self,
+        command: String,
+        request: HostEcaptureProbeRequest,
+        timeout: Duration,
+        max_output_size: usize,
+        runtime: tokio::runtime::Handle,
+    ) -> bool {
+        let audit = request
+            .feedback
+            .should_toast()
+            .then(|| self.host_tool_audit(&request.connection_id, "query_host_ecapture", None));
+        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+            if let Some(audit) = audit {
+                audit.finish(
+                    oxideterm_audit::AuditOutcome::Failed,
+                    oxideterm_audit::AuditEvidence::Request,
+                    None,
+                    None,
+                );
+            }
+            return false;
+        };
+        let delivery_tx = self.reliable_delivery_tx.clone();
+        runtime.spawn(async move {
+            let mut result = handle
+                .run_command_capture(&command, timeout, max_output_size)
+                .await
+                .map_err(|_| ());
+            if let Some(audit) = audit {
+                finish_host_query_audit(audit, &result);
+            }
+            let parsed = match result.as_mut() {
+                Ok(output) => {
+                    let parsed = if output.exit_code.unwrap_or(0) == 0 {
+                        Ok(parse_ecapture_probe(&output.stdout, output.truncated))
+                    } else {
+                        Err(host_tool_capture_failure_message(
+                            &output.stdout,
+                            &output.stderr,
+                            output.exit_code,
+                            &request.failure_fallback,
+                        ))
+                    };
+                    zeroize_host_snapshot_output(output);
+                    parsed
+                }
+                Err(()) => Err(request.failure_fallback.clone()),
+            };
+            let _ = delivery_tx.send(super::delivery::HostToolsReliableDelivery::EcaptureProbe(
+                HostEcaptureProbeDelivery {
+                    request,
+                    result: parsed,
+                },
+            ));
+        });
+        true
+    }
+
+    pub(super) fn spawn_ecapture_poll(
+        &self,
+        command: String,
+        request: HostEcapturePollRequest,
+        timeout: Duration,
+        max_output_size: usize,
+        runtime: tokio::runtime::Handle,
+    ) -> bool {
+        let audit = request
+            .feedback
+            .should_toast()
+            .then(|| self.host_tool_audit(&request.connection_id, "query_host_ecapture", None));
+        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+            if let Some(audit) = audit {
+                audit.finish(
+                    oxideterm_audit::AuditOutcome::Failed,
+                    oxideterm_audit::AuditEvidence::Request,
+                    None,
+                    None,
+                );
+            }
+            return false;
+        };
+        let delivery_tx = self.reliable_delivery_tx.clone();
+        // Captured TLS plaintext is parsed inside the worker; only bounded
+        // records reach the Entity delivery queue.
+        runtime.spawn(async move {
+            let mut result = handle
+                .run_command_capture(&command, timeout, max_output_size)
+                .await
+                .map_err(|_| ());
+            if let Some(audit) = audit {
+                finish_host_query_audit(audit, &result);
+            }
+            let parsed = match result.as_mut() {
+                Ok(output) => {
+                    let parsed = if output.exit_code.unwrap_or(0) == 0 {
+                        Ok(parse_ecapture_poll(
+                            &request.run_id,
+                            &output.stdout,
+                            output.truncated,
+                        ))
+                    } else {
+                        Err(host_tool_capture_failure_message(
+                            &output.stdout,
+                            &output.stderr,
+                            output.exit_code,
+                            &request.failure_fallback,
+                        ))
+                    };
+                    zeroize_host_snapshot_output(output);
+                    parsed
+                }
+                Err(()) => Err(request.failure_fallback.clone()),
+            };
+            let _ = delivery_tx.send(super::delivery::HostToolsReliableDelivery::EcapturePoll(
+                HostEcapturePollDelivery {
+                    request,
+                    result: parsed,
+                },
+            ));
+        });
+        true
+    }
+
+    pub(super) fn spawn_ecapture_start(
+        &self,
+        command: zeroize::Zeroizing<String>,
+        request: HostEcaptureStartRequest,
+        timeout: Duration,
+        max_output_size: usize,
+        runtime: tokio::runtime::Handle,
+    ) -> bool {
+        let audit = self.host_tool_audit(
+            &request.connection_id,
+            "start_ecapture",
+            Some(&format!("template={:?}", request.spec.template)),
+        );
+        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+            audit.finish(
+                oxideterm_audit::AuditOutcome::Failed,
+                oxideterm_audit::AuditEvidence::Request,
+                None,
+                None,
+            );
+            return false;
+        };
+        let delivery_tx = self.reliable_delivery_tx.clone();
+        runtime.spawn(async move {
+            let mut audit_exit_code = None;
+            let result = handle
+                .run_command_capture(command.as_str(), timeout, max_output_size)
+                .await
+                .map(|mut output| {
+                    audit_exit_code = output.exit_code;
+                    let started = output.exit_code.unwrap_or(0) == 0
+                        && parse_ecapture_start_finished(&request.run_id, &output.stdout);
+                    let failure = (!started).then(|| {
+                        host_tool_capture_failure_message(
+                            &output.stdout,
+                            &output.stderr,
+                            output.exit_code,
+                            &request.failure_fallback,
+                        )
+                    });
+                    zeroize_host_snapshot_output(&mut output);
+                    HostEcaptureStartOutcome { started, failure }
+                })
+                .map_err(|_| request.failure_fallback.clone());
+            let audit_outcome = match (&result, audit_exit_code) {
+                (Err(_), _) => oxideterm_audit::AuditOutcome::Failed,
+                (_, Some(0)) => oxideterm_audit::AuditOutcome::Succeeded,
+                (_, Some(_)) => oxideterm_audit::AuditOutcome::Failed,
+                (_, None) => oxideterm_audit::AuditOutcome::Unknown,
+            };
+            audit.finish(
+                audit_outcome,
+                if audit_exit_code.is_some() {
+                    oxideterm_audit::AuditEvidence::ExitCode
+                } else {
+                    oxideterm_audit::AuditEvidence::Protocol
+                },
+                audit_exit_code,
+                None,
+            );
+            let _ = delivery_tx.send(super::delivery::HostToolsReliableDelivery::EcaptureStart(
+                HostEcaptureStartDelivery { request, result },
+            ));
+        });
+        true
+    }
+
+    pub(super) fn spawn_ecapture_action(
+        &self,
+        command: zeroize::Zeroizing<String>,
+        request: HostEcaptureActionRequest,
+        timeout: Duration,
+        max_output_size: usize,
+        runtime: tokio::runtime::Handle,
+    ) -> bool {
+        let audit = self.host_tool_audit(
+            &request.connection_id,
+            "ecapture_action",
+            Some(&format!("kind={:?}", request.kind)),
+        );
+        let Some(handle) = self.ssh_registry.get(&request.connection_id) else {
+            audit.finish(
+                oxideterm_audit::AuditOutcome::Failed,
+                oxideterm_audit::AuditEvidence::Request,
+                None,
+                None,
+            );
+            return false;
+        };
+        let delivery_tx = self.reliable_delivery_tx.clone();
         runtime.spawn(async move {
             let mut audit_exit_code = None;
             let result = handle
@@ -1452,8 +1739,8 @@ impl HostToolsEntity {
                 audit_exit_code,
                 None,
             );
-            let _ = delivery_tx.send(super::delivery::HostToolsReliableDelivery::TmuxAction(
-                HostTmuxActionDelivery { request, result },
+            let _ = delivery_tx.send(super::delivery::HostToolsReliableDelivery::EcaptureAction(
+                HostEcaptureActionDelivery { request, result },
             ));
         });
         true
@@ -1562,6 +1849,9 @@ impl HostToolsEntity {
         }
         if tool != ContextSidebarTool::Schedules {
             self.dismiss_schedule_confirm(cx);
+        }
+        if tool != ContextSidebarTool::Ecapture {
+            self.dismiss_ecapture_confirm(cx);
         }
 
         if let Some(runtime) = self.lifecycle_runtime.clone() {
@@ -1698,6 +1988,8 @@ impl HostToolsEntity {
         self.dismiss_tmux_input_dialog(cx);
         self.dismiss_tmux_confirm(cx);
         self.dismiss_schedule_confirm(cx);
+        self.dismiss_ecapture_confirm(cx);
+        self.clear_ecapture_error(cx);
 
         let Some(runtime) = self.lifecycle_runtime.clone() else {
             return;
@@ -1742,6 +2034,7 @@ impl HostToolsEntity {
                     | ContextSidebarTool::Gpu
                     | ContextSidebarTool::Processes
                     | ContextSidebarTool::Docker
+                    | ContextSidebarTool::Ecapture
             )
         {
             // Tests record the command boundary without opening a real SSH channel.
@@ -1765,6 +2058,13 @@ impl HostToolsEntity {
                 self.monitoring.logs_enabled,
                 runtime,
                 messages.log_unknown_error,
+                cx,
+            ),
+            ContextSidebarTool::Ecapture => self.request_ecapture_snapshot(
+                connection_id,
+                feedback,
+                runtime,
+                messages.ecapture_unknown_error,
                 cx,
             ),
             ContextSidebarTool::Tmux => self.request_tmux_snapshot(
@@ -1874,6 +2174,20 @@ impl HostToolsEntity {
         runtime: tokio::runtime::Handle,
         cx: &mut Context<Self>,
     ) {
+        if connection_id == LOCAL_HOST_CONNECTION_ID {
+            // The local machine has no SSH handle; its samples run through the
+            // same command builders via one-shot local captures.
+            self.profiler_registry.start_with_sampler_on_config(
+                connection_id,
+                Arc::new(LocalResourceSampler),
+                local_host_os_type(),
+                sampling_config,
+                Some(self.profiler_update_tx.clone()),
+                runtime,
+            );
+            cx.notify();
+            return;
+        }
         let Some(handle) = self.ssh_registry.get(&connection_id) else {
             return;
         };
@@ -1920,6 +2234,20 @@ impl HostToolsEntity {
         }
         if let Some(task) = self.host_gpu.sampling_task.take() {
             task.stop();
+        }
+        if connection_id == LOCAL_HOST_CONNECTION_ID {
+            self.host_gpu.snapshot_connection_id = Some(connection_id.clone());
+            self.host_gpu.snapshot = None;
+            self.host_gpu.expanded_uuid = None;
+            self.host_gpu.sampling_task = Some(start_gpu_sampling_on(
+                connection_id,
+                Arc::new(LocalResourceSampler),
+                local_host_os_type().to_string(),
+                self.host_gpu.update_tx.clone(),
+                runtime,
+            ));
+            cx.notify();
+            return;
         }
         let Some(handle) = self.ssh_registry.get(&connection_id) else {
             return;
@@ -2079,6 +2407,7 @@ impl WorkspaceApp {
         &mut self,
         modal: HostToolsWindowModalSnapshot,
         event: &KeyDownEvent,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
         match modal {
@@ -2119,8 +2448,14 @@ impl WorkspaceApp {
             HostToolsWindowModalSnapshot::TmuxInput => {
                 self.handle_host_tmux_input_dialog_key(event, cx)
             }
+            HostToolsWindowModalSnapshot::EcaptureConfirm(_) => {
+                self.handle_host_ecapture_confirm_key(event, cx)
+            }
             HostToolsWindowModalSnapshot::ScheduleConfirm(_) => {
                 self.handle_host_schedule_confirm_key(event, cx)
+            }
+            HostToolsWindowModalSnapshot::PackageConfirm(_) => {
+                self.handle_host_package_confirm_key(event, window, cx)
             }
             HostToolsWindowModalSnapshot::ScheduleLogs => {
                 if self.handle_host_log_search_key(event, cx) {
@@ -2283,6 +2618,8 @@ mod tests {
                 schedule_unknown_error: "Schedule capture failed".to_string(),
                 tmux_unknown_error: "tmux capture failed".to_string(),
                 tmux_unavailable: "tmux unavailable".to_string(),
+                local_connection_label: "This machine".to_string(),
+                ecapture_unknown_error: "eCapture capture failed".to_string(),
             });
             entity.select_connection(connection_id.clone(), None, cx);
             entity.active_tool = ContextSidebarTool::Gpu;
@@ -2379,10 +2716,11 @@ mod tests {
                 false,
                 cx,
             );
-            entity.request_active_tool_snapshot(HostSnapshotFeedback::Silent, cx);
         });
 
         // Re-showing Services restarts only the shared profiler plus Services.
+        // The lifecycle transition itself re-requests the active page, so a
+        // caller must not add a second request on top of it.
         wait_for_counter(&shell_open_count, hidden_shell_open_count + 1);
         std::thread::sleep(Duration::from_millis(25));
         assert_eq!(
@@ -2694,6 +3032,8 @@ mod tests {
                 schedule_unknown_error: "Schedule capture failed".to_string(),
                 tmux_unknown_error: "tmux capture failed".to_string(),
                 tmux_unavailable: "tmux unavailable".to_string(),
+                local_connection_label: "This machine".to_string(),
+                ecapture_unknown_error: "eCapture capture failed".to_string(),
             });
             entity.select_tool(ContextSidebarTool::Services, cx);
             assert!(
@@ -3028,5 +3368,43 @@ mod tests {
             })
         );
         assert!(events.try_recv().is_err());
+    }
+
+    #[gpui::test]
+    fn monitor_connections_lists_the_local_target_after_ssh_connections(cx: &mut TestAppContext) {
+        let registry = SshConnectionRegistry::default();
+        let handle = registry.acquire(
+            SshConfig {
+                host: "host.example".to_string(),
+                username: "alice".to_string(),
+                auth: AuthMethod::Agent,
+                ..SshConfig::default()
+            },
+            ConnectionConsumer::NodeRouter("node-local-target".to_string()),
+        );
+        let connection_id = handle.connection_id().to_string();
+        let (profiler_update_tx, profiler_update_rx) = tokio::sync::mpsc::channel(1);
+        let entity =
+            cx.new(|cx| HostToolsEntity::new(profiler_update_tx, profiler_update_rx, registry, cx));
+        entity.update(cx, |entity, _cx| {
+            entity.messages = Some(HostToolsMessages {
+                service_connection_missing: "Service connection missing".to_string(),
+                service_action_failed: "Service action failed".to_string(),
+                log_unknown_error: "Log capture failed".to_string(),
+                port_unknown_error: "Port capture failed".to_string(),
+                filesystem_unknown_error: "Filesystem capture failed".to_string(),
+                package_unknown_error: "Package capture failed".to_string(),
+                schedule_unknown_error: "Schedule capture failed".to_string(),
+                tmux_unknown_error: "tmux capture failed".to_string(),
+                tmux_unavailable: "tmux unavailable".to_string(),
+                local_connection_label: "This machine".to_string(),
+                ecapture_unknown_error: "eCapture capture failed".to_string(),
+            });
+            let connections = entity.monitor_connections();
+            assert_eq!(connections.len(), 2);
+            assert_eq!(connections[0].connection_id, connection_id);
+            assert_eq!(connections[1].connection_id, LOCAL_HOST_CONNECTION_ID);
+            assert_eq!(monitor_connection_label(&connections[1]), "This machine");
+        });
     }
 }

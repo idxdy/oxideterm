@@ -139,8 +139,9 @@ use oxideterm_connection_monitor::{
     build_docker_action_command, build_docker_exec_shell_command, build_docker_follow_logs_command,
     build_docker_logs_command, build_filesystem_diagnostic_command,
     build_filesystem_snapshot_command, build_log_follow_command, build_log_snapshot_command,
-    build_package_inspect_command, build_package_snapshot_command, build_port_diagnostic_command,
-    build_port_snapshot_command, build_process_action_command, build_scheduled_task_action_command,
+    build_package_inspect_command, build_package_snapshot_command, build_package_uninstall_command,
+    build_package_upgrade_command, build_port_diagnostic_command, build_port_snapshot_command,
+    build_process_action_command, build_scheduled_task_action_command,
     build_scheduled_task_diagnostic_command, build_scheduled_task_logs_command,
     build_scheduled_task_snapshot_command, build_service_action_command,
     build_service_follow_logs_command, build_service_logs_command, build_tmux_action_command,
@@ -150,8 +151,9 @@ use oxideterm_connection_monitor::{
     docker_row_signature, docker_state_label_key, filesystem_attention_label_keys,
     filesystem_entry_severity, filesystem_filter_label_key, filesystem_kind_label_key,
     filesystem_read_only_label_key, filesystem_row_signature, format_bytes,
-    gpu_device_row_signature, log_level_label_key, log_preset_label_key, log_row_signature,
-    package_filter_label_key, package_row_signature, package_status_label_key, parse_log_snapshot,
+    gpu_device_row_signature, host_tool_capture_failure_message, log_level_label_key,
+    log_preset_label_key, log_row_signature, package_filter_label_key, package_filter_manager,
+    package_filter_options, package_row_signature, package_status_label_key, parse_log_snapshot,
     parse_package_snapshot, parse_port_snapshot, percent_level, port_endpoint,
     port_filter_label_key, port_is_risky_exposure, port_row_signature, port_state_label_key,
     process_display_command, process_display_name, process_row_signature, process_state_label_key,
@@ -168,6 +170,16 @@ use oxideterm_connections::{
     MoshIpFamily as SavedMoshIpFamily, MoshPredictionMode,
     MoshUdpPortSelection as SavedMoshUdpPortSelection, PrivilegePromptType, PrivilegeResponseMode,
     SaveConnectionRequest, SavedPrivilegeCredential, SshConfigSyncService,
+};
+use oxideterm_ecapture::{
+    ECAPTURE_MAX_STREAM_BYTES, EcaptureCommandCapability, EcaptureDirection, EcaptureEvent,
+    EcaptureFilter, EcaptureLaunch, EcapturePoll, EcaptureSession, EcaptureSpec, EcaptureTemplate,
+    ResourceEcaptureProbe, ResourceEcaptureStatus, build_ecapture_clear_command,
+    build_ecapture_poll_command, build_ecapture_probe_command, build_ecapture_start_command,
+    build_ecapture_stop_command, ecapture_capability_label_key, ecapture_direction_label_key,
+    ecapture_event_row_signature, ecapture_filter_label_key, ecapture_kind_label_key,
+    ecapture_run_id, ecapture_template_label_key, parse_ecapture_poll, parse_ecapture_probe,
+    parse_ecapture_start_finished, validate_ecapture_launch,
 };
 use oxideterm_forwarding::{
     ForwardEventDeliverySender, ForwardStatus, ForwardingRegistry, SavedForwardStore,
@@ -362,8 +374,8 @@ pub(super) use virtual_list::{
     uniform_list_edge_autoscroll,
 };
 use virtual_list::{
-    VirtualListSignatureCache, sync_tauri_variable_list_state_by_signatures,
-    sync_tauri_virtual_list_state_by_signatures,
+    VirtualListSignatureCache, expandable_row_signature,
+    sync_tauri_variable_list_state_by_signatures, sync_tauri_virtual_list_state_by_signatures,
 };
 
 const SETTINGS_SECTION_LIST_INITIAL_ITEM_COUNT: usize = 4;

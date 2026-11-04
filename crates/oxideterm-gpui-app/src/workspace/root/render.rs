@@ -1353,6 +1353,10 @@ impl WorkspaceApp {
                 |root, dialog| root.child(dialog),
             )
             .when_some(
+                self.render_host_package_confirm_dialog(cx),
+                |root, dialog| root.child(dialog),
+            )
+            .when_some(
                 self.render_host_docker_confirm_dialog(cx),
                 |root, dialog| root.child(dialog),
             )
@@ -1372,6 +1376,10 @@ impl WorkspaceApp {
             .when_some(self.render_host_tmux_input_dialog(cx), |root, dialog| {
                 root.child(dialog)
             })
+            .when_some(
+                self.render_host_ecapture_confirm_dialog(cx),
+                |root, dialog| root.child(dialog),
+            )
             .when_some(
                 self.render_host_schedule_confirm_dialog(cx),
                 |root, dialog| root.child(dialog),
