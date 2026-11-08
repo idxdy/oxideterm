@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use gpui::{Rgba, rgb, rgba};
 use oxideterm_gpui_ui::motion::ExitPresence;
-use oxideterm_ssh::SshCommandOutput;
+use oxideterm_ssh::{SshCommandOutput, SshSecretCommandOutput};
 use oxideterm_topology::TopologyViewStatus;
 use zeroize::Zeroize;
 
@@ -52,6 +52,38 @@ pub(super) const HOST_SERVICE_ACTION_TIMEOUT: Duration = Duration::from_secs(15)
 pub(super) const HOST_SERVICE_ACTION_MAX_OUTPUT_SIZE: usize = 4096;
 pub(super) const HOST_SERVICE_LOGS_MAX_OUTPUT_SIZE: usize = 128 * 1024;
 pub(super) const HOST_SERVICE_LOGS_DIALOG_WIDTH: f32 = 760.0;
+// The PING probe self-bounds with `redis-cli -t 3`; the runner timeout only
+// covers a hung connection setup on top of it.
+pub(super) const HOST_REDIS_PROBE_TIMEOUT: Duration = Duration::from_secs(12);
+pub(super) const HOST_REDIS_PROBE_MAX_OUTPUT_SIZE: usize = 64 * 1024;
+// Browsing runs one bounded SCAN per database, so it needs room for several
+// databases worth of keys and a longer runner timeout than the PING probe.
+pub(super) const HOST_REDIS_KEYS_TIMEOUT: Duration = Duration::from_secs(30);
+pub(super) const HOST_REDIS_KEYS_MAX_OUTPUT_SIZE: usize = 512 * 1024;
+pub(super) const HOST_REDIS_TREE_ROW_HEIGHT: f32 = 24.0;
+pub(super) const HOST_REDIS_ENDPOINT_CHIP_HEIGHT: f32 = 26.0;
+// A value read runs TYPE plus one bounded range/scan on top of the password
+// handshake, so it needs more room than the key listing.
+pub(super) const HOST_REDIS_VALUE_TIMEOUT: Duration = Duration::from_secs(20);
+pub(super) const HOST_REDIS_VALUE_MAX_OUTPUT_SIZE: usize = 512 * 1024;
+pub(super) const HOST_REDIS_ACTION_TIMEOUT: Duration = Duration::from_secs(12);
+pub(super) const HOST_REDIS_ACTION_MAX_OUTPUT_SIZE: usize = 4096;
+pub(super) const HOST_REDIS_VALUE_DIALOG_WIDTH: f32 = 720.0;
+pub(super) const HOST_REDIS_VALUE_DIALOG_DEFAULT_HEIGHT: f32 = 420.0;
+pub(super) const HOST_REDIS_VALUE_DIALOG_MIN_WIDTH: f32 = 420.0;
+pub(super) const HOST_REDIS_VALUE_DIALOG_MIN_HEIGHT: f32 = 200.0;
+pub(super) const HOST_REDIS_VALUE_DIALOG_MAX_WIDTH: f32 = 1200.0;
+pub(super) const HOST_REDIS_VALUE_DIALOG_MAX_HEIGHT: f32 = 800.0;
+/// One virtual row for the value viewer; long lines never wrap. The dialog's
+/// default body height is derived from this so resizing stays on row boundaries
+/// only by convention, not by measurement.
+pub(super) const HOST_REDIS_VALUE_ROW_HEIGHT: f32 = 18.0;
+// String/JSON values are longer than a key name; the editor gets room to show
+// the document instead of a single 32px line.
+pub(super) const HOST_REDIS_VALUE_INPUT_HEIGHT: f32 = 96.0;
+// The dialog is a viewer over a bounded capture; per-frame line output stops
+// here instead of building thousands of GPUI elements.
+pub(super) const HOST_REDIS_VALUE_MAX_LINES: usize = 400;
 pub(super) const HOST_SERVICE_LOGS_DIALOG_MAX_HEIGHT: f32 = 520.0;
 pub(super) const HOST_LOG_LIST_ESTIMATED_ROW_HEIGHT: f32 = 56.0;
 pub(super) const HOST_LOG_TABLE_HEADER_HEIGHT: f32 = 28.0;
@@ -432,6 +464,695 @@ impl HostServicesState {
     }
 }
 
+#[derive(Clone, Eq, PartialEq)]
+pub(super) struct HostRedisSnapshotRequest {
+    pub(super) connection_id: String,
+    pub(super) connection_fallback: String,
+    pub(super) failure_fallback: String,
+}
+
+pub(super) struct HostRedisSnapshotDelivery {
+    pub(super) request: HostRedisSnapshotRequest,
+    pub(super) result: Result<SshCommandOutput, ()>,
+}
+
+pub(super) struct HostRedisSnapshotPending {
+    pub(super) request: HostRedisSnapshotRequest,
+    pub(super) runtime: tokio::runtime::Handle,
+}
+
+/// One key-browsing request for a single endpoint.
+///
+/// The password lives only in this request and in the focused input buffer: it
+/// is never formatted, audited, or written to a snapshot.
+#[derive(Clone)]
+pub(super) struct HostRedisKeysRequest {
+    pub(super) connection_id: String,
+    pub(super) endpoint: oxideterm_connection_monitor::ResourceRedisEndpoint,
+    pub(super) password: zeroize::Zeroizing<String>,
+    /// `SCAN MATCH` glob when the key search is active.
+    pub(super) pattern: Option<String>,
+    pub(super) failure_fallback: String,
+}
+
+impl HostRedisKeysRequest {
+    /// Request identity ignores the credential so a re-typed password for the
+    /// same endpoint still replaces the in-flight result.
+    pub(super) fn same_target(&self, other: &Self) -> bool {
+        self.connection_id == other.connection_id
+            && self.endpoint == other.endpoint
+            && self.pattern == other.pattern
+    }
+
+    /// A queued read belongs to the host and endpoint that were selected when
+    /// it was made. Once either moved on, starting it would read the old host
+    /// and render the result under the new one.
+    pub(super) fn is_stale_for(
+        &self,
+        connection: Option<&str>,
+        endpoint: Option<&oxideterm_connection_monitor::ResourceRedisEndpoint>,
+    ) -> bool {
+        connection != Some(self.connection_id.as_str()) || endpoint != Some(&self.endpoint)
+    }
+}
+
+pub(super) struct HostRedisKeysDelivery {
+    pub(super) request: HostRedisKeysRequest,
+    pub(super) result: Result<SshSecretCommandOutput, ()>,
+}
+
+pub(super) struct HostRedisKeysPending {
+    pub(super) request: HostRedisKeysRequest,
+    pub(super) runtime: tokio::runtime::Handle,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum HostRedisValuePurpose {
+    /// The dialog is open and renders the value.
+    Open,
+    /// The row menu copies the value without opening the dialog.
+    Copy,
+    /// A save re-reads the key first, so an edit is only written when the
+    /// server copy still matches the value the editor opened with.
+    VerifyWrite,
+}
+
+#[derive(Clone)]
+pub(super) struct HostRedisValueRequest {
+    pub(super) connection_id: String,
+    pub(super) endpoint: oxideterm_connection_monitor::ResourceRedisEndpoint,
+    /// Database the key lives in; a key name alone is ambiguous across dbs.
+    pub(super) database: u32,
+    pub(super) key: String,
+    pub(super) password: zeroize::Zeroizing<String>,
+    pub(super) purpose: HostRedisValuePurpose,
+    pub(super) failure_fallback: String,
+}
+
+impl HostRedisValueRequest {
+    pub(super) fn same_target(&self, other: &Self) -> bool {
+        self.connection_id == other.connection_id
+            && self.endpoint == other.endpoint
+            && self.database == other.database
+            && self.key == other.key
+            && self.purpose == other.purpose
+    }
+}
+
+pub(super) struct HostRedisValueDelivery {
+    pub(super) request: HostRedisValueRequest,
+    pub(super) result: Result<SshSecretCommandOutput, ()>,
+}
+
+pub(super) struct HostRedisValuePending {
+    pub(super) request: HostRedisValueRequest,
+    pub(super) runtime: tokio::runtime::Handle,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum HostRedisMutationKind {
+    Delete,
+    /// Deletes every key in `keys` in one exec (prefix deletion).
+    DeleteMany,
+    Rename,
+    /// Sets an expiry in seconds (`ttl_seconds`).
+    Expire,
+    /// Removes the expiry.
+    Persist,
+}
+
+#[derive(Clone)]
+pub(super) struct HostRedisMutationRequest {
+    pub(super) connection_id: String,
+    pub(super) endpoint: oxideterm_connection_monitor::ResourceRedisEndpoint,
+    pub(super) database: u32,
+    pub(super) kind: HostRedisMutationKind,
+    pub(super) key: String,
+    /// Targets for `DeleteMany`; single mutations leave this empty.
+    pub(super) keys: Vec<String>,
+    pub(super) new_key: Option<String>,
+    /// Expiry for `Expire`; unused by the other mutations.
+    pub(super) ttl_seconds: Option<u64>,
+    pub(super) password: zeroize::Zeroizing<String>,
+    pub(super) failure_fallback: String,
+}
+
+pub(super) struct HostRedisMutationDelivery {
+    pub(super) request: HostRedisMutationRequest,
+    pub(super) result: Result<SshSecretCommandOutput, ()>,
+}
+
+pub(super) struct HostRedisValueDialog {
+    pub(super) connection_id: String,
+    pub(super) endpoint: oxideterm_connection_monitor::ResourceRedisEndpoint,
+    pub(super) database: u32,
+    pub(super) key: String,
+    pub(super) value: Option<oxideterm_connection_monitor::ResourceRedisValue>,
+    pub(super) loading: bool,
+    pub(super) error: Option<String>,
+    pub(super) json_view: bool,
+}
+
+impl HostRedisValueDialog {
+    /// Whether a delivery still belongs to this dialog's target. A key name
+    /// alone is not unique: the same name can live on another host, endpoint,
+    /// or database, so every part of the target has to match before a value is
+    /// installed. The read purpose is deliberately not part of the identity —
+    /// callers branch on it before installing.
+    /// Mutation results are matched the same way, ignoring the mutation kind:
+    /// only the target decides which dialog owns the answer.
+    pub(super) fn matches_mutation(&self, request: &HostRedisMutationRequest) -> bool {
+        self.connection_id == request.connection_id
+            && self.database == request.database
+            && self.key == request.key
+    }
+
+    pub(super) fn matches_request(&self, request: &HostRedisValueRequest) -> bool {
+        self.connection_id == request.connection_id
+            && self.endpoint == request.endpoint
+            && self.database == request.database
+            && self.key == request.key
+    }
+
+    /// Installs a freshly read value, wiping the previous body first: the body
+    /// is the secret itself and must not linger in the freed allocation.
+    pub(super) fn set_value(
+        &mut self,
+        value: Option<oxideterm_connection_monitor::ResourceRedisValue>,
+    ) {
+        self.clear_value();
+        self.value = value;
+    }
+
+    pub(super) fn clear_value(&mut self) {
+        if let Some(mut value) = self.value.take() {
+            zeroize_redis_value(&mut value);
+        }
+    }
+}
+
+impl Drop for HostRedisValueDialog {
+    /// Closing or replacing the dialog drops the fetched body; wipe it instead
+    /// of handing a freed-but-readable copy back to the allocator.
+    fn drop(&mut self) {
+        self.clear_value();
+    }
+}
+
+/// Wipes the secret-bearing parts of a read Redis value. `body` holds the
+/// display projection and `elements` the exact reply bytes, so both go.
+pub(super) fn zeroize_redis_value(value: &mut oxideterm_connection_monitor::ResourceRedisValue) {
+    use zeroize::Zeroize;
+    value.body.zeroize();
+    value.elements.zeroize();
+    if let Some(raw_type) = value.raw_type.as_mut() {
+        raw_type.zeroize();
+    }
+}
+
+pub(super) struct HostRedisDeleteConfirm {
+    pub(super) connection_id: String,
+    pub(super) database: u32,
+    /// Display name: the key name, or the prefix for a subtree deletion.
+    pub(super) key: String,
+    /// Every key the confirmation removes; a single key for leaf deletes.
+    pub(super) keys: Vec<String>,
+    pub(super) presence: ExitPresence,
+}
+
+pub(in crate::workspace) struct HostRedisCreateKeyDialog {
+    pub(super) connection_id: String,
+    pub(super) endpoint: oxideterm_connection_monitor::ResourceRedisEndpoint,
+    pub(super) database: u32,
+    /// New key name; zeroized when the dialog closes.
+    pub(super) name: zeroize::Zeroizing<String>,
+    pub(super) kind: oxideterm_connection_monitor::RedisCreateKind,
+    /// When true the key is created without an expiry and the TTL field is hidden.
+    pub(super) ttl_never: bool,
+    pub(super) ttl: zeroize::Zeroizing<String>,
+    /// Value for `string`/`json`, or the pending element while adding entries.
+    pub(super) value: zeroize::Zeroizing<String>,
+    /// Pending hash field while adding a pair.
+    pub(super) field: zeroize::Zeroizing<String>,
+    /// Committed elements: `field<TAB>value` for hash, `member<TAB>score` for a
+    /// sorted set, plain values otherwise.
+    pub(super) entries: Vec<zeroize::Zeroizing<String>>,
+    pub(super) error: Option<String>,
+    pub(super) loading: bool,
+}
+
+#[derive(Clone)]
+pub(super) struct HostRedisCreateKeyRequest {
+    pub(super) connection_id: String,
+    pub(super) endpoint: oxideterm_connection_monitor::ResourceRedisEndpoint,
+    pub(super) database: u32,
+    pub(super) key: String,
+    pub(super) password: zeroize::Zeroizing<String>,
+    pub(super) value: zeroize::Zeroizing<String>,
+    pub(super) failure_fallback: String,
+}
+
+pub(super) struct HostRedisCreateKeyDelivery {
+    pub(super) request: HostRedisCreateKeyRequest,
+    pub(super) result: Result<SshSecretCommandOutput, ()>,
+}
+
+pub(in crate::workspace) struct HostRedisSetValueDialog {
+    pub(super) connection_id: String,
+    pub(super) endpoint: oxideterm_connection_monitor::ResourceRedisEndpoint,
+    pub(super) database: u32,
+    pub(super) key: String,
+    /// Shape being edited, taken from the fetched value.
+    pub(super) kind: RedisValueWriteKind,
+    /// Value the editor opened with. Saving re-reads the key and refuses to
+    /// overwrite when the server copy no longer matches this baseline.
+    pub(super) base: Option<oxideterm_connection_monitor::ResourceRedisValue>,
+    /// Replacement value for string/JSON, or the pending element.
+    pub(super) value: zeroize::Zeroizing<String>,
+    /// Pending hash field while adding a pair.
+    pub(super) field: zeroize::Zeroizing<String>,
+    /// Committed rows: `field<TAB>value`, `member<TAB>score`, or elements.
+    pub(super) entries: Vec<zeroize::Zeroizing<String>>,
+    pub(super) error: Option<String>,
+    pub(super) loading: bool,
+}
+
+impl Drop for HostRedisSetValueDialog {
+    /// The baseline copy holds the same secret bytes as the fetched value, so
+    /// closing the editor wipes it instead of leaving it to the allocator.
+    fn drop(&mut self) {
+        if let Some(base) = self.base.as_mut() {
+            zeroize_redis_value(base);
+        }
+    }
+}
+
+#[derive(Clone)]
+pub(super) struct HostRedisSetValueRequest {
+    pub(super) connection_id: String,
+    pub(super) endpoint: oxideterm_connection_monitor::ResourceRedisEndpoint,
+    pub(super) database: u32,
+    pub(super) key: String,
+    pub(super) password: zeroize::Zeroizing<String>,
+    pub(super) value: zeroize::Zeroizing<String>,
+    pub(super) failure_fallback: String,
+}
+
+pub(super) struct HostRedisSetValueDelivery {
+    pub(super) request: HostRedisSetValueRequest,
+    pub(super) result: Result<SshSecretCommandOutput, ()>,
+}
+
+pub(super) struct HostRedisState {
+    pub(super) snapshot_connection_id: Option<String>,
+    pub(super) snapshot: Option<oxideterm_connection_monitor::ResourceRedisSnapshot>,
+    pub(super) snapshot_running: Option<HostRedisSnapshotRequest>,
+    pub(super) snapshot_pending: Option<HostRedisSnapshotPending>,
+    pub(super) snapshot_in_flight: bool,
+    pub(super) keys_connection_id: Option<String>,
+    pub(super) keys_endpoint: Option<oxideterm_connection_monitor::ResourceRedisEndpoint>,
+    /// Endpoint the cached key list was read from. A cached tree is only valid
+    /// for the endpoint it came from; anything else is a stale projection.
+    pub(super) keys_cache_endpoint: Option<oxideterm_connection_monitor::ResourceRedisEndpoint>,
+    pub(super) keys: Option<oxideterm_connection_monitor::ResourceRedisKeys>,
+    pub(super) keys_running: Option<HostRedisKeysRequest>,
+    pub(super) keys_pending: Option<HostRedisKeysPending>,
+    pub(super) keys_in_flight: bool,
+    pub(super) value_dialog: Option<HostRedisValueDialog>,
+    /// Value viewer geometry; dragging the corner keeps it across openings.
+    pub(super) value_dialog_size: (f32, f32),
+    pub(super) value_dialog_resize: Option<HostToolsDialogResizeDrag>,
+    pub(super) value_dialog_list: ListState,
+    pub(super) value_dialog_list_cache: std::cell::RefCell<VirtualListSignatureCache>,
+    pub(super) value_running: Option<HostRedisValueRequest>,
+    pub(super) value_pending: Option<HostRedisValuePending>,
+    pub(super) value_in_flight: bool,
+    pub(super) mutation_running: Option<HostRedisMutationRequest>,
+    pub(super) set_value_running: Option<HostRedisSetValueRequest>,
+    pub(super) create_key_running: Option<HostRedisCreateKeyRequest>,
+    /// Key awaiting a delete confirmation.
+    pub(super) delete_confirm: Option<HostRedisDeleteConfirm>,
+    /// Databases the user collapsed. Databases start expanded.
+    pub(super) collapsed_databases: std::collections::BTreeSet<String>,
+    /// Key-tree segments the user expanded. Segments start collapsed, so a
+    /// freshly browsed database shows only its first-level prefixes.
+    pub(super) expanded_segments: std::collections::BTreeSet<String>,
+    pub(super) list_state: ListState,
+    pub(super) list_cache: std::cell::RefCell<VirtualListSignatureCache>,
+}
+
+impl HostRedisState {
+    pub(super) fn new() -> Self {
+        Self {
+            snapshot_connection_id: None,
+            snapshot: None,
+            snapshot_running: None,
+            snapshot_pending: None,
+            snapshot_in_flight: false,
+            keys_connection_id: None,
+            keys_endpoint: None,
+            keys_cache_endpoint: None,
+            keys: None,
+            keys_running: None,
+            keys_pending: None,
+            keys_in_flight: false,
+            value_dialog: None,
+            value_dialog_size: (
+                HOST_REDIS_VALUE_DIALOG_WIDTH,
+                HOST_REDIS_VALUE_DIALOG_DEFAULT_HEIGHT,
+            ),
+            value_dialog_resize: None,
+            value_dialog_list: tauri_virtual_list_state(
+                0,
+                ListAlignment::Top,
+                TauriVirtualListSpec::new(px(HOST_REDIS_VALUE_ROW_HEIGHT), 11),
+            ),
+            value_dialog_list_cache: std::cell::RefCell::new(VirtualListSignatureCache::default()),
+            value_running: None,
+            value_pending: None,
+            value_in_flight: false,
+            mutation_running: None,
+            set_value_running: None,
+            create_key_running: None,
+            delete_confirm: None,
+            collapsed_databases: std::collections::BTreeSet::new(),
+            expanded_segments: std::collections::BTreeSet::new(),
+            list_state: tauri_virtual_list_state(
+                0,
+                gpui::ListAlignment::Top,
+                TauriVirtualListSpec::new(px(HOST_REDIS_TREE_ROW_HEIGHT), 8),
+            ),
+            list_cache: std::cell::RefCell::new(VirtualListSignatureCache::default()),
+        }
+    }
+}
+
+/// Container tool inventory tabs. Pods only exist on Podman, so the panel
+/// hides that tab instead of rendering an always-empty page.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(super) enum HostContainerTab {
+    #[default]
+    Containers,
+    Images,
+    Volumes,
+    Networks,
+    Pods,
+    Registries,
+}
+
+impl HostContainerTab {
+    /// Engine capability gates inventory tabs; a switch must not strand the
+    /// panel on a tab the new engine cannot fill.
+    pub(super) fn supported_by(
+        self,
+        engine: oxideterm_connection_monitor::container::ContainerEngine,
+    ) -> bool {
+        match self {
+            Self::Pods => engine.supports_pods(),
+            Self::Registries => engine.supports_registry_auth(),
+            Self::Containers | Self::Images | Self::Volumes | Self::Networks => true,
+        }
+    }
+}
+
+/// Column the Containers tab orders by. The cycle is ascending, descending,
+/// then the engine's own order.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum ContainerSortKey {
+    Cpu,
+    Memory,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) struct ContainerSort {
+    pub(super) key: ContainerSortKey,
+    pub(super) descending: bool,
+}
+
+pub(super) const HOST_CONTAINER_CAPTURE_DIALOG_DEFAULT_WIDTH: f32 = 760.0;
+pub(super) const HOST_CONTAINER_CAPTURE_DIALOG_DEFAULT_HEIGHT: f32 = 420.0;
+pub(super) const HOST_CONTAINER_CAPTURE_DIALOG_MIN_WIDTH: f32 = 420.0;
+pub(super) const HOST_CONTAINER_CAPTURE_DIALOG_MIN_HEIGHT: f32 = 260.0;
+pub(super) const HOST_CONTAINER_CAPTURE_DIALOG_MAX_WIDTH: f32 = 1100.0;
+pub(super) const HOST_CONTAINER_CAPTURE_DIALOG_MAX_HEIGHT: f32 = 720.0;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::workspace) enum HostContainerConfirmKind {
+    /// Prunes stopped containers on the selected engine.
+    ContainerPrune,
+    Container(oxideterm_connection_monitor::container::ContainerAction),
+    Image(oxideterm_connection_monitor::container::ImageAction),
+    Volume(oxideterm_connection_monitor::container::VolumeAction),
+    Network(oxideterm_connection_monitor::container::NetworkAction),
+    Pod(oxideterm_connection_monitor::container::PodAction),
+    /// A command assembled from an input dialog; never shown as a confirm.
+    Raw,
+}
+
+/// A confirmed mutation stays here until its command delivery resolves.
+#[derive(Clone)]
+pub(in crate::workspace) struct HostContainerConfirmRequest {
+    pub(in crate::workspace) connection_id: String,
+    pub(in crate::workspace) instance: oxideterm_connection_monitor::container::ContainerInstance,
+    pub(in crate::workspace) target_id: String,
+    pub(in crate::workspace) label: String,
+    pub(in crate::workspace) kind: HostContainerConfirmKind,
+}
+
+pub(in crate::workspace) struct HostContainerConfirmDelivery {
+    pub(in crate::workspace) request: HostContainerConfirmRequest,
+    pub(in crate::workspace) result: Result<SshCommandOutput, ()>,
+}
+
+/// Text-input dialogs for the container tool. Free-form arguments stay raw by
+/// design; identifiers are validated before they reach a command.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) enum HostContainerInputKind {
+    Run,
+    Pull,
+    Push,
+    Build,
+    Tag { image_id: String },
+    Save { image_id: String },
+    Load,
+    Import,
+    Export { container_id: String },
+    Copy { container_id: String },
+    CreateVolume,
+    CreateNetwork,
+    CreatePod,
+    Rename { container_id: String },
+    Search,
+    Login,
+}
+
+/// Structured fields for the image `run` dialog. Defaults keep the dialog
+/// usable without touching any field: `-d` plus the image entrypoint.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(super) struct HostContainerRunParams {
+    pub(super) name: String,
+    pub(super) detached: bool,
+    pub(super) interactive: bool,
+    pub(super) auto_remove: bool,
+    /// Comma-separated `-p` specs.
+    pub(super) ports: String,
+    /// Comma-separated `-v` specs.
+    pub(super) volumes: String,
+    /// Program and arguments run inside the container (e.g. `/bin/sh`).
+    pub(super) command: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum HostContainerRunFlag {
+    Detached,
+    Interactive,
+    AutoRemove,
+}
+
+/// Image-search progress for the run-dialog style search. Results live here so
+/// they render under the search field instead of a separate window.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(super) struct HostContainerSearchState {
+    pub(super) running: bool,
+    pub(super) error: Option<String>,
+    pub(super) results: Vec<oxideterm_connection_monitor::container::ContainerSearchResult>,
+}
+
+#[derive(Clone)]
+pub(super) struct HostContainerInputDialog {
+    pub(super) kind: HostContainerInputKind,
+    /// Registry typed or picked for pull/push/search. Empty means Docker Hub,
+    /// which is why the field carries a default hint instead of a value.
+    pub(super) registry: String,
+    pub(super) value: String,
+    /// Fields for `HostContainerInputKind::Run`; unused by the other kinds.
+    pub(super) run: HostContainerRunParams,
+    /// Image-search progress; `Some` only while `kind` is `Search`.
+    pub(super) search: Option<HostContainerSearchState>,
+    /// Registry proxy for pull/push/search. Empty means direct access.
+    pub(super) proxy: zeroize::Zeroizing<String>,
+}
+
+#[derive(Clone)]
+pub(in crate::workspace) enum HostContainerCaptureKind {
+    /// Engine detection; also refreshes the instance switcher.
+    Discovery,
+    Snapshot(oxideterm_connection_monitor::container::ContainerInstance),
+    /// One-shot container resource usage.
+    Stats,
+    /// Authenticated registries read from the engine auth file.
+    Registries,
+    /// Read-only output rendered in the shared text dialog.
+    Text {
+        capture: oxideterm_connection_monitor::container::ContainerCapture,
+        title: String,
+    },
+}
+
+#[derive(Clone)]
+pub(in crate::workspace) struct HostContainerCaptureRequest {
+    pub(in crate::workspace) connection_id: String,
+    pub(in crate::workspace) kind: HostContainerCaptureKind,
+    /// Engine the capture was built for; a delivery for another engine than
+    /// the selected one must not replace the panel's copy.
+    pub(in crate::workspace) instance_id: Option<String>,
+    pub(in crate::workspace) failure_fallback: String,
+}
+
+pub(in crate::workspace) struct HostContainerCaptureDelivery {
+    pub(in crate::workspace) request: HostContainerCaptureRequest,
+    pub(in crate::workspace) result: Result<SshCommandOutput, ()>,
+}
+
+pub(super) struct HostContainerTextDialog {
+    pub(super) title: String,
+    pub(super) output: Option<Arc<zeroize::Zeroizing<String>>>,
+    pub(super) error: Option<String>,
+    pub(super) loading: bool,
+    pub(super) scroll_handle: gpui::ScrollHandle,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct HostToolsDialogResizeDrag {
+    pub(super) start_cursor: gpui::Point<gpui::Pixels>,
+    pub(super) start_width: f32,
+    pub(super) start_height: f32,
+}
+
+pub(super) struct HostContainerState {
+    pub(super) discovery: Option<oxideterm_connection_monitor::container::ContainerDiscovery>,
+    pub(super) discovery_connection_id: Option<String>,
+    pub(super) discovery_running: bool,
+    /// Handle of the running discovery probe. Aborting it cancels the capture,
+    /// so a superseding connection does not wait out the old host's 40s probe.
+    pub(super) discovery_task: Option<tokio::task::JoinHandle<()>>,
+    /// Engine selection survives refreshes and is dropped only when the engine
+    /// disappears from discovery.
+    pub(super) selected_instance_id: Option<String>,
+    pub(super) snapshot_connection_id: Option<String>,
+    pub(super) snapshot: Option<oxideterm_connection_monitor::container::ContainerSnapshot>,
+    pub(super) snapshot_running: bool,
+    pub(super) tab: HostContainerTab,
+    pub(super) confirm: Option<HostToolConfirmState<HostContainerConfirmRequest>>,
+    pub(super) action_running: bool,
+    pub(super) text_dialog: Option<HostContainerTextDialog>,
+    pub(super) text_dialog_running: Option<HostContainerCaptureRequest>,
+    /// Dialog epoch. Bumped whenever a capture dialog opens or closes so a
+    /// delivery spawned for an earlier dialog cannot fill a newer one that
+    /// asks for the very same capture.
+    pub(super) text_dialog_generation: u64,
+    /// Epoch the running capture was spawned under; it has to equal
+    /// `text_dialog_generation` for its delivery to land.
+    pub(super) text_dialog_running_generation: Option<u64>,
+    /// User-chosen capture dialog size, kept across openings.
+    pub(super) text_dialog_size: (f32, f32),
+    pub(super) text_dialog_resize: Option<HostToolsDialogResizeDrag>,
+    /// In-flight image search; results land in the open input dialog.
+    pub(super) search_running: Option<HostContainerCaptureRequest>,
+    pub(super) stats: Option<Vec<oxideterm_connection_monitor::container::ContainerStat>>,
+    pub(super) stats_running: bool,
+    /// Read failure for the stats tab, kept apart from the table so an error
+    /// does not render as an empty result.
+    pub(super) stats_error: Option<String>,
+    pub(super) registries: Option<Vec<oxideterm_connection_monitor::container::ContainerRegistry>>,
+    pub(super) registries_running: bool,
+    /// Read failure for the registries tab.
+    pub(super) registries_error: Option<String>,
+    /// Row whose action strip is expanded; only one row shows actions at a time.
+    pub(super) selected_row: Option<String>,
+    /// Containers tab ordering; `None` keeps the engine's order.
+    pub(super) container_sort: Option<ContainerSort>,
+    /// Images tab ordering; `None` keeps the engine's own order.
+    pub(super) image_sort: Option<oxideterm_connection_monitor::container::ImageSort>,
+    pub(super) image_sort_descending: bool,
+    /// One virtual list serves every inventory tab.
+    pub(super) list_state: ListState,
+    pub(super) list_cache: std::cell::RefCell<VirtualListSignatureCache>,
+}
+
+impl HostContainerState {
+    pub(super) fn new() -> Self {
+        Self {
+            discovery: None,
+            discovery_connection_id: None,
+            discovery_running: false,
+            discovery_task: None,
+            selected_instance_id: None,
+            snapshot_connection_id: None,
+            snapshot: None,
+            snapshot_running: false,
+            tab: HostContainerTab::Containers,
+            confirm: None,
+            action_running: false,
+            text_dialog: None,
+            text_dialog_running: None,
+            text_dialog_generation: 0,
+            text_dialog_running_generation: None,
+            text_dialog_size: (
+                HOST_CONTAINER_CAPTURE_DIALOG_DEFAULT_WIDTH,
+                HOST_CONTAINER_CAPTURE_DIALOG_DEFAULT_HEIGHT,
+            ),
+            text_dialog_resize: None,
+            search_running: None,
+            stats: None,
+            stats_running: false,
+            stats_error: None,
+            registries: None,
+            registries_running: false,
+            registries_error: None,
+            selected_row: None,
+            container_sort: None,
+            image_sort: None,
+            image_sort_descending: true,
+            list_state: tauri_virtual_list_state(
+                0,
+                ListAlignment::Top,
+                TauriVirtualListSpec::new(px(88.0), 6),
+            ),
+            list_cache: std::cell::RefCell::new(VirtualListSignatureCache::default()),
+        }
+    }
+
+    /// Opens a new capture-dialog epoch. A capture spawned under an earlier
+    /// epoch keeps that older value, so its delivery can no longer land.
+    pub(super) fn begin_container_text_dialog(&mut self) -> u64 {
+        self.text_dialog_generation = self.text_dialog_generation.wrapping_add(1);
+        self.text_dialog_generation
+    }
+
+    /// Closes the capture dialog and cancels its request. The spawn itself
+    /// cannot be aborted, so the epoch bump is what makes its delivery inert.
+    /// Returns whether a dialog was open.
+    pub(super) fn invalidate_container_text_dialog(&mut self) -> bool {
+        self.text_dialog_generation = self.text_dialog_generation.wrapping_add(1);
+        self.text_dialog_running = None;
+        self.text_dialog_running_generation = None;
+        let was_open = self.text_dialog.take().is_some();
+        self.text_dialog_resize = None;
+        was_open
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::workspace) enum HostSnapshotFeedback {
     Silent,
@@ -444,6 +1165,9 @@ pub(in crate::workspace) enum HostToolsWindowModalSnapshot {
     ProcessConfirm(oxideterm_gpui_ui::motion::ExitPhase),
     DockerConfirm(oxideterm_gpui_ui::motion::ExitPhase),
     DockerLogs,
+    ContainerConfirm(oxideterm_gpui_ui::motion::ExitPhase),
+    ContainerText,
+    ContainerInput,
     ServiceConfirm(oxideterm_gpui_ui::motion::ExitPhase),
     ServiceLogs,
     TmuxConfirm(oxideterm_gpui_ui::motion::ExitPhase),
@@ -839,6 +1563,24 @@ pub(in crate::workspace) enum HostToolsTextInput {
     ScheduleSearch,
     FilesystemSearch,
     PackageSearch,
+    ContainerSearch,
+    ContainerDialog,
+    ContainerDialogRegistry,
+    ContainerRunName,
+    ContainerRunPorts,
+    ContainerRunVolumes,
+    ContainerRunCommand,
+    ContainerRegistryProxy,
+    RedisPassword,
+    RedisRename,
+    RedisSetValue,
+    RedisSetValueField,
+    RedisCreateKeyName,
+    RedisCreateKeyValue,
+    RedisCreateKeyField,
+    RedisCreateKeyTtl,
+    RedisTtl,
+    RedisSearch,
 }
 
 pub(super) struct HostTmuxState {
@@ -1086,6 +1828,26 @@ pub(in crate::workspace) struct HostToolsMessages {
     pub(super) tmux_unknown_error: String,
     pub(super) tmux_unavailable: String,
     pub(super) local_connection_label: String,
+    pub(super) redis_connection_missing: String,
+    pub(super) redis_probe_failed: String,
+    pub(super) redis_key_action_failed: String,
+    pub(super) redis_rename_invalid: String,
+    pub(super) redis_auth_required: String,
+    pub(super) redis_key_missing: String,
+    pub(super) redis_value_set_invalid_json: String,
+    /// Shown when a value holds bytes or line breaks the editor would rewrite.
+    pub(super) redis_value_edit_unsupported: String,
+    /// Shown when the server copy moved since the editor opened.
+    pub(super) redis_value_edit_conflict: String,
+    pub(super) redis_create_key_exists: String,
+    pub(super) redis_create_key_invalid_name: String,
+    pub(super) redis_create_key_invalid_ttl: String,
+    pub(super) redis_create_key_empty_entries: String,
+    pub(super) redis_create_key_invalid_field: String,
+    pub(super) redis_create_key_invalid_score: String,
+    pub(super) container_capture_failed: String,
+    pub(super) container_terminal_opened: String,
+    pub(super) container_terminal_missing: String,
 }
 
 impl HostToolsMessages {
@@ -1101,6 +1863,26 @@ impl HostToolsMessages {
             tmux_unknown_error: i18n.t("sidebar.host_tmux.toast.unknown_error"),
             tmux_unavailable: i18n.t("sidebar.host_tmux.unavailable"),
             local_connection_label: i18n.t("sidebar.host_connection.local_machine"),
+            redis_connection_missing: i18n.t("sidebar.host_redis.toast.connection_missing"),
+            redis_probe_failed: i18n.t("sidebar.host_redis.toast.probe_failed"),
+            // Consumers wrap this text into their own notice, so the fallback
+            // must not carry the notice's own prefix or a placeholder.
+            redis_key_action_failed: i18n.t("sidebar.host_redis.toast.action_failed"),
+            redis_rename_invalid: i18n.t("sidebar.host_redis.rename.invalid"),
+            redis_auth_required: i18n.t("sidebar.host_redis.auth_required"),
+            redis_key_missing: i18n.t("sidebar.host_redis.value.ttl_missing"),
+            redis_value_set_invalid_json: i18n.t("sidebar.host_redis.set_value.invalid_json"),
+            redis_value_edit_unsupported: i18n.t("sidebar.host_redis.value.edit_unsupported"),
+            redis_value_edit_conflict: i18n.t("sidebar.host_redis.value.edit_conflict"),
+            redis_create_key_exists: i18n.t("sidebar.host_redis.create_key.exists"),
+            redis_create_key_invalid_name: i18n.t("sidebar.host_redis.create_key.invalid_name"),
+            redis_create_key_invalid_ttl: i18n.t("sidebar.host_redis.create_key.invalid_ttl"),
+            redis_create_key_empty_entries: i18n.t("sidebar.host_redis.create_key.empty_entries"),
+            redis_create_key_invalid_field: i18n.t("sidebar.host_redis.create_key.invalid_field"),
+            redis_create_key_invalid_score: i18n.t("sidebar.host_redis.create_key.invalid_score"),
+            container_capture_failed: i18n.t("sidebar.host_container.captures.failed"),
+            container_terminal_opened: i18n.t("sidebar.host_container.toast.terminal_opened"),
+            container_terminal_missing: i18n.t("sidebar.host_container.toast.terminal_missing"),
         }
     }
 }
@@ -1167,6 +1949,10 @@ impl<T> HostToolConfirmState<T> {
 /// Owns Host Tools input, selection, expansion, and virtual-list presentation state.
 pub(in crate::workspace) struct HostToolsUiState {
     pub(in crate::workspace) focused_input: Option<HostToolsTextInput>,
+    /// Container search text lives with the other Host Tools inputs so the
+    /// shared IME plumbing can read and replace it.
+    pub(super) host_container_search_query: String,
+    pub(super) host_container_input_dialog: Option<HostContainerInputDialog>,
     pub(in crate::workspace) host_process_search_query: String,
     pub(super) host_process_filter: ProcessFilter,
     pub(super) host_process_sort: ProcessSort,
@@ -1189,18 +1975,33 @@ pub(in crate::workspace) struct HostToolsUiState {
     pub(in crate::workspace) host_tmux_expanded_window_id: Option<String>,
     pub(in crate::workspace) host_tmux_input_dialog: Option<HostTmuxInputDialog>,
     pub(in crate::workspace) host_mux_input_dialog: Option<MuxInputDialog>,
+    /// Inline rename buffer for the key title; `Some` means the editor is open.
+    pub(in crate::workspace) host_redis_rename_value: Option<zeroize::Zeroizing<String>>,
+    pub(in crate::workspace) host_redis_rename_error: Option<String>,
+    /// Key search in the Redis tree; an empty query shows everything loaded.
+    pub(in crate::workspace) host_redis_search_query: String,
+    pub(in crate::workspace) host_redis_ttl_value: Option<zeroize::Zeroizing<String>>,
+    pub(in crate::workspace) host_redis_ttl_error: Option<String>,
+    pub(in crate::workspace) host_redis_set_value_dialog: Option<HostRedisSetValueDialog>,
+    pub(in crate::workspace) host_redis_create_key_dialog: Option<HostRedisCreateKeyDialog>,
     pub(super) host_tmux_list_state: ListState,
     pub(super) host_tmux_list_cache: RefCell<VirtualListSignatureCache>,
     pub(in crate::workspace) host_port_search_query: String,
     pub(in crate::workspace) host_schedule_search_query: String,
     pub(in crate::workspace) host_filesystem_search_query: String,
     pub(in crate::workspace) host_package_search_query: String,
+    /// Redis password buffer; zeroized when the field or panel is dropped.
+    pub(in crate::workspace) host_redis_password: zeroize::Zeroizing<String>,
+    /// When false the tree hides databases that hold no keys.
+    pub(in crate::workspace) host_redis_show_all_databases: bool,
 }
 
 impl HostToolsUiState {
     pub(in crate::workspace) fn new() -> Self {
         Self {
             focused_input: None,
+            host_container_search_query: String::new(),
+            host_container_input_dialog: None,
             host_process_search_query: String::new(),
             host_process_filter: ProcessFilter::All,
             host_process_sort: ProcessSort::Memory,
@@ -1235,6 +2036,13 @@ impl HostToolsUiState {
             host_tmux_expanded_window_id: None,
             host_tmux_input_dialog: None,
             host_mux_input_dialog: None,
+            host_redis_rename_value: None,
+            host_redis_rename_error: None,
+            host_redis_search_query: String::new(),
+            host_redis_ttl_value: None,
+            host_redis_ttl_error: None,
+            host_redis_set_value_dialog: None,
+            host_redis_create_key_dialog: None,
             host_tmux_list_state: tauri_virtual_list_state(
                 0,
                 ListAlignment::Top,
@@ -1245,6 +2053,8 @@ impl HostToolsUiState {
             host_schedule_search_query: String::new(),
             host_filesystem_search_query: String::new(),
             host_package_search_query: String::new(),
+            host_redis_password: zeroize::Zeroizing::new(String::new()),
+            host_redis_show_all_databases: false,
         }
     }
 
@@ -1290,6 +2100,25 @@ impl HostToolsUiState {
             ) | (
                 Some(HostToolsTextInput::PackageSearch),
                 ContextSidebarTool::Packages
+            ) | (
+                Some(
+                    HostToolsTextInput::ContainerSearch
+                        | HostToolsTextInput::ContainerDialog
+                        | HostToolsTextInput::ContainerDialogRegistry
+                ),
+                ContextSidebarTool::Container
+            ) | (
+                Some(
+                    HostToolsTextInput::RedisPassword
+                        | HostToolsTextInput::RedisRename
+                        | HostToolsTextInput::RedisSetValue
+                        | HostToolsTextInput::RedisSetValueField
+                        | HostToolsTextInput::RedisCreateKeyName
+                        | HostToolsTextInput::RedisCreateKeyValue
+                        | HostToolsTextInput::RedisCreateKeyField
+                        | HostToolsTextInput::RedisCreateKeyTtl
+                ),
+                ContextSidebarTool::Redis
             )
         );
         if !belongs_to_tool {
@@ -1324,7 +2153,136 @@ impl HostToolsUiState {
             HostToolsTextInput::ScheduleSearch => Some(&self.host_schedule_search_query),
             HostToolsTextInput::FilesystemSearch => Some(&self.host_filesystem_search_query),
             HostToolsTextInput::PackageSearch => Some(&self.host_package_search_query),
+            HostToolsTextInput::ContainerSearch => Some(&self.host_container_search_query),
+            HostToolsTextInput::ContainerDialog => self
+                .host_container_input_dialog
+                .as_ref()
+                .map(|dialog| dialog.value.as_str()),
+            HostToolsTextInput::ContainerDialogRegistry => self
+                .host_container_input_dialog
+                .as_ref()
+                .map(|dialog| dialog.registry.as_str()),
+            HostToolsTextInput::ContainerRunName => self
+                .host_container_input_dialog
+                .as_ref()
+                .map(|dialog| dialog.run.name.as_str()),
+            HostToolsTextInput::ContainerRunPorts => self
+                .host_container_input_dialog
+                .as_ref()
+                .map(|dialog| dialog.run.ports.as_str()),
+            HostToolsTextInput::ContainerRunVolumes => self
+                .host_container_input_dialog
+                .as_ref()
+                .map(|dialog| dialog.run.volumes.as_str()),
+            HostToolsTextInput::ContainerRunCommand => self
+                .host_container_input_dialog
+                .as_ref()
+                .map(|dialog| dialog.run.command.as_str()),
+            HostToolsTextInput::ContainerRegistryProxy => self
+                .host_container_input_dialog
+                .as_ref()
+                .map(|dialog| dialog.proxy.as_str()),
+            HostToolsTextInput::RedisPassword => Some(&self.host_redis_password),
+            HostToolsTextInput::RedisRename => self.host_redis_rename_value(),
+            HostToolsTextInput::RedisSetValue => self.host_redis_set_value(),
+            HostToolsTextInput::RedisSetValueField => self.host_redis_set_value_field(),
+            HostToolsTextInput::RedisCreateKeyName => self.host_redis_create_key_name(),
+            HostToolsTextInput::RedisCreateKeyValue => self.host_redis_create_key_value(),
+            HostToolsTextInput::RedisCreateKeyField => self.host_redis_create_key_field(),
+            HostToolsTextInput::RedisCreateKeyTtl => self.host_redis_create_key_ttl(),
+            HostToolsTextInput::RedisTtl => self.host_redis_ttl_value(),
+            HostToolsTextInput::RedisSearch => Some(&self.host_redis_search_query),
         }
+    }
+
+    fn host_redis_create_key_name(&self) -> Option<&str> {
+        self.host_redis_create_key_dialog
+            .as_ref()
+            .map(|dialog| dialog.name.as_str())
+    }
+
+    fn host_redis_create_key_name_mut(&mut self) -> Option<&mut String> {
+        self.host_redis_create_key_dialog
+            .as_mut()
+            .map(|dialog| &mut *dialog.name)
+    }
+
+    fn host_redis_create_key_field(&self) -> Option<&str> {
+        self.host_redis_create_key_dialog
+            .as_ref()
+            .map(|dialog| dialog.field.as_str())
+    }
+
+    fn host_redis_create_key_field_mut(&mut self) -> Option<&mut String> {
+        self.host_redis_create_key_dialog
+            .as_mut()
+            .map(|dialog| &mut *dialog.field)
+    }
+
+    fn host_redis_create_key_ttl(&self) -> Option<&str> {
+        self.host_redis_create_key_dialog
+            .as_ref()
+            .map(|dialog| dialog.ttl.as_str())
+    }
+
+    fn host_redis_create_key_ttl_mut(&mut self) -> Option<&mut String> {
+        self.host_redis_create_key_dialog
+            .as_mut()
+            .map(|dialog| &mut *dialog.ttl)
+    }
+
+    fn host_redis_create_key_value(&self) -> Option<&str> {
+        self.host_redis_create_key_dialog
+            .as_ref()
+            .map(|dialog| dialog.value.as_str())
+    }
+
+    fn host_redis_create_key_value_mut(&mut self) -> Option<&mut String> {
+        self.host_redis_create_key_dialog
+            .as_mut()
+            .map(|dialog| &mut *dialog.value)
+    }
+
+    fn host_redis_set_value_field(&self) -> Option<&str> {
+        self.host_redis_set_value_dialog
+            .as_ref()
+            .map(|dialog| dialog.field.as_str())
+    }
+
+    fn host_redis_set_value_field_mut(&mut self) -> Option<&mut String> {
+        self.host_redis_set_value_dialog
+            .as_mut()
+            .map(|dialog| &mut *dialog.field)
+    }
+
+    fn host_redis_set_value(&self) -> Option<&str> {
+        self.host_redis_set_value_dialog
+            .as_ref()
+            .map(|dialog| dialog.value.as_str())
+    }
+
+    fn host_redis_set_value_mut(&mut self) -> Option<&mut String> {
+        self.host_redis_set_value_dialog
+            .as_mut()
+            .map(|dialog| &mut *dialog.value)
+    }
+
+    fn host_redis_rename_value(&self) -> Option<&str> {
+        self.host_redis_rename_value.as_deref().map(String::as_str)
+    }
+
+    fn host_redis_ttl_value(&self) -> Option<&str> {
+        self.host_redis_ttl_value.as_deref().map(String::as_str)
+    }
+
+    fn host_redis_ttl_value_mut(&mut self) -> Option<&mut String> {
+        self.host_redis_ttl_value.as_mut().map(|value| &mut **value)
+    }
+
+    fn host_redis_rename_value_mut(&mut self) -> Option<&mut String> {
+        self.host_redis_rename_value
+            .as_mut()
+            .map(|value| &mut **value)
     }
 
     pub(in crate::workspace) fn input_value_mut(
@@ -1353,6 +2311,45 @@ impl HostToolsUiState {
             HostToolsTextInput::ScheduleSearch => Some(&mut self.host_schedule_search_query),
             HostToolsTextInput::FilesystemSearch => Some(&mut self.host_filesystem_search_query),
             HostToolsTextInput::PackageSearch => Some(&mut self.host_package_search_query),
+            HostToolsTextInput::ContainerSearch => Some(&mut self.host_container_search_query),
+            HostToolsTextInput::ContainerDialog => self
+                .host_container_input_dialog
+                .as_mut()
+                .map(|dialog| &mut dialog.value),
+            HostToolsTextInput::ContainerDialogRegistry => self
+                .host_container_input_dialog
+                .as_mut()
+                .map(|dialog| &mut dialog.registry),
+            HostToolsTextInput::ContainerRunName => self
+                .host_container_input_dialog
+                .as_mut()
+                .map(|dialog| &mut dialog.run.name),
+            HostToolsTextInput::ContainerRunPorts => self
+                .host_container_input_dialog
+                .as_mut()
+                .map(|dialog| &mut dialog.run.ports),
+            HostToolsTextInput::ContainerRunVolumes => self
+                .host_container_input_dialog
+                .as_mut()
+                .map(|dialog| &mut dialog.run.volumes),
+            HostToolsTextInput::ContainerRunCommand => self
+                .host_container_input_dialog
+                .as_mut()
+                .map(|dialog| &mut dialog.run.command),
+            HostToolsTextInput::ContainerRegistryProxy => self
+                .host_container_input_dialog
+                .as_mut()
+                .map(|dialog| &mut *dialog.proxy),
+            HostToolsTextInput::RedisPassword => Some(&mut self.host_redis_password),
+            HostToolsTextInput::RedisRename => self.host_redis_rename_value_mut(),
+            HostToolsTextInput::RedisSetValue => self.host_redis_set_value_mut(),
+            HostToolsTextInput::RedisSetValueField => self.host_redis_set_value_field_mut(),
+            HostToolsTextInput::RedisCreateKeyName => self.host_redis_create_key_name_mut(),
+            HostToolsTextInput::RedisCreateKeyValue => self.host_redis_create_key_value_mut(),
+            HostToolsTextInput::RedisCreateKeyField => self.host_redis_create_key_field_mut(),
+            HostToolsTextInput::RedisCreateKeyTtl => self.host_redis_create_key_ttl_mut(),
+            HostToolsTextInput::RedisTtl => self.host_redis_ttl_value_mut(),
+            HostToolsTextInput::RedisSearch => Some(&mut self.host_redis_search_query),
         }
     }
 }
