@@ -31,6 +31,29 @@ pub(in crate::workspace) struct ActiveTabWindowModalSnapshot {
     phase: oxideterm_gpui_ui::motion::ExitPhase,
 }
 
+/// Redis workspace dialogs, ordered the way root/render.rs stacks them: the
+/// highest kind is the one whose backdrop the user sees last.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::workspace) enum HostRedisDialogKind {
+    Value,
+    Delete,
+    Rename,
+    SetValue,
+    Ttl,
+    CreateKey,
+}
+
+impl HostRedisDialogKind {
+    /// Only the editors own a text field; the read-only value viewer and the
+    /// delete confirmation must not open an IME composition.
+    fn accepts_text_input(self) -> bool {
+        matches!(
+            self,
+            Self::Rename | Self::SetValue | Self::Ttl | Self::CreateKey
+        )
+    }
+}
+
 /// Identifies the top blocking portal that owns window keyboard input.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::workspace) enum ActiveWindowModalOwner {
@@ -87,6 +110,15 @@ pub(in crate::workspace) enum ActiveWindowModalOwner {
         phase: oxideterm_gpui_ui::motion::ExitPhase,
     },
     HostDockerLogs,
+    HostContainerConfirm {
+        phase: oxideterm_gpui_ui::motion::ExitPhase,
+    },
+    HostContainerText,
+    HostContainerInput,
+    /// Inline Redis credential field; it is not a portal and only owns keys
+    /// while no portal is open.
+    HostRedisPassword,
+    HostRedisDialog(HostRedisDialogKind),
     HostServiceConfirm {
         phase: oxideterm_gpui_ui::motion::ExitPhase,
     },
@@ -183,29 +215,36 @@ impl ActiveWindowModalOwner {
             Self::HostMuxConfirm { .. } => 27,
             Self::HostMuxInput => 28,
             Self::HostMuxRead => 29,
-            Self::HostScheduleConfirm { .. } => 30,
-            Self::HostScheduleLogs => 31,
-            Self::NativePluginConfirm { .. } => 32,
-            Self::TabRename => 33,
-            Self::ArchiveCommand => 34,
+            Self::HostContainerConfirm { .. } => 30,
+            Self::HostContainerText => 31,
+            Self::HostContainerInput => 32,
+            // Never compared: the inline credential field is only returned when
+            // no portal owner exists.
+            Self::HostRedisPassword => 0,
+            Self::HostRedisDialog(_) => 33,
+            Self::HostScheduleConfirm { .. } => 34,
+            Self::HostScheduleLogs => 35,
+            Self::NativePluginConfirm { .. } => 36,
+            Self::TabRename => 37,
+            Self::ArchiveCommand => 38,
             Self::SshTunnel => 1,
-            Self::ActiveTabWindowModal { .. } => 35,
-            Self::TerminalCastPlayer => 36,
-            Self::ThemeEditor { .. } => 37,
-            Self::SettingsSshConfigImport { .. } => 38,
-            Self::TerminalCommandSpecsEditor => 39,
-            Self::QuickCommandsManager => 40,
-            Self::AiTextEditor => 41,
-            Self::OxideImport { .. } => 42,
-            Self::OxideExport { .. } => 43,
-            Self::CommandPalette => 44,
-            Self::VersionMigration => 45,
-            Self::Onboarding => 46,
-            Self::LegalNotice { .. } => 47,
-            Self::NativeUpdateReleaseNotes { .. } => 48,
-            Self::Shortcuts => 49,
-            Self::AppLockDialog => 50,
-            Self::MermaidZoom => 51,
+            Self::ActiveTabWindowModal { .. } => 39,
+            Self::TerminalCastPlayer => 40,
+            Self::ThemeEditor { .. } => 41,
+            Self::SettingsSshConfigImport { .. } => 42,
+            Self::TerminalCommandSpecsEditor => 43,
+            Self::QuickCommandsManager => 44,
+            Self::AiTextEditor => 45,
+            Self::OxideImport { .. } => 46,
+            Self::OxideExport { .. } => 47,
+            Self::CommandPalette => 48,
+            Self::VersionMigration => 49,
+            Self::Onboarding => 50,
+            Self::LegalNotice { .. } => 51,
+            Self::NativeUpdateReleaseNotes { .. } => 52,
+            Self::Shortcuts => 53,
+            Self::AppLockDialog => 54,
+            Self::MermaidZoom => 55,
         }
     }
 
@@ -226,6 +265,7 @@ impl ActiveWindowModalOwner {
             | Self::TabClose { phase }
             | Self::HostProcessConfirm { phase }
             | Self::HostDockerConfirm { phase }
+            | Self::HostContainerConfirm { phase }
             | Self::HostServiceConfirm { phase }
             | Self::HostTmuxConfirm { phase }
             | Self::HostMuxConfirm { phase }
@@ -247,6 +287,10 @@ impl ActiveWindowModalOwner {
             | Self::RemoteShellIntegration
             | Self::TerminalTriggerQuickCommand
             | Self::HostDockerLogs
+            | Self::HostContainerText
+            | Self::HostContainerInput
+            | Self::HostRedisPassword
+            | Self::HostRedisDialog(_)
             | Self::HostServiceLogs
             | Self::HostTmuxInput
             | Self::HostMuxInput
@@ -269,6 +313,10 @@ impl ActiveWindowModalOwner {
     }
 
     fn allows_modal_ime(self) -> bool {
+        if let Self::HostRedisDialog(kind) = self {
+            // The value viewer and the delete confirmation have no text field.
+            return kind.accepts_text_input();
+        }
         matches!(
             self,
             Self::NewConnection
@@ -276,7 +324,10 @@ impl ActiveWindowModalOwner {
                 | Self::KeyboardInteractiveChallenge
                 | Self::HostTmuxInput
                 | Self::HostMuxInput
+                | Self::HostContainerInput
+                | Self::HostRedisPassword
                 | Self::HostDockerLogs
+                | Self::HostContainerText
                 | Self::HostServiceLogs
                 | Self::HostScheduleLogs
                 | Self::TabRename
@@ -354,6 +405,7 @@ pub(in crate::workspace) struct ActiveWindowModalProjection {
     pub(in crate::workspace) tab_close_phase: Option<oxideterm_gpui_ui::motion::ExitPhase>,
     pub(in crate::workspace) host_tools_modal:
         Option<connection_monitor::HostToolsWindowModalSnapshot>,
+    pub(in crate::workspace) host_redis_dialog: Option<HostRedisDialogKind>,
     pub(in crate::workspace) native_plugin_phase: Option<oxideterm_gpui_ui::motion::ExitPhase>,
     pub(in crate::workspace) tab_rename_open: bool,
     pub(in crate::workspace) archive_command_open: bool,
@@ -471,6 +523,15 @@ impl ActiveWindowModalProjection {
             connection_monitor::HostToolsWindowModalSnapshot::DockerLogs => {
                 ActiveWindowModalOwner::HostDockerLogs
             }
+            connection_monitor::HostToolsWindowModalSnapshot::ContainerConfirm(phase) => {
+                ActiveWindowModalOwner::HostContainerConfirm { phase }
+            }
+            connection_monitor::HostToolsWindowModalSnapshot::ContainerText => {
+                ActiveWindowModalOwner::HostContainerText
+            }
+            connection_monitor::HostToolsWindowModalSnapshot::ContainerInput => {
+                ActiveWindowModalOwner::HostContainerInput
+            }
             connection_monitor::HostToolsWindowModalSnapshot::ServiceConfirm(phase) => {
                 ActiveWindowModalOwner::HostServiceConfirm { phase }
             }
@@ -502,6 +563,9 @@ impl ActiveWindowModalProjection {
                 ActiveWindowModalOwner::HostPackageConfirm { phase }
             }
         });
+        let host_redis_owner = self
+            .host_redis_dialog
+            .map(ActiveWindowModalOwner::HostRedisDialog);
         let native_plugin_owner = self
             .native_plugin_phase
             .map(|phase| ActiveWindowModalOwner::NativePluginConfirm { phase });
@@ -586,6 +650,7 @@ impl ActiveWindowModalProjection {
             cloud_sync_owner,
             tab_owner,
             host_tools_owner,
+            host_redis_owner,
             native_plugin_owner,
             tab_rename_owner,
             archive_command_owner,
@@ -677,6 +742,24 @@ impl WorkspaceApp {
                 .is_some()
                 .then_some(plugins.confirm_phase())
         };
+        let host_redis_dialog = {
+            let host_tools = self.host_tools.read(cx);
+            if host_tools.redis_create_key_open() {
+                Some(HostRedisDialogKind::CreateKey)
+            } else if host_tools.redis_set_value_open() {
+                Some(HostRedisDialogKind::SetValue)
+            } else if host_tools.redis_ttl_edit_open() {
+                Some(HostRedisDialogKind::Ttl)
+            } else if host_tools.redis_rename_open() {
+                Some(HostRedisDialogKind::Rename)
+            } else if host_tools.redis_delete_open() {
+                Some(HostRedisDialogKind::Delete)
+            } else if host_tools.redis_value_dialog_open() {
+                Some(HostRedisDialogKind::Value)
+            } else {
+                None
+            }
+        };
         let (oxide_import_phase, oxide_export_phase) = {
             let session_manager = self.session_manager.read(cx);
             (
@@ -690,7 +773,7 @@ impl WorkspaceApp {
                     .map(|dialog| dialog.presence.phase()),
             )
         };
-        ActiveWindowModalProjection {
+        let top_owner = ActiveWindowModalProjection {
             new_connection_open,
             local_shell_launcher_open: self.local_shell_launcher_open,
             jump_server_open,
@@ -737,6 +820,7 @@ impl WorkspaceApp {
             cloud_sync_phase,
             tab_close_phase: self.tab_host.read(cx).close_confirm_phase(),
             host_tools_modal: self.host_tools.read(cx).window_modal_snapshot(),
+            host_redis_dialog,
             native_plugin_phase,
             tab_rename_open: self.tab_rename_dialog.is_some(),
             archive_command_open: self.archive_command.is_some(),
@@ -762,7 +846,29 @@ impl WorkspaceApp {
             }),
             native_update_toast_visible: self.native_update_notification_open,
         }
-        .top_owner()
+        .top_owner();
+        // The credential field is inline rather than a portal, so it may only
+        // own keys when no blocking portal exists.
+        top_owner.or_else(|| {
+            self.redis_password_prompt_owns_keys(cx)
+                .then_some(ActiveWindowModalOwner::HostRedisPassword)
+        })
+    }
+
+    /// Mirrors the IME gate for `HostToolsTextInput::RedisPassword`: the field
+    /// is rendered by the Host Tools sidebar panel, so keys stay in it only
+    /// while that panel is mounted and shows the focused credential input.
+    fn redis_password_prompt_owns_keys(&self, cx: &App) -> bool {
+        let (password_focused, redis_active) = {
+            let host_tools = self.host_tools.read(cx);
+            (
+                host_tools
+                    .ui
+                    .input_is_focused(connection_monitor::HostToolsTextInput::RedisPassword),
+                host_tools.active_tool() == ContextSidebarTool::Redis,
+            )
+        };
+        password_focused && redis_active && self.host_tools_visibility(cx).sidebar_is_visible()
     }
 
     fn active_tab_window_modal_owner(&self, cx: &App) -> Option<ActiveTabWindowModalSnapshot> {
@@ -1119,6 +1225,42 @@ impl WorkspaceApp {
                     cx,
                 );
             }
+            ActiveWindowModalOwner::HostContainerConfirm { phase: _ } => {
+                let _ = self.handle_host_tools_window_modal_key(
+                    connection_monitor::HostToolsWindowModalSnapshot::ContainerConfirm(
+                        oxideterm_gpui_ui::motion::ExitPhase::Visible,
+                    ),
+                    event,
+                    window,
+                    cx,
+                );
+            }
+            ActiveWindowModalOwner::HostContainerText => {
+                let _ = self.handle_host_tools_window_modal_key(
+                    connection_monitor::HostToolsWindowModalSnapshot::ContainerText,
+                    event,
+                    window,
+                    cx,
+                );
+            }
+            ActiveWindowModalOwner::HostContainerInput => {
+                let _ = self.handle_host_tools_window_modal_key(
+                    connection_monitor::HostToolsWindowModalSnapshot::ContainerInput,
+                    event,
+                    window,
+                    cx,
+                );
+            }
+            ActiveWindowModalOwner::HostRedisPassword => {
+                // Enter re-reads the endpoint with the typed credential and
+                // Escape releases the field; every other key stays in it.
+                let _ = self.handle_host_redis_key(event, cx);
+            }
+            ActiveWindowModalOwner::HostRedisDialog(_) => {
+                // Escape closes the top dialog and Enter submits the focused
+                // editor; every other key stays inside the dialog.
+                let _ = self.handle_host_redis_key(event, cx);
+            }
             ActiveWindowModalOwner::HostServiceConfirm { phase } => {
                 let _ = self.handle_host_tools_window_modal_key(
                     connection_monitor::HostToolsWindowModalSnapshot::ServiceConfirm(phase),
@@ -1462,6 +1604,47 @@ mod tests {
         let route = owner.key_route("escape");
         assert!(route.consumes_key());
         assert_eq!(route.dispatch_owner, None);
+    }
+
+    #[test]
+    fn redis_dialogs_own_every_key_and_sit_above_the_host_tools_dialogs() {
+        let viewer = ActiveWindowModalOwner::HostRedisDialog(HostRedisDialogKind::Value);
+        let route = viewer.key_route("x");
+        assert!(route.consumes_key());
+        assert_eq!(route.dispatch_owner, Some(viewer));
+        assert!(!viewer.allows_modal_ime());
+
+        let editor = ActiveWindowModalOwner::HostRedisDialog(HostRedisDialogKind::CreateKey);
+        assert!(editor.allows_modal_ime());
+
+        let password = ActiveWindowModalOwner::HostRedisPassword;
+        assert!(password.allows_modal_ime());
+        assert!(password.key_route("a").consumes_key());
+        assert_eq!(password.key_route("escape").dispatch_owner, Some(password));
+
+        let projection = ActiveWindowModalProjection {
+            host_tools_modal: Some(connection_monitor::HostToolsWindowModalSnapshot::DockerLogs),
+            host_redis_dialog: Some(HostRedisDialogKind::Delete),
+            ..Default::default()
+        };
+        assert_eq!(
+            projection.top_owner(),
+            Some(ActiveWindowModalOwner::HostRedisDialog(
+                HostRedisDialogKind::Delete
+            ))
+        );
+
+        let projection = ActiveWindowModalProjection {
+            host_redis_dialog: Some(HostRedisDialogKind::SetValue),
+            host_tools_modal: Some(
+                connection_monitor::HostToolsWindowModalSnapshot::ServiceConfirm(VISIBLE),
+            ),
+            ..Default::default()
+        };
+        assert_eq!(
+            projection.top_owner(),
+            Some(ActiveWindowModalOwner::HostServiceConfirm { phase: VISIBLE })
+        );
     }
 
     #[test]

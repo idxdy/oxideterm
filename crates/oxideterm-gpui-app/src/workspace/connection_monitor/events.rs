@@ -87,6 +87,39 @@ pub(in crate::workspace) enum ScheduleActionNoticeKind {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(in crate::workspace) enum HostToolsNotice {
+    RedisKeyCopied {
+        key: String,
+    },
+    RedisValueCopied {
+        key: String,
+    },
+    RedisValueCopyFailed {
+        key: String,
+    },
+    RedisKeyDeleted {
+        key: String,
+    },
+    RedisKeyRenamed {
+        key: String,
+    },
+    RedisValueSet {
+        key: String,
+    },
+    RedisTtlUpdated {
+        key: String,
+    },
+    RedisKeyCreated {
+        key: String,
+    },
+    RedisKeyActionFailed {
+        message: String,
+    },
+    /// A collection read hit its row cap, so a wholesale rewrite would drop the
+    /// entries the panel never saw.
+    RedisValueEditCapped,
+    /// The read could not represent every byte exactly (empty members, embedded
+    /// separators, non-UTF-8), so a rewrite could not preserve the value.
+    RedisValueEditUnsupported,
     ProcessActionAlreadyRunning,
     ProcessInvalidNice,
     ProcessConnectionMissing,
@@ -107,6 +140,17 @@ pub(in crate::workspace) enum HostToolsNotice {
         container_name: String,
         succeeded: bool,
     },
+    ContainerCopied {
+        label: String,
+    },
+    ContainerActionFinished {
+        description: String,
+        succeeded: bool,
+    },
+    ContainerActionAlreadyRunning,
+    ContainerConnectionMissing,
+    ContainerActionFailed,
+    ContainerCaptureFailed,
     ServiceActionAlreadyRunning,
     ServiceLogsAlreadyRunning,
     ServiceConnectionMissing,
